@@ -468,11 +468,14 @@ export class VisualMatch {
       const sign = this.rng.next() < 0.5 ? -1 : 1
       gy = GOAL_MID + sign * (corner ? 2.2 + this.rng.next() * 1.2 : this.rng.next() * 1.6)
     } else {
-      // 막히거나 빗나간다. 골대 폭 바로 바깥이나 골키퍼 정면
-      const wide = this.rng.next() < 0.45
+      // 막히거나 빗나간다. 멀리서 쏠수록 골대를 벗어나기 쉽다 —
+      // 10미터 20% → 25미터 53% → 35미터 75%. 가까운 슛은 골키퍼
+      // 정면으로 가서 막히는 그림이 된다
+      const dGoal = Math.hypot(gx - shooter.x, GOAL_MID - shooter.y)
+      const wide = this.rng.next() < clamp(0.2 + (dGoal - 10) * 0.022, 0.2, 0.8)
       const sign = this.rng.next() < 0.5 ? -1 : 1
       gy = wide
-        ? GOAL_MID + sign * (GOAL_HALF + 0.8 + this.rng.next() * 3)
+        ? GOAL_MID + sign * (GOAL_HALF + 1 + this.rng.next() * (2 + dGoal * 0.06))
         : GOAL_MID + sign * this.rng.next() * 2
     }
 
@@ -520,9 +523,31 @@ export class VisualMatch {
   private pass(holder: VPlayer, to: VPlayer) {
     // 받는 사람이 뛰어갈 자리로 찔러준다
     const lead = 0.35
-    const tx = clamp(to.x + to.vx * lead, 2, PITCH_W - 2)
-    const ty = clamp(to.y + to.vy * lead, 2, PITCH_H - 2)
+    let tx = clamp(to.x + to.vx * lead, 2, PITCH_W - 2)
+    let ty = clamp(to.y + to.vy * lead, 2, PITCH_H - 2)
     const d = Math.hypot(tx - holder.x, ty - holder.y)
+
+    // 패스는 100% 붙지 않는다. 가까우면 거의 붙고 멀수록 성공률이
+    // 떨어지며, 발밑에 상대가 붙은 채로 차면 더 나빠진다.
+    // 8미터 0.97 → 20미터 0.83 → 35미터 0.65
+    const oppNear = this.players.reduce((m, o) => {
+      if (o.side === holder.side || o.pos === 'GK') return m
+      return Math.min(m, dist(o, holder))
+    }, Infinity)
+    let success = 0.97 - Math.max(0, d - 8) * 0.012
+    if (oppNear < 3) success -= 0.08
+    success = clamp(success, 0.6, 0.97)
+
+    let targetId: string | null = to.id
+    if (this.rng.next() >= success) {
+      // 빗나간다 — 리시버에 못 미치거나 옆으로 새서 주인 없는 공이 된다
+      const ang = this.rng.next() * Math.PI * 2
+      const off = 3 + this.rng.next() * 5
+      tx = clamp(tx + Math.cos(ang) * off, 2, PITCH_W - 2)
+      ty = clamp(ty + Math.sin(ang) * off, 2, PITCH_H - 2)
+      targetId = null
+    }
+
     this.ball.mode = 'PASS'
     this.ball.holder = null
     this.ball.fromX = this.ball.x
@@ -531,7 +556,7 @@ export class VisualMatch {
     this.ball.toY = ty
     this.ball.t = 0
     this.ball.dur = clamp(d / PASS_SPEED, 0.14, PASS_MAX_T)
-    this.ball.targetId = to.id
+    this.ball.targetId = targetId
   }
 
   /** 공을 가진 선수가 무엇을 할지 정한다 */
@@ -582,11 +607,19 @@ export class VisualMatch {
       if (d < 3.2) crowd += 1
     }
 
-    if (nearest < 2.0) this.pressure += dt * (1 + 0.8 * Math.max(0, crowd - 1))
+    // 발끝이 닿는 거리면 터치하는 순간을 노린 태클이 바로 나올 수 있다
+    if (taker && nearest < 1.7 && this.rng.next() < dt * 3.2) {
+      this.flash('TACKLE', this.ball.x, this.ball.y)
+      holder.recover = 0.55
+      this.giveTo(taker)
+      return
+    }
+
+    if (nearest < 2.4) this.pressure += dt * (1 + 0.8 * Math.max(0, crowd - 1))
     else if (nearest > 3.6) this.pressure = Math.max(0, this.pressure - dt * 1.8)
 
-    // 반 초 넘게 붙잡혀 있으면 곧 뺏긴다. 둘러싸이면 더 빨리
-    if (taker && this.pressure > 0.45 && this.rng.next() < dt * (1.6 + crowd * 0.9)) {
+    // 붙잡힌 시간이 쌓여도 뺏긴다. 둘러싸이면 더 빨리
+    if (taker && this.pressure > 0.4 && this.rng.next() < dt * (1.6 + crowd * 0.9)) {
       this.flash('TACKLE', this.ball.x, this.ball.y)
       holder.recover = 0.55
       this.giveTo(taker)
@@ -814,10 +847,15 @@ export class VisualMatch {
             }
           } else {
             const gk = this.players.find((p) => p.side === conceding && p.pos === 'GK')
-            this.flash('SAVE', b.x, b.y)
+            const missedWide = Math.abs(b.toY - GOAL_MID) > GOAL_HALF
+            // 골대 안이면 선방, 밖이면 그냥 빗나간 것 — 골킥으로 이어진다
+            if (!missedWide) this.flash('SAVE', b.x, b.y)
             if (gk) this.giveTo(gk)
             else b.mode = 'LOOSE'
           }
+        } else if (!b.targetId) {
+          // 빗나간 패스 — 주인 없는 공. 제일 먼저 닿는 쪽이 줍는다
+          b.mode = 'LOOSE'
         } else {
           // 패스 도착. 더 가까운 상대가 있으면 가로챈다
           const receiver = this.byId(b.targetId)
@@ -835,7 +873,7 @@ export class VisualMatch {
       return
     }
 
-    // 흘러나온 공 — 제일 가까운 사람이 잡는다
+    // 흘러나온 공 — 제일 가까운 사람이 몸을 던져 줍는다
     let best: VPlayer | undefined
     let bd = Infinity
     for (const p of this.players) {
@@ -845,7 +883,7 @@ export class VisualMatch {
         best = p
       }
     }
-    if (best && bd < 2) this.giveTo(best)
+    if (best && bd < 2.6) this.giveTo(best)
   }
 
   /**
