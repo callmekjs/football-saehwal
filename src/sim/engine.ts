@@ -12,7 +12,7 @@ import {
   minDefenderSpeed,
   onPitchCount,
 } from './squad'
-import { BASE, EVENTS, TOTAL_TICKS } from './constants'
+import { EVENTS, TOTAL_TICKS } from './constants'
 import type { Decision, MatchState, Mentality, PlayerState, Problem } from './types'
 
 /**
@@ -36,7 +36,7 @@ export function createState(problem: Problem): MatchState {
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: { ...problem.initialTactics },
     formation: problem.initialFormation,
-    ball: { x: 0.5, y: 0.5 },
+    ball: { x: 0.5, y: 0.5, owner: 'HOME' },
     stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },
     players,
     opponent: mentalityOf(problem.score),
@@ -69,33 +69,54 @@ function applySub(players: PlayerState[], out: string, inId: string): PlayerStat
   })
 }
 
-const clamp01 = (v: number) => (v < 0.04 ? 0.04 : v > 0.96 ? 0.96 : v)
+const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
+
+type Ball = MatchState['ball']
 
 /**
  * 볼의 화면상 위치.
  *
  * 판정에 쓰이지 않는다. 이미 뽑아둔 난수에서 파생하므로 별도로 난수를
  * 소비하지 않고, 따라서 이 함수를 고쳐도 경기 결과가 변하지 않는다.
- * 0.1초마다 최대 35미터씩 순간이동하면 축구로 안 보이므로 관성을 준다.
+ *
+ * 공을 가진 쪽이 상대 골대 쪽으로 계속 밀고 나가고, 점유가 넘어가면
+ * 방향이 뒤집힌다. 공격 시도가 발생한 틱에만 움직이게 하면 그런 틱이
+ * 전체의 몇 퍼센트뿐이라 공이 제자리에 서 있는 것처럼 보인다.
  */
 function nextBall(
-  ball: { x: number; y: number },
+  ball: Ball,
   d: TickDraws,
   c: Coefficients,
   scored: boolean,
   conceded: boolean,
-): { x: number; y: number } {
-  if (scored || conceded) return { x: 0.5, y: 0.5 }
+): Ball {
+  if (scored) return { x: 0.5, y: 0.5, owner: 'AWAY' }
+  if (conceded) return { x: 0.5, y: 0.5, owner: 'HOME' }
 
-  const weOwn = d.homeAttempt < BASE.A0 * c.widthK * 2.2
-  const theyOwn = d.awayAttempt < BASE.O0 * c.oppOpen * 2.2
-  const pull = weOwn ? 0.035 : theyOwn ? -0.035 : (0.5 - ball.x) * 0.012
+  // 점유 전환. 압박이 강하면 우리가 더 자주 뺏고, 상대 진영 깊숙이
+  // 들어갈수록 뺏기기 쉽다 — 공이 한쪽에 영원히 머물지 않는다.
+  // 전환이 너무 잦으면 공이 가운데서만 왔다갔다 하다 끝난다.
+  const attacking = ball.owner === 'HOME' ? ball.x : 1 - ball.x
+  const turnover = 0.012 + attacking * 0.04
+  const bias = ball.owner === 'HOME' ? 1 / c.steal : c.steal
+  let owner = ball.owner
+  // 골문 앞까지 가면 반드시 끊긴다. 벽에 붙어 멈추는 것을 막는 장치
+  if (attacking > 0.88 || d.card < turnover * bias) {
+    owner = ball.owner === 'HOME' ? 'AWAY' : 'HOME'
+  }
 
-  // 폭을 벌리면 볼이 좌우로 더 벌어진다 — 레버 효과가 눈에 보인다
-  const spread = 0.5 + (d.homeEnter - 0.5) * Math.min(1, c.widthK * 0.5)
+  const dir = owner === 'HOME' ? 1 : -1
+  const goal = owner === 'HOME' ? 0.94 : 0.06
+  // 골대에 가까워질수록 느려진다
+  const speed = 0.016 * (0.45 + Math.abs(goal - ball.x))
+
+  // 폭을 벌리면 볼이 좌우로 더 넓게 돈다 — 레버 효과가 눈에 보인다
+  const lane = 0.5 + (d.penaltyShot - 0.5) * clamp(c.widthK, 0.5, 1.6)
+
   return {
-    x: clamp01(ball.x + pull + (d.setPiece - 0.5) * 0.01),
-    y: clamp01(ball.y + (spread - ball.y) * 0.06),
+    owner,
+    x: clamp(ball.x + dir * speed + (d.sendOff - 0.5) * 0.004, 0.04, 0.96),
+    y: clamp(ball.y + (lane - ball.y) * 0.05, 0.06, 0.94),
   }
 }
 

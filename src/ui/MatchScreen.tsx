@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { drawPitch } from '../render/pitch'
+import { drawPitch, resetSmoothing } from '../render/pitch'
 import { FORMATION_IDS, getFormation, shapeOf, type FormationId } from '../sim/formations'
 import { BENCH, getPlayer } from '../sim/squad'
 import { TOTAL_TICKS } from '../sim/constants'
@@ -28,6 +28,7 @@ function Pitch({ state }: { state: MatchState }) {
   useLayoutEffect(() => {
     const canvas = ref.current
     if (!canvas) return
+    resetSmoothing()
     let raf = 0
 
     const render = () => {

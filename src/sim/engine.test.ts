@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { simulate, createState } from './engine'
+import { simulate, createState, tick } from './engine'
+import { createRng } from './rng'
 import { TOTAL_TICKS } from './constants'
 import { HOME_XI, BENCH } from './squad'
 import type { Decision, Problem } from './types'
@@ -115,6 +116,73 @@ describe('simulate — 선수 상태', () => {
     expect(
       conceded([{ tick: 0, type: 'SUB', out: slowest.id, in: fastest.id }]),
     ).toBeLessThan(conceded([]))
+  })
+})
+
+describe('볼 움직임', () => {
+  /** 750틱 동안의 볼 위치를 전부 모은다 */
+  const track = (p = P) => {
+    const rng = createRng(p.seed)
+    let s = createState(p)
+    const xs: number[] = []
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      s = tick(s, rng)
+      xs.push(s.ball.x)
+    }
+    return xs
+  }
+
+  it('가만히 서 있지 않는다', () => {
+    // 공격 시도가 발생한 틱에만 움직이게 하면 그런 틱이 전체의 몇 퍼센트뿐이라
+    // 화면에서 공이 멈춰 있는 것처럼 보인다.
+    const xs = track()
+    const moved = xs.filter((x, i) => i > 0 && Math.abs(x - xs[i - 1]) > 0.001).length
+    expect(moved / xs.length).toBeGreaterThan(0.9)
+  })
+
+  it('경기장 전체를 오간다', () => {
+    const xs = track()
+    expect(Math.min(...xs)).toBeLessThan(0.3)
+    expect(Math.max(...xs)).toBeGreaterThan(0.7)
+  })
+
+  it('한쪽 끝에 붙어 멈추지 않는다', () => {
+    const xs = track()
+    const stuck = xs.filter((x) => x <= 0.05 || x >= 0.95).length
+    expect(stuck / xs.length).toBeLessThan(0.1)
+  })
+
+  it('점유가 여러 번 바뀐다', () => {
+    const rng = createRng(P.seed)
+    let s = createState(P)
+    let flips = 0
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      const before = s.ball.owner
+      s = tick(s, rng)
+      if (s.ball.owner !== before) flips += 1
+    }
+    expect(flips).toBeGreaterThan(10)
+  })
+
+  it('한 틱에 순간이동하지 않는다', () => {
+    // 득점 직후에는 중앙 재개이므로 그 틱은 제외한다
+    const rng = createRng(P.seed)
+    let s = createState(P)
+    let prevX = s.ball.x
+    let prevScore = s.score[0] + s.score[1]
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      s = tick(s, rng)
+      const scored = s.score[0] + s.score[1] !== prevScore
+      if (!scored) expect(Math.abs(s.ball.x - prevX)).toBeLessThan(0.05)
+      prevX = s.ball.x
+      prevScore = s.score[0] + s.score[1]
+    }
+  })
+
+  it('판정에는 영향을 주지 않는다', () => {
+    // 볼 위치는 이미 뽑아둔 난수에서 파생하므로 난수를 추가 소비하지 않는다.
+    // 같은 시드로 두 번 돌리면 스코어가 같아야 한다.
+    expect(simulate(P, []).final.score).toEqual(simulate(P, []).final.score)
   })
 })
 

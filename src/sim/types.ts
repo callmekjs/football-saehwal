@@ -78,7 +78,7 @@ export interface MatchState {
    * 판정에 쓰이지 않고 화면에만 쓰인다 — 이미 뽑은 난수에서 파생하므로
    * 별도로 난수를 소비하지 않는다.
    */
-  ball: { x: number; y: number }
+  ball: { x: number; y: number; owner: 'HOME' | 'AWAY' }
   /** 화면의 양상 지표가 읽는 누적 집계. 판정에는 쓰이지 않는다 */
   stats: {
     homeAttempt: number
