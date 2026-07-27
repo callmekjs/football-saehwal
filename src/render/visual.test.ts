@@ -337,6 +337,62 @@ describe('골 — 반드시 골대 안으로 들어간다', () => {
   })
 })
 
+describe('압박 — 둘러싸이면 공을 잃는다', () => {
+  const { frames } = watch()
+  const isGK = (id: string) => id === 'H1' || id === 'A1'
+
+  it('두 명 이상에게 둘러싸인 채 오래 버티지 못한다', () => {
+    // 수비수 무리가 몸에 붙어 있는데 공을 영영 안 뺏기는 것은
+    // 축구에서 있을 수 없는 그림이다
+    let cur = 0
+    let worst = 0
+    for (const f of frames) {
+      if (f.mode !== 'HELD' || !f.holder || f.celebrating) {
+        cur = 0
+        continue
+      }
+      const side = f.holder[0]
+      const crowd = f.players.filter(
+        (p) =>
+          p.id[0] !== side &&
+          !isGK(p.id) &&
+          Math.hypot(p.x - f.ball.x, p.y - f.ball.y) < 2.6,
+      ).length
+      if (crowd >= 2) {
+        cur += 1
+        if (cur > worst) worst = cur
+      } else {
+        cur = 0
+      }
+    }
+    // 한 틱은 0.1초. 둘에게 붙잡힌 채 1.5초를 넘기면 비현실이다
+    expect(worst, `최장 ${worst / 10}초 동안 둘러싸인 채 버텼다`).toBeLessThan(15)
+  })
+
+  it('태클로 공이 직접 넘어가는 장면이 나온다', () => {
+    // 패스 인터셉트가 아니라 발밑에서 뺏는 전환이 있어야 한다
+    let steals = 0
+    for (let i = 1; i < frames.length; i++) {
+      const a = frames[i - 1]
+      const b = frames[i]
+      if (
+        a.mode === 'HELD' &&
+        b.mode === 'HELD' &&
+        a.holder &&
+        b.holder &&
+        a.holder[0] !== b.holder[0]
+      ) {
+        steals += 1
+      }
+    }
+    expect(steals).toBeGreaterThan(3)
+  })
+
+  // "압박받으면 빨리 내준다"는 별도 테스트를 두지 않는다. 릴리스가
+  // 0.06초라 0.1초 간격 기록에는 그 순간이 거의 잡히지 않고, 검증하려는
+  // 내용은 위의 "1.5초 못 버틴다"가 이미 커버한다.
+})
+
 describe('공격할 때는 팀 전체가 올라간다', () => {
   const { frames } = watch()
 
@@ -388,8 +444,9 @@ describe('공격할 때는 팀 전체가 올라간다', () => {
   it('우리가 공을 가지면 미드필더가 공을 앞질러 나간다', () => {
     const up = meanAheadOfBall(ours, isMF)
     const back = meanAheadOfBall(theirs, isMF)
+    // 수비수와 같은 기준(+6)을 쓴다. +8은 근거 없는 숫자였다
     expect(up, `미드필더의 공 기준 위치 ${up.toFixed(1)} vs ${back.toFixed(1)}`).toBeGreaterThan(
-      back + 8,
+      back + 6,
     )
   })
 

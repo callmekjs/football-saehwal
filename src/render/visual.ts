@@ -57,6 +57,14 @@ export interface VPlayer {
   vy: number
   tx: number
   ty: number
+  /**
+   * 부드럽게 따라가는 실제 목표.
+   *
+   * 역할이 바뀌는 순간 tx·ty 는 반대편으로 튈 수 있다. 몸이 그걸 그대로
+   * 따라가면 홱홱 꺾이는 갈지자가 된다. 사람은 방향을 눌러서 바꾼다.
+   */
+  stx: number
+  sty: number
   /** 이 자리가 원래 자기 자리 */
   homeX: number
   homeY: number
@@ -142,6 +150,12 @@ export class VisualMatch {
   private lastOwner: 'HOME' | 'AWAY' = 'HOME'
   private lastFormation = ''
   private lastHomeCount = 11
+  /** 관전 시계 (초). 추격조 유지 시간 계산에 쓴다 */
+  private clock = 0
+  /** 압박 게이지. 상대가 발밑에 붙어 있던 시간이 쌓인다 */
+  private pressure = 0
+  private chaseIds: Record<'HOME' | 'AWAY', string[]> = { HOME: [], AWAY: [] }
+  private chaseAt: Record<'HOME' | 'AWAY', number> = { HOME: -9, AWAY: -9 }
 
   constructor(state: MatchState, seed: number) {
     this.rng = createRng((seed ^ 0x5bf03635) >>> 0)
@@ -196,6 +210,8 @@ export class VisualMatch {
         vy: prev?.vy ?? 0,
         tx: slot.x,
         ty: slot.y,
+        stx: prev?.stx ?? slot.x,
+        sty: prev?.sty ?? slot.y,
         homeX: slot.x,
         homeY: slot.y,
         top: TOP_SPEED[slot.pos],
@@ -221,6 +237,8 @@ export class VisualMatch {
         vy: prev?.vy ?? 0,
         tx: x,
         ty: y,
+        stx: prev?.stx ?? x,
+        sty: prev?.sty ?? y,
         homeX: x,
         homeY: y,
         top: TOP_SPEED[pos],
@@ -244,6 +262,10 @@ export class VisualMatch {
     this.ball.holder = p.id
     this.ball.targetId = null
     this.ball.lift = 0
+    // 주인이 바뀌었으니 압박은 처음부터 다시 쌓이고, 추격조도 새로 짠다
+    this.pressure = 0
+    this.chaseAt.HOME = -9
+    this.chaseAt.AWAY = -9
     // 공을 잡는 순간 발밑으로 붙인다. 서서히 다가가게 두면 몇 프레임 동안
     // 공이 주인과 떨어져 있어 "누가 가진 건지" 알 수 없다
     const dir = p.side === 'HOME' ? 1 : -1
@@ -406,6 +428,10 @@ export class VisualMatch {
       if (p.side === 'HOME' && p.x > PITCH_W / 2 - 2) p.x = PITCH_W / 2 - 2 - (p.x - PITCH_W / 2) * 0.3
       if (p.side === 'AWAY' && p.x < PITCH_W / 2 + 2) p.x = PITCH_W / 2 + 2 + (PITCH_W / 2 - p.x) * 0.3
       p.x = clamp(p.x, 2, PITCH_W - 2)
+      p.tx = p.x
+      p.ty = p.y
+      p.stx = p.x
+      p.sty = p.y
     }
     this.ball.x = PITCH_W / 2
     this.ball.y = PITCH_H / 2
@@ -510,23 +536,60 @@ export class VisualMatch {
 
   /** 공을 가진 선수가 무엇을 할지 정한다 */
   private decide(holder: VPlayer, dt: number) {
+    const nearest = this.players.reduce((m, o) => {
+      if (o.side === holder.side || o.pos === 'GK') return m
+      return Math.min(m, dist(o, holder))
+    }, Infinity)
+
+    // 발밑까지 붙었으면 여유 부릴 시간이 없다. 원터치로 내준다.
+    // 이게 없으면 수비수가 몸에 붙었는데 태연히 공을 몰고 다닌다
+    if (nearest < 2.6) this.decideIn = Math.min(this.decideIn, 0.06)
+
     this.decideIn -= dt
     if (this.decideIn > 0) return
 
     const target = this.choosePass(holder)
-    const pressure = this.players.reduce((m, o) => {
-      if (o.side === holder.side) return m
-      return Math.min(m, dist(o, holder))
-    }, Infinity)
 
     // 쫓기면 빨리 내주고, 여유가 있으면 조금 몰고 간다.
     // 15분에 여든 번쯤 오가야 축구로 보인다 — 내주는 쪽이 기본이다
-    const wantPass = pressure < 8 ? 0.96 : 0.72
+    const wantPass = nearest < 8 ? 0.96 : 0.72
     if (target && this.rng.next() < wantPass) {
       this.pass(holder, target)
     } else {
       // 내줄 데가 없으면 몰고 가며 다시 살핀다
       this.decideIn = 0.35 + this.rng.next() * 0.45
+    }
+  }
+
+  /**
+   * 압박 게이지.
+   *
+   * 상대가 발밑까지 붙은 시간이 쌓이면 공을 지킬 수 없다. 둘러싸일수록
+   * 빨리 쌓인다. 이것이 없으면 수비수 셋이 몸에 붙어 있는데도 공을 영영
+   * 안 뺏기는, 축구에서 있을 수 없는 그림이 나온다.
+   */
+  private updatePressure(holder: VPlayer, dt: number) {
+    let nearest = Infinity
+    let crowd = 0
+    let taker: VPlayer | undefined
+    for (const o of this.players) {
+      if (o.side === holder.side || o.pos === 'GK' || o.recover > 0) continue
+      const d = dist(o, holder)
+      if (d < nearest) {
+        nearest = d
+        taker = o
+      }
+      if (d < 3.2) crowd += 1
+    }
+
+    if (nearest < 2.0) this.pressure += dt * (1 + 0.8 * Math.max(0, crowd - 1))
+    else if (nearest > 3.6) this.pressure = Math.max(0, this.pressure - dt * 1.8)
+
+    // 반 초 넘게 붙잡혀 있으면 곧 뺏긴다. 둘러싸이면 더 빨리
+    if (taker && this.pressure > 0.45 && this.rng.next() < dt * (1.6 + crowd * 0.9)) {
+      this.flash('TACKLE', this.ball.x, this.ball.y)
+      holder.recover = 0.55
+      this.giveTo(taker)
     }
   }
 
@@ -552,9 +615,25 @@ export class VisualMatch {
       const attacking = ballSide === p.side
 
       if (holder && holder.id === p.id) {
-        // 공을 몰고 앞으로
-        p.tx = clamp(p.x + 14 * dir, 4, PITCH_W - 4)
-        p.ty = clamp(p.y + (34 - p.y) * 0.12, 4, PITCH_H - 4)
+        // 공을 몰 때는 앞이 기본이되, 막힌 쪽을 피해 빈 길로 꺾는다.
+        // 무작정 직진하면 수비수 무리 속으로 제 발로 파고든다
+        let ex = dir * 1.1
+        let ey = (PITCH_H / 2 - p.y) * 0.015
+        let boxed = 0
+        for (const o of this.players) {
+          if (o.side === p.side || o.pos === 'GK') continue
+          const d = dist(o, p)
+          if (d > 9) continue
+          const w = (9 - d) / 9
+          ex -= ((o.x - p.x) / (d || 1)) * w * 1.5
+          ey -= ((o.y - p.y) / (d || 1)) * w * 1.5
+          if (d < 3.2) boxed += 1
+        }
+        const m = Math.hypot(ex, ey) || 1
+        // 완전히 갇히면 멀리 못 간다. 몸으로 지키며 내줄 곳을 찾는 그림
+        const run = boxed >= 2 ? 5 : 13
+        p.tx = clamp(p.x + (ex / m) * run, 4, PITCH_W - 4)
+        p.ty = clamp(p.y + (ey / m) * run, 4, PITCH_H - 4)
         continue
       }
 
@@ -590,9 +669,9 @@ export class VisualMatch {
         p.tx = clamp(tx, 3, PITCH_W - 3)
         p.ty = clamp(ty, 3, PITCH_H - 3)
       } else {
-        // 수비 — 가장 가까운 두세 명은 공에 달려들고 나머지는 자리를 지킨다.
+        // 수비 — 추격조 세 명은 공에 달려들고 나머지는 자리를 지킨다.
         // 공을 가진 선수가 몰고 가므로 지금 자리가 아니라 갈 자리를 노린다
-        const rank = this.pressRank(p)
+        const rank = this.chasersOf(p.side).indexOf(p.id)
         const lead = 0.45
         const px = holder ? holder.x + holder.vx * lead : this.ball.x
         const py = holder ? holder.y + holder.vy * lead : this.ball.y
@@ -630,15 +709,23 @@ export class VisualMatch {
     void state
   }
 
-  /** 이 선수가 자기 팀에서 공에 몇 번째로 가까운가 */
-  private pressRank(p: VPlayer): number {
-    let rank = 0
-    const mine = dist(p, this.ball)
-    for (const o of this.players) {
-      if (o.side !== p.side || o.pos === 'GK' || o.id === p.id) continue
-      if (dist(o, this.ball) < mine) rank += 1
+  /**
+   * 공에 달려들 추격조 세 명.
+   *
+   * 매 프레임 거리순으로 다시 뽑으면 두 선수의 순위가 오락가락할 때마다
+   * 역할이 뒤바뀌어 전원이 갈지자로 뛴다. 한 번 정한 추격조는 잠깐
+   * 유지하고, 공 주인이 바뀔 때 새로 짠다.
+   */
+  private chasersOf(side: 'HOME' | 'AWAY'): string[] {
+    if (this.clock - this.chaseAt[side] > 0.7) {
+      this.chaseIds[side] = this.players
+        .filter((p) => p.side === side && p.pos !== 'GK')
+        .sort((a, b) => dist(a, this.ball) - dist(b, this.ball))
+        .slice(0, 3)
+        .map((p) => p.id)
+      this.chaseAt[side] = this.clock
     }
-    return rank
+    return this.chaseIds[side]
   }
 
   private movePlayer(p: VPlayer, dt: number) {
@@ -651,8 +738,8 @@ export class VisualMatch {
       return
     }
 
-    const dx = p.tx - p.x
-    const dy = p.ty - p.y
+    const dx = p.stx - p.x
+    const dy = p.sty - p.y
     const d = Math.hypot(dx, dy)
     // 공을 몰고 뛰는 선수는 빈 몸으로 뛰는 선수보다 느리다.
     // 이것 때문에 수비수가 따라붙을 수 있고, 압박이 실제로 작동한다
@@ -761,9 +848,36 @@ export class VisualMatch {
     if (best && bd < 2) this.giveTo(best)
   }
 
+  /**
+   * 겹침 방지.
+   *
+   * 두 사람이 같은 점 위에 서 있으면 사람이 아니라 표식으로 보인다.
+   * 몸이 닿을 거리면 서로 밀어낸다.
+   */
+  private separate() {
+    for (let a = 0; a < this.players.length; a++) {
+      for (let b = a + 1; b < this.players.length; b++) {
+        const p = this.players[a]
+        const q = this.players[b]
+        const dx = q.x - p.x
+        const dy = q.y - p.y
+        const d = Math.hypot(dx, dy)
+        if (d >= 1.4 || d < 1e-6) continue
+        const push = Math.min(0.08, (1.4 - d) / 2)
+        const ux = dx / d
+        const uy = dy / d
+        p.x = clamp(p.x - ux * push, 1, PITCH_W - 1)
+        p.y = clamp(p.y - uy * push, 1, PITCH_H - 1)
+        q.x = clamp(q.x + ux * push, 1, PITCH_W - 1)
+        q.y = clamp(q.y + uy * push, 1, PITCH_H - 1)
+      }
+    }
+  }
+
   /** 관전 장면을 dt 초만큼 진행시킨다 */
   advance(state: MatchState, dt: number) {
     const step = Math.min(dt, 0.05)
+    this.clock += step
 
     for (const f of this.flashes) f.life -= step
     this.flashes = this.flashes.filter((f) => f.life > 0)
@@ -774,6 +888,8 @@ export class VisualMatch {
       for (const p of this.players) {
         p.tx = p.homeX
         p.ty = p.homeY
+        p.stx = p.homeX
+        p.sty = p.homeY
         this.movePlayer(p, step)
       }
       this.ball.x = this.celebration.x
@@ -787,10 +903,25 @@ export class VisualMatch {
     }
 
     this.setTargets(state)
+
+    // 목표를 부드럽게 따라간다. 역할이 바뀌어 목표가 반대편으로 튀어도
+    // 몸이 홱 꺾이지 않고 사람처럼 방향을 눌러서 바꾼다
+    const follow = Math.min(1, step * 5)
+    for (const p of this.players) {
+      p.stx += (p.tx - p.stx) * follow
+      p.sty += (p.ty - p.sty) * follow
+    }
+
     const holder = this.byId(this.ball.holder)
-    if (holder && this.ball.mode === 'HELD') this.decide(holder, step)
+    if (holder && this.ball.mode === 'HELD') {
+      this.updatePressure(holder, step)
+      // 방금 태클로 주인이 바뀌었을 수 있다
+      const now = this.byId(this.ball.holder)
+      if (now && this.ball.mode === 'HELD') this.decide(now, step)
+    }
 
     for (const p of this.players) this.movePlayer(p, step)
+    this.separate()
     this.moveBall(step)
   }
 }
