@@ -26,6 +26,8 @@ interface Dot {
   side: 'HOME' | 'AWAY'
   booked: boolean
   spent: boolean
+  /** 이 선수가 목표 지점을 따라가는 속도. 전원이 같으면 한 몸처럼 움직인다 */
+  lag: number
 }
 
 /**
@@ -64,90 +66,136 @@ export function resetSmoothing() {
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
 
 /**
- * 선수가 살아 있게 보이는 미세 움직임.
+ * 포지션별 행동 규칙.
  *
- * 축구에서 공이 없는 선수도 계속 자리를 잡는다. 이게 없으면 공만 굴러가고
- * 사람은 얼어 있는 화면이 된다. 틱과 등번호로 위상을 갈라 각자 다른
- * 주기로 움직이게 한다.
+ * 전원에게 같은 오프셋을 더하면 열한 개 점이 강체처럼 통째로 미끄러진다.
+ * 축구는 각자 자기 구역을 맡고 서로 다른 정도로 반응한다. 수비수는 좁게
+ * 움직이고 공을 따라 옆으로 크게 밀린다. 미드필더는 가장 넓게 돌아다닌다.
+ * 공격수는 앞에 남아 있으려 해서 뒤로는 잘 안 내려온다.
  */
-function jitter(tick: number, seed: number): [number, number] {
-  const t = tick * 0.055
+interface Role {
+  /** 자기 자리에서 앞뒤·좌우로 벗어날 수 있는 한계 (미터) */
+  roamX: number
+  roamY: number
+  /** 공의 앞뒤 위치를 얼마나 따라가나 */
+  followX: number
+  /** 공의 좌우 위치를 얼마나 따라가나 */
+  followY: number
+  /** 밀어붙일 때 전진하는 정도 / 밀릴 때 후퇴하는 정도 */
+  pushUp: number
+  pushBack: number
+  /** 공에 달려붙는 정도 */
+  chase: number
+  /** 가만히 있을 때의 흔들림 */
+  wobble: number
+  /** 반응 속도. 낮을수록 굼뜨다 */
+  lag: number
+}
+
+const ROLES: Record<string, Role> = {
+  GK: { roamX: 5, roamY: 7, followX: 0.05, followY: 0.14, pushUp: 3, pushBack: 2, chase: 0, wobble: 0.5, lag: 0.06 },
+  DF: { roamX: 15, roamY: 11, followX: 0.30, followY: 0.62, pushUp: 13, pushBack: 9, chase: 0.30, wobble: 1.1, lag: 0.11 },
+  MF: { roamX: 23, roamY: 17, followX: 0.46, followY: 0.68, pushUp: 12, pushBack: 13, chase: 0.42, wobble: 2.0, lag: 0.15 },
+  FW: { roamX: 19, roamY: 15, followX: 0.38, followY: 0.42, pushUp: 11, pushBack: 6, chase: 0.34, wobble: 1.7, lag: 0.13 },
+}
+
+/**
+ * 공이 없을 때의 흔들림. 선수마다 주기와 진폭이 다르다.
+ *
+ * 같은 식에 위상만 다르게 주면 열한 명이 한 몸처럼 흔들린다.
+ */
+function wobbleOf(tick: number, seed: number, amp: number): [number, number] {
+  const a = tick * (0.035 + (seed % 5) * 0.009)
+  const b = tick * (0.022 + (seed % 7) * 0.006)
   return [
-    Math.sin(t + seed * 1.7) * 2.0 + Math.sin(t * 0.41 + seed) * 1.2,
-    Math.cos(t * 0.83 + seed * 2.3) * 1.7 + Math.sin(t * 0.29 + seed * 0.7) * 1.0,
+    (Math.sin(a + seed * 1.7) + Math.sin(b * 1.6 + seed)) * amp,
+    (Math.cos(b + seed * 2.3) + Math.sin(a * 0.7 + seed * 0.9)) * amp * 0.8,
   ]
 }
 
-/** 공에 끌리는 범위. 이보다 멀면 대형만 유지한다 */
-const CONVERGE_RADIUS = 24
-
 /**
- * 공 근처 선수를 공 쪽으로 끌어당긴다.
+ * 한 선수가 이 틱에 있어야 할 자리.
  *
- * 실제 축구에서 공 주변에는 사람이 몰린다. 전원이 대형만 유지하고 있으면
- * 볼 경합이 일어나는 것처럼 보이지 않는다.
- *
- * "가장 가까운 세 명"처럼 잘라내면 네 번째가 세 번째가 되는 순간 갑자기
- * 끌려가 순간이동처럼 보인다. 거리에 따라 연속으로 약해지게 해야 한다.
+ * 자기 자리(포메이션 좌표)를 기준으로 삼고, 공의 위치와 경기 기울기에
+ * 포지션별로 다르게 반응한 뒤, 자기 활동 반경 안으로 묶는다. 반경으로
+ * 묶기 때문에 아무리 공을 따라가도 대형이 무너지지 않는다.
  */
-function converge(dots: Dot[], bx: number, by: number, strength: number) {
-  for (const d of dots) {
-    if (d.num === 1) continue
-    const dist = Math.hypot(d.x - bx, d.y - by)
-    if (dist >= CONVERGE_RADIUS) continue
-    const near = 1 - dist / CONVERGE_RADIUS
-    const k = strength * near * near
-    d.x += (bx - d.x) * k
-    d.y += (by - d.y) * k
+function place(
+  home: { x: number; y: number },
+  role: Role,
+  tilt: number,
+  bx: number,
+  by: number,
+  tick: number,
+  seed: number,
+  attackingRight: boolean,
+): { x: number; y: number } {
+  const dir = attackingRight ? 1 : -1
+  const push = tilt * dir > 0 ? role.pushUp : -role.pushBack
+  const [wx, wy] = wobbleOf(tick, seed, role.wobble)
+
+  let x = home.x + Math.abs(tilt) * push * dir + (bx - home.x) * role.followX * 0.4 + wx
+  let y = home.y + (by - home.y) * role.followY + wy
+
+  // 공이 자기 구역 가까이 오면 달려나간다. 멀면 자기 자리를 지킨다
+  const dist = Math.hypot(x - bx, y - by)
+  if (dist < 26 && role.chase > 0) {
+    const near = 1 - dist / 26
+    const k = role.chase * near * near
+    x += (bx - x) * k
+    y += (by - y) * k
+  }
+
+  return {
+    x: clamp(x, home.x - role.roamX, home.x + role.roamX),
+    y: clamp(y, home.y - role.roamY, home.y + role.roamY),
   }
 }
 
-/** 상대 배치. 성향에 따라 블록 전체가 앞뒤로 밀리고, 공을 따라 움직인다 */
+/** 상대 배치. 성향에 따라 자기 자리 자체가 앞뒤로 옮겨간다 */
 function awayDots(state: MatchState, bx: number, by: number): Dot[] {
   const mood =
     state.opponent === 'ALL_OUT' ? -13 : state.opponent === 'PARK_BUS' ? 11 : 0
-  // 경기가 기운 쪽으로 블록 전체가 옮겨간다. 상대 골대는 x = 0 쪽이다
-  const push = state.ball.tilt * -12
-  const slide = (by - 34) * 0.45
 
-  const rows: Array<[number, number[]]> = [
-    [98, [34]],
-    [84, [12, 27, 41, 56]],
-    [66, [16, 30, 44, 58]],
-    [50, [28, 44]],
+  const rows: Array<[number, number[], string]> = [
+    [98, [34], 'GK'],
+    [84, [12, 27, 41, 56], 'DF'],
+    [66, [16, 30, 44, 58], 'MF'],
+    [50, [28, 44], 'FW'],
   ]
   const nums = [1, 2, 5, 4, 3, 7, 8, 10, 6, 9, 11]
   const limit = state.awayCount === 11 ? 11 : 10
 
   const dots: Dot[] = []
   let i = 0
-  for (const [x, ys] of rows) {
+  for (const [rowX, ys, pos] of rows) {
     for (const y of ys) {
       if (i >= limit) break
-      const gk = i === 0
-      const [jx, jy] = jitter(state.tick, i + 40)
+      const role = ROLES[pos]
+      const home = { x: pos === 'GK' ? rowX : rowX + mood, y }
+      // 상대는 x = 0 쪽을 공격한다
+      const p = place(home, role, state.ball.tilt, bx, by, state.tick, i + 41, false)
       dots.push({
-        x: gk
-          ? clamp(x + (bx - 52) * 0.06, 96, 103)
-          : clamp(x + mood + push + jx, 26, 102),
-        y: gk ? 34 + (by - 34) * 0.12 : clamp(y + slide + jy, 4, 64),
+        x: clamp(p.x, 24, 103),
+        y: clamp(p.y, 4, 64),
         num: nums[i] ?? 0,
         side: 'AWAY',
         booked: false,
         spent: false,
+        lag: role.lag * (0.85 + ((i * 37) % 11) / 36),
       })
       i += 1
     }
   }
-  converge(dots, bx, by, 0.42)
   return dots
 }
 
 /**
  * 우리 배치.
  *
- * 포메이션 좌표가 뼈대이고, 그 위에 수비라인 오프셋 · 점유에 따른 전진
- * 후퇴 · 공을 따라가는 좌우 슬라이드 · 미세 움직임이 얹힌다.
+ * 포메이션 좌표가 각자의 자기 자리이고, 그 위에 수비라인 오프셋과 폭
+ * 설정이 자리 자체를 옮긴다. 그다음 각 선수가 포지션별 규칙에 따라
+ * 따로 반응하되 자기 활동 반경을 벗어나지 않는다.
  */
 function homeDots(state: MatchState, bx: number, by: number): Dot[] {
   const tenMen = state.homeCount < 11
@@ -155,32 +203,30 @@ function homeDots(state: MatchState, bx: number, by: number): Dot[] {
 
   const lineShift = (state.tactics.line - 1) * 8
   const widthScale = 0.8 + state.tactics.width * 0.18
-  // 밀어붙이면 전체가 올라가고 밀리면 내려온다. 폭이 작으면 축구로 안 보인다
-  const push = state.ball.tilt * 13
-  const slide = (by - 34) * 0.45
-
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
 
-  const dots = slots.map((slot, i) => {
+  return slots.map((slot, i) => {
     const s = onPitch[i]
-    const p = s ? getPlayer(s.id) : null
+    const info = s ? getPlayer(s.id) : null
+    const role = ROLES[slot.pos]
     const gk = slot.pos === 'GK'
-    const [jx, jy] = jitter(state.tick, i)
+
+    const home = gk
+      ? { x: slot.x, y: slot.y }
+      : { x: slot.x + lineShift, y: 34 + (slot.y - 34) * widthScale }
+
+    const p = place(home, role, state.ball.tilt, bx, by, state.tick, i, true)
     return {
-      x: gk
-        ? clamp(slot.x + (bx - 52) * 0.06, 2, 9)
-        : clamp(slot.x + lineShift + push + jx, 3, 79),
-      y: gk
-        ? 34 + (by - 34) * 0.12
-        : clamp(34 + (slot.y - 34) * widthScale + slide + jy, 4, 64),
-      num: p?.num ?? 0,
+      x: clamp(p.x, 2, 81),
+      y: clamp(p.y, 4, 64),
+      num: info?.num ?? 0,
       side: 'HOME' as const,
       booked: s?.booked ?? false,
       spent: (s?.stamina ?? 100) < 35,
+      // 지친 선수는 굼뜨게 따라간다
+      lag: role.lag * (0.85 + ((i * 53) % 13) / 42) * ((s?.stamina ?? 100) < 35 ? 0.7 : 1),
     }
   })
-  converge(dots, bx, by, 0.46)
-  return dots
 }
 
 /**
@@ -252,7 +298,7 @@ export function drawPitch(
   const by = state.ball.y * PITCH_H
 
   for (const d of [...awayDots(state, bx, by), ...homeDots(state, bx, by)]) {
-    const p = ease(`${d.side}${d.num}`, d.x, d.y, 0.12)
+    const p = ease(`${d.side}${d.num}`, d.x, d.y, d.lag)
     const cx = X(p.x)
     const cy = Y(p.y)
     const home = d.side === 'HOME'

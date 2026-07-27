@@ -152,6 +152,94 @@ describe('선수 움직임', () => {
     expect(avg(meanX.HOME)).toBeGreaterThan(avg(meanX.AWAY) + 8)
   })
 
+  it('선수마다 움직이는 양이 다르다', () => {
+    // 전원에게 같은 오프셋을 더하면 열한 개 점이 강체처럼 통째로 미끄러진다.
+    // 수비수는 좁게, 미드필더는 넓게 움직여야 축구로 보인다.
+    const home = [...paths].filter(([k]) => k.startsWith('HOME') && k !== 'HOME1')
+    const areas = home.map(([, p]) => {
+      const s = spread(p)
+      return s.x * s.y
+    })
+    const min = Math.min(...areas)
+    const max = Math.max(...areas)
+    expect(max).toBeGreaterThan(min * 2)
+  })
+
+  it('대형이 강체처럼 통째로 미끄러지지 않는다', () => {
+    // 공이 오른쪽으로 가면 다수가 같이 오른쪽으로 도는 것은 정상이다.
+    // 문제는 열한 개 점이 한 덩어리로 움직이는 것이다. 강체는 모든 선수
+    // 사이 거리가 고정되므로, 서로 간격이 실제로 변하는지를 본다.
+    const keys = [...paths.keys()].filter((k) => k.startsWith('HOME') && k !== 'HOME1')
+    const len = paths.get(keys[0])!.length
+
+    const ranges: number[] = []
+    for (let a = 0; a < keys.length; a++) {
+      for (let b = a + 1; b < keys.length; b++) {
+        const pa = paths.get(keys[a])!
+        const pb = paths.get(keys[b])!
+        let min = Infinity
+        let max = -Infinity
+        for (let i = 0; i < len; i++) {
+          const d = Math.hypot(pa[i][0] - pb[i][0], pa[i][1] - pb[i][1])
+          if (d < min) min = d
+          if (d > max) max = d
+        }
+        ranges.push(max - min)
+      }
+    }
+    // 모든 짝의 간격 변화 중앙값이 충분히 커야 한다
+    ranges.sort((x, y) => x - y)
+    const median = ranges[Math.floor(ranges.length / 2)]
+    expect(median, '선수 사이 간격이 거의 안 변한다 — 강체다').toBeGreaterThan(8)
+  })
+
+  it('간격 변화가 특정 짝에만 몰려 있지 않다', () => {
+    // 몇 명만 흔들리고 나머지는 붙어 있으면 그것도 강체에 가깝다
+    const keys = [...paths.keys()].filter((k) => k.startsWith('HOME') && k !== 'HOME1')
+    const len = paths.get(keys[0])!.length
+    for (const key of keys) {
+      const self = paths.get(key)!
+      let moved = 0
+      for (const other of keys) {
+        if (other === key) continue
+        const p = paths.get(other)!
+        let min = Infinity
+        let max = -Infinity
+        for (let i = 0; i < len; i++) {
+          const d = Math.hypot(self[i][0] - p[i][0], self[i][1] - p[i][1])
+          if (d < min) min = d
+          if (d > max) max = d
+        }
+        if (max - min > 5) moved += 1
+      }
+      expect(moved, `${key} 는 다른 선수들과 간격이 거의 고정이다`).toBeGreaterThan(3)
+    }
+  })
+
+  it('아무리 공을 따라가도 자기 자리를 크게 벗어나지 않는다', () => {
+    // 대형이 유지되어야 한다. 공만 쫓아 전원이 몰려다니면 축구가 아니다.
+    for (const [key, path] of paths) {
+      if (!key.startsWith('HOME') || key === 'HOME1') continue
+      const s = spread(path)
+      expect(s.x, `${key} 의 앞뒤 활동 폭이 너무 넓다`).toBeLessThan(52)
+      expect(s.y, `${key} 의 좌우 활동 폭이 너무 넓다`).toBeLessThan(40)
+    }
+  })
+
+  it('수비수가 공격수보다 앞에 서지 않는다', () => {
+    // 대형이 뒤집히면 포메이션을 유지한다고 할 수 없다
+    const rng = createRng(P.seed)
+    let s = createState(P)
+    for (let i = 0; i < TOTAL_TICKS; i += 25) {
+      for (let j = 0; j < 25; j++) s = tick(s, rng)
+      const home = computeDots(s).filter((d) => d.side === 'HOME' && d.num !== 1)
+      // 4-4-2 기준 앞 넷이 수비수, 뒤 둘이 공격수 (배치 순서 그대로)
+      const defMean = home.slice(0, 4).reduce((a, d) => a + d.x, 0) / 4
+      const fwMean = home.slice(-2).reduce((a, d) => a + d.x, 0) / 2
+      expect(fwMean, `틱 ${i}`).toBeGreaterThan(defMean + 15)
+    }
+  })
+
   it('포메이션을 바꾸면 배치가 달라진다', () => {
     const back = computeDots(createState({ ...P, initialFormation: '5-4-1' }))
     const front = computeDots(createState({ ...P, initialFormation: '3-4-3' }))
