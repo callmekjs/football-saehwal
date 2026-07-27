@@ -337,6 +337,96 @@ describe('골 — 반드시 골대 안으로 들어간다', () => {
   })
 })
 
+describe('공격할 때는 팀 전체가 올라간다', () => {
+  const { frames } = watch()
+
+  /** 우리 팀이 공을 가진 프레임과 상대가 가진 프레임을 나눈다 */
+  const ours = frames.filter((f) => f.mode === 'HELD' && f.holder?.startsWith('H') && !f.celebrating)
+  const theirs = frames.filter((f) => f.mode === 'HELD' && f.holder?.startsWith('A') && !f.celebrating)
+
+  /**
+   * 공을 기준으로 한 선수의 앞뒤 위치.
+   *
+   * 절대 좌표로 비교하면 안 된다. 우리가 공을 가질 때와 상대가 가질 때는
+   * 공 위치 자체가 다르므로 두 상황이 섞여버린다. 축구에서 물어야 할 것은
+   * "공보다 앞에 있느냐 뒤에 있느냐"다 — 공격하면 앞으로 나가 받으려 하고,
+   * 수비하면 공과 우리 골대 사이에 선다.
+   */
+  const meanAheadOfBall = (fs: typeof frames, pick: (id: string) => boolean) => {
+    let sum = 0
+    let n = 0
+    for (const f of fs) {
+      for (const p of f.players) {
+        if (!pick(p.id)) continue
+        sum += p.x - f.ball.x
+        n += 1
+      }
+    }
+    return sum / Math.max(1, n)
+  }
+
+  // 4-4-2 기준 우리 팀 등번호: 골키퍼 1, 수비 2·3·4·5, 중원 6·7·8·10, 공격 9·11
+  const isDF = (id: string) => ['H2', 'H3', 'H4', 'H5'].includes(id)
+  const isMF = (id: string) => ['H6', 'H7', 'H8', 'H10'].includes(id)
+  const isFW = (id: string) => ['H9', 'H11'].includes(id)
+
+  it('양쪽 표본이 충분하다', () => {
+    expect(ours.length).toBeGreaterThan(50)
+    expect(theirs.length).toBeGreaterThan(50)
+  })
+
+  it('우리가 공을 가지면 수비수가 공 쪽으로 따라 올라간다', () => {
+    // 공격할 때 뒤에 가만히 서 있는 수비수는 없다.
+    // 공과의 거리가 줄어들어야 라인을 올린 것이다
+    const up = meanAheadOfBall(ours, isDF)
+    const back = meanAheadOfBall(theirs, isDF)
+    expect(up, `수비수의 공 기준 위치 ${up.toFixed(1)} vs ${back.toFixed(1)}`).toBeGreaterThan(
+      back + 6,
+    )
+  })
+
+  it('우리가 공을 가지면 미드필더가 공을 앞질러 나간다', () => {
+    const up = meanAheadOfBall(ours, isMF)
+    const back = meanAheadOfBall(theirs, isMF)
+    expect(up, `미드필더의 공 기준 위치 ${up.toFixed(1)} vs ${back.toFixed(1)}`).toBeGreaterThan(
+      back + 8,
+    )
+  })
+
+  it('공격수는 공보다 앞에 있다', () => {
+    // 받을 자리를 잡아야 하므로 공보다 앞으로 나간다
+    expect(meanAheadOfBall(ours, isFW)).toBeGreaterThan(0)
+  })
+
+  it('수비할 때는 공과 우리 골대 사이에 선다', () => {
+    // 공보다 앞에 나가 있으면 뒤가 비어 있다는 뜻이다
+    expect(meanAheadOfBall(theirs, isDF)).toBeLessThan(-6)
+    expect(meanAheadOfBall(theirs, isMF)).toBeLessThan(2)
+  })
+
+  it('공격 중에 수비수가 공보다 한참 뒤처지지 않는다', () => {
+    // 공은 상대 진영인데 수비라인이 자기 골대에 붙어 있으면 축구가 아니다
+    let far = 0
+    for (const f of ours) {
+      const df = f.players.filter((p) => isDF(p.id))
+      const line = df.reduce((a, p) => a + p.x, 0) / df.length
+      if (f.ball.x - line > 46) far += 1
+    }
+    expect(far / ours.length, '수비라인이 공에서 46m 넘게 처진 비율').toBeLessThan(0.25)
+  })
+
+  it('대형 순서는 유지된다', () => {
+    // 다 같이 올라가되 수비수가 공격수를 앞지르면 안 된다
+    let broken = 0
+    for (const f of ours) {
+      const df = f.players.filter((p) => isDF(p.id)).reduce((a, p) => a + p.x, 0) / 4
+      const fw = f.players.filter((p) => isFW(p.id)).reduce((a, p) => a + p.x, 0) / 2
+      if (df >= fw) broken += 1
+    }
+    expect(broken / ours.length).toBeLessThan(0.05)
+  })
+})
+
 describe('킥오프 — 축구 규칙대로', () => {
   const { frames } = watch()
 

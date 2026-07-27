@@ -474,7 +474,7 @@ export class VisualMatch {
       if (p.side !== holder.side || p.id === holder.id || p.pos === 'GK') continue
       // 짧은 패스가 기본이다. 매번 롱볼을 때리면 공이 계속 공중에 있다
       const d = dist(p, holder)
-      if (d < 5 || d > 32) continue
+      if (d < 5 || d > 46) continue
 
       // 앞으로 갈수록 좋고, 상대가 붙어 있으면 나쁘다
       const forward = (p.x - holder.x) * dir
@@ -559,19 +559,34 @@ export class VisualMatch {
       }
 
       if (attacking) {
-        // 공격 — 앞으로 나가 패스 받을 자리를 잡는다
-        const push = p.pos === 'FW' ? 16 : p.pos === 'MF' ? 11 : 6
+        // 공격 — 팀 전체가 올라간다.
+        //
+        // 공격할 때 가만히 서 있는 선수는 없다. 수비라인은 하프라인까지
+        // 밀고 올라가고 미드필더는 상대 박스 근처까지 들어간다. 전진 폭이
+        // 작으면 공만 앞에 가 있고 뒤에 아홉 명이 서 있는 화면이 된다.
+        const push = p.pos === 'FW' ? 22 : p.pos === 'MF' ? 30 : 32
         let tx = p.homeX + push * dir
         let ty = p.homeY
+
         if (holder) {
-          // 공 잡은 선수 근처면 지원하러 붙되 너무 겹치지 않는다
+          // 공 있는 쪽으로 팀 전체가 쏠린다. 반대편은 폭을 유지한다
+          const lateral = p.pos === 'DF' ? 0.35 : 0.5
+          ty = p.homeY + (holder.y - p.homeY) * lateral
+
           const d = dist(p, holder)
-          if (d < 22) {
+          if (d < 24 && p.pos !== 'DF') {
+            // 가까우면 받을 각을 만든다 — 겹치지 않게 벌려 선다
             const away = p.y > holder.y ? 1 : -1
-            ty = clamp(p.homeY + away * 7, 4, PITCH_H - 4)
-            tx = clamp(holder.x + 9 * dir + (p.pos === 'FW' ? 8 : 0), 4, PITCH_W - 4)
+            ty = clamp(holder.y + away * (8 + (p.pos === 'FW' ? 4 : 0)), 4, PITCH_H - 4)
+            tx = clamp(holder.x + (p.pos === 'FW' ? 14 : 8) * dir, 4, PITCH_W - 4)
+          }
+          // 수비라인은 공보다 너무 뒤처지지 않는다. 압축된 블록을 유지한다
+          if (p.pos === 'DF') {
+            const lineCap = holder.x - 34 * dir
+            tx = dir > 0 ? Math.max(tx, lineCap) : Math.min(tx, lineCap)
           }
         }
+
         p.tx = clamp(tx, 3, PITCH_W - 3)
         p.ty = clamp(ty, 3, PITCH_H - 3)
       } else {
@@ -596,9 +611,18 @@ export class VisualMatch {
           // 나머지는 블록을 유지한 채 공 쪽으로 통째로 이동한다.
           // 이게 헐거우면 패스 한 번에 압박이 풀려 아무도 안 붙는 화면이
           // 된다. 실제 수비 블록은 공에서 20미터 안쪽에 모여 있다.
-          // 수비수는 뒷공간을 지켜야 하므로 덜 나온다
-          const compact = p.pos === 'DF' ? 0.52 : 0.72
-          p.tx = clamp(p.homeX + (this.ball.x - p.homeX) * compact, 3, PITCH_W - 3)
+          const compact = p.pos === 'DF' ? 0.42 : 0.72
+          let tx = p.homeX + (this.ball.x - p.homeX) * compact
+
+          // 수비할 때는 자기 골대 쪽에 머문다. 상대가 자기 진영에서 공을
+          // 돌린다고 우리 수비라인이 하프라인을 넘어가면 축구가 아니다
+          const limit = p.pos === 'DF' ? -9 : 16
+          tx =
+            dir > 0
+              ? Math.min(tx, PITCH_W / 2 + limit)
+              : Math.max(tx, PITCH_W / 2 - limit)
+
+          p.tx = clamp(tx, 3, PITCH_W - 3)
           p.ty = clamp(p.homeY + (this.ball.y - p.homeY) * 0.68, 3, PITCH_H - 3)
         }
       }
