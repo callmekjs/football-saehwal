@@ -4,9 +4,42 @@
  * 브라우저 없이 Node에서 돌린다. 손으로 확인하면 한 국면당 8시간이
  * 걸리는 작업이 몇 초로 끝난다. 실행: npm run sim
  */
-import problems from '../src/data/problems.json' with { type: 'json' }
+import raw from '../src/data/problems.json' with { type: 'json' }
 import { simulate } from '../src/sim/engine'
-import type { Decision, Level, Problem } from '../src/sim/types'
+import type { Decision, Level, Objective, Problem } from '../src/sim/types'
+
+/**
+ * JSON 을 Problem 으로 좁힌다.
+ *
+ * JSON 모듈은 score 를 number[] 로, line 을 number 로 읽으므로 그대로는
+ * 튜플과 Level 에 맞지 않는다. 통째로 캐스팅하면 국면 데이터에 오타가
+ * 있어도 조용히 통과하므로, 필드마다 명시적으로 옮기면서 검사한다.
+ */
+function toProblem(p: (typeof raw)[number]): Problem {
+  const level = (v: number, field: string): Level => {
+    if (v !== 0 && v !== 1 && v !== 2) {
+      throw new Error(`${p.id}: ${field} 는 0·1·2 중 하나여야 하는데 ${v} 다`)
+    }
+    return v
+  }
+  if (p.score.length !== 2) throw new Error(`${p.id}: score 는 두 개여야 한다`)
+  if (p.objective.type !== 'SURVIVE' && p.objective.type !== 'EQUALIZE') {
+    throw new Error(`${p.id}: objective.type 이 ${p.objective.type} 다`)
+  }
+
+  return {
+    ...p,
+    score: [p.score[0], p.score[1]],
+    initialTactics: {
+      line: level(p.initialTactics.line, 'line'),
+      press: level(p.initialTactics.press, 'press'),
+      width: level(p.initialTactics.width, 'width'),
+    },
+    objective: p.objective as Objective,
+  }
+}
+
+const problems = raw.map(toProblem)
 
 const SEEDS = 400
 
@@ -58,7 +91,7 @@ console.log('─'.repeat(68))
 
 let allPassed = true
 
-for (const p of problems as Problem[]) {
+for (const p of problems) {
   const noop = measure(p, [])
   const { top, bottom } = best(p)
   const gap = top.rate - noop.rate
