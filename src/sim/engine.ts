@@ -34,6 +34,7 @@ export function createState(problem: Problem): MatchState {
     score: [...problem.score] as [number, number],
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: { ...problem.initialTactics },
+    formation: problem.initialFormation,
     players,
     opponent: mentalityOf(problem.score),
     homeCount: onPitchCount(players),
@@ -71,6 +72,7 @@ export function tick(state: MatchState, rng: Rng): MatchState {
     state.opponent,
     state.awayCount < 11,
     state.homeCount < 11,
+    state.formation,
   )
 
   let players = state.players.map((s) =>
@@ -169,7 +171,8 @@ export function simulate(
             ],
           }
         }
-      } else if (d.type === 'LINE') state.tactics.line = d.value
+      } else if (d.type === 'FORMATION') state = { ...state, formation: d.value }
+      else if (d.type === 'LINE') state.tactics.line = d.value
       else if (d.type === 'PRESS') state.tactics.press = d.value
       else state.tactics.width = d.value
     }

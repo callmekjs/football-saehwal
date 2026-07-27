@@ -1,4 +1,5 @@
 import { LINE, PRESS, WIDTH, MENTALITY, COUNT_PENALTY } from './constants'
+import { getFormation, type FormationId } from './formations'
 import type { Mentality, Tactics } from './types'
 
 /** 레버 3개와 상대 성향이 합쳐져 나오는 최종 승수 묶음 */
@@ -37,11 +38,13 @@ export function resolveCoefficients(
   mentality: Mentality,
   oppTenMan: boolean,
   homeTenMan = false,
+  formation: FormationId = '4-4-2',
 ): Coefficients {
   const line = LINE[tactics.line]
   const press = PRESS[tactics.press]
   const width = WIDTH_BY_LEVEL[tactics.width]
   const ment = MENTALITY[mentality]
+  const form = getFormation(formation).coef
 
   const congestion = Math.min(
     1,
@@ -52,9 +55,9 @@ export function resolveCoefficients(
   const cover = homeTenMan ? COUNT_PENALTY.tenManCover : 1
 
   return {
-    behind: line.behind * ment.behind * cover,
-    steal: line.steal * press.steal,
-    drain: line.drain * press.drain,
+    behind: line.behind * ment.behind * cover * form.behind,
+    steal: line.steal * press.steal * form.steal,
+    drain: line.drain * press.drain * form.drain,
     entryXg: line.entryXg,
     setPiece: line.setPiece * cover,
     // 폭을 벌리면 중앙이 열린다. 이 대가가 없으면 넓게가 공짜가 된다
@@ -63,9 +66,10 @@ export function resolveCoefficients(
       width.oppOpen *
       ment.oppVolume *
       cover *
+      form.oppOpen *
       (oppTenMan ? COUNT_PENALTY.oppTenManVolume : 1),
     foul: press.foul,
-    widthK: width.base + width.congestion * congestion,
-    openness: ment.openness,
+    widthK: (width.base + width.congestion * congestion) * form.attack,
+    openness: ment.openness * form.enter,
   }
 }

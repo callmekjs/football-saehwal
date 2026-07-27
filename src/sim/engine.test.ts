@@ -11,6 +11,7 @@ const P: Problem = {
   order: 1,
   score: [1, 0],
   initialTactics: { line: 0, press: 0, width: 0 },
+  initialFormation: '4-4-2',
   objective: { type: 'SURVIVE', bonusOnWin: false },
   seed: 40712,
   subsLeft: 3,

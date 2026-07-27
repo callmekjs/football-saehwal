@@ -1,3 +1,5 @@
+import type { FormationId } from './formations'
+
 /** 전술 레버의 3단계. 0 = 낮음/약/좁게, 1 = 보통/중/보통, 2 = 높음/강/넓게 */
 export type Level = 0 | 1 | 2
 
@@ -69,6 +71,8 @@ export interface MatchState {
   /** [우리, 상대] */
   score: [number, number]
   tactics: Tactics
+  /** 우리 팀 포메이션. 바꾸면 확률이 즉시 바뀐다 */
+  formation: FormationId
   players: PlayerState[]
   opponent: Mentality
   homeCount: number
@@ -97,6 +101,8 @@ export interface Problem {
    * 중립에서 시작하면 아무것도 안 해도 통과해버려 퍼즐이 되지 않는다.
    */
   initialTactics: Tactics
+  /** 앞 감독이 세워둔 포메이션 */
+  initialFormation: FormationId
   objective: Objective
   seed: number
   subsLeft: number
@@ -120,3 +126,4 @@ export interface Problem {
 export type Decision =
   | { tick: number; type: 'LINE' | 'PRESS' | 'WIDTH'; value: Level }
   | { tick: number; type: 'SUB'; out: string; in: string }
+  | { tick: number; type: 'FORMATION'; value: FormationId }

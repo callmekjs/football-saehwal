@@ -6,6 +6,7 @@
  */
 import raw from '../src/data/problems.json' with { type: 'json' }
 import { simulate } from '../src/sim/engine'
+import { FORMATION_IDS, type FormationId } from '../src/sim/formations'
 import type { Decision, Level, Objective, Problem } from '../src/sim/types'
 
 /**
@@ -38,6 +39,7 @@ export function toProblem(p: (typeof raw)[number]): Problem {
     unavailable: [...p.unavailable],
     // JSON 은 국면마다 키가 달라 유니온으로 읽힌다. 명시적으로 좁힌다
     staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
+    initialFormation: p.initialFormation as FormationId,
     score: [p.score[0], p.score[1]],
     initialTactics: {
       line: level(p.initialTactics.line, 'line'),
@@ -105,6 +107,7 @@ console.log(`조합은 라인/압박/폭. 0=낮음·약·좁게, 1=보통·중, 
 
 let allPassed = true
 const winners: Array<{ title: string; top: string }> = []
+const formationWinners: Array<{ title: string; top: FormationId }> = []
 
 for (const p of problems) {
   const noop = measure(p, [])
@@ -139,7 +142,23 @@ for (const p of problems) {
     `   최하위: ${bottom.label} ${pct(bottom.rate)}   ` +
       `1위와 구분 안 되는 조합 ${tied.length}개 (오차 ±${(margin * 100).toFixed(1)}%p)`,
   )
+
+  // 포메이션은 레버와 별도로 훑는다. 27 x 5 = 135조합을 다 돌리면 느리고,
+  // 형태가 결과를 바꾸는지만 알면 충분하다
+  const [l, pr, w] = top.label.split('/').map(Number) as [Level, Level, Level]
+  const byFormation = FORMATION_IDS.map((f) => ({
+    id: f,
+    rate: measure({ ...p, initialFormation: f }, set(l, pr, w)).rate,
+  })).sort((a, b) => b.rate - a.rate)
+
+  console.log(
+    `   포메이션: ${byFormation.map((f) => `${f.id} ${pct(f.rate)}`).join('  ')}`,
+  )
+  console.log(
+    `   포메이션 스프레드 ${((byFormation[0].rate - byFormation[byFormation.length - 1].rate) * 100).toFixed(1)}%p`,
+  )
   console.log()
+  formationWinners.push({ title: p.title, top: byFormation[0].id })
 }
 
 console.log('─'.repeat(72))
@@ -151,7 +170,14 @@ const distinct = new Set(winners.map((w) => w.top))
 console.log(
   distinct.size === 1
     ? `주의: 전 국면의 최선 조합이 ${[...distinct][0]} 로 동일하다 — 만능 조합이 존재한다`
-    : `국면별 최선 조합: ${winners.map((w) => `${w.title} ${w.top}`).join(' · ')}`,
+    : `국면별 최선 레버: ${winners.map((w) => `${w.title} ${w.top}`).join(' · ')}`,
+)
+
+const distinctForm = new Set(formationWinners.map((w) => w.top))
+console.log(
+  distinctForm.size === 1
+    ? `주의: 전 국면의 최선 포메이션이 ${[...distinctForm][0]} 로 동일하다`
+    : `국면별 최선 포메이션: ${formationWinners.map((w) => `${w.title} ${w.top}`).join(' · ')}`,
 )
 
 if (!allPassed) process.exitCode = 1

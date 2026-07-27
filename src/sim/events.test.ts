@@ -10,6 +10,7 @@ const P: Problem = {
   order: 1,
   score: [1, 0],
   initialTactics: { line: 1, press: 1, width: 1 },
+  initialFormation: '4-4-2',
   objective: { type: 'SURVIVE', bonusOnWin: false },
   seed: 40712,
   subsLeft: 3,
@@ -78,6 +79,7 @@ describe('부상', () => {
       ...P,
       staminaOverrides: {},
       initialTactics: { line: 1, press: 0, width: 1 },
+      initialFormation: '4-4-2',
     }
     expect(count(exhausted, [], 'INJURY')).toBeGreaterThan(count(healthy, [], 'INJURY'))
   })
