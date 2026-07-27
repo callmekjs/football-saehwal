@@ -64,6 +64,8 @@ Vite · React · TypeScript · Canvas 2D
 - [x] 설계 명세 확정 — [`docs/design.md`](docs/design.md)
 - [x] 국면 5종 정의
 - [x] 시뮬레이션 엔진 — 틱 루프 · 확률 모델 · 결정론
+- [x] 자동 밸런스 검증 — 27조합 전수 스윕 (`npm run sim`)
+- [x] 선수 명단 27명 — 전부 창작, 이름 없이 등번호만
 - [ ] 경기 중 사건 (경고 · 퇴장 · 부상) · 교체 카드
 - [ ] Canvas 렌더러 · 전술 레버
 - [ ] 경기 분석 화면
