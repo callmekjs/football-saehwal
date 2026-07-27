@@ -36,7 +36,7 @@ export function createState(problem: Problem): MatchState {
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: { ...problem.initialTactics },
     formation: problem.initialFormation,
-    ball: { x: 0.5, y: 0.5, owner: 'HOME' },
+    ball: { x: 0.5, y: 0.5, owner: 'HOME', tilt: 0 },
     stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },
     players,
     opponent: mentalityOf(problem.score),
@@ -90,8 +90,8 @@ function nextBall(
   scored: boolean,
   conceded: boolean,
 ): Ball {
-  if (scored) return { x: 0.5, y: 0.5, owner: 'AWAY' }
-  if (conceded) return { x: 0.5, y: 0.5, owner: 'HOME' }
+  if (scored) return { x: 0.5, y: 0.5, owner: 'AWAY', tilt: -0.2 }
+  if (conceded) return { x: 0.5, y: 0.5, owner: 'HOME', tilt: 0.2 }
 
   // 점유 전환. 압박이 강하면 우리가 더 자주 뺏고, 상대 진영 깊숙이
   // 들어갈수록 뺏기기 쉽다 — 공이 한쪽에 영원히 머물지 않는다.
@@ -113,8 +113,12 @@ function nextBall(
   // 폭을 벌리면 볼이 좌우로 더 넓게 돈다 — 레버 효과가 눈에 보인다
   const lane = 0.5 + (d.penaltyShot - 0.5) * clamp(c.widthK, 0.5, 1.6)
 
+  // 블록 전체가 옮겨가는 데 걸리는 시간. 0.06이면 약 2초
+  const tilt = ball.tilt + ((owner === 'HOME' ? 1 : -1) - ball.tilt) * 0.06
+
   return {
     owner,
+    tilt,
     x: clamp(ball.x + dir * speed + (d.sendOff - 0.5) * 0.004, 0.04, 0.96),
     y: clamp(ball.y + (lane - ball.y) * 0.05, 0.06, 0.94),
   }

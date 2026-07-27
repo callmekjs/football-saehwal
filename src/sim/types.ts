@@ -78,7 +78,13 @@ export interface MatchState {
    * 판정에 쓰이지 않고 화면에만 쓰인다 — 이미 뽑은 난수에서 파생하므로
    * 별도로 난수를 소비하지 않는다.
    */
-  ball: { x: number; y: number; owner: 'HOME' | 'AWAY' }
+  /**
+   * `tilt` 은 경기가 어느 쪽으로 기울어 있는지다. -1이면 우리가 밀리고
+   * +1이면 우리가 밀어붙인다. 점유가 넘어가도 즉시 뒤집히지 않고 약 2초에
+   * 걸쳐 옮겨간다 — 실제 축구에서도 공을 뺏긴다고 전원이 즉시 뒤로 튀지
+   * 않는다. 화면의 선수 배치가 이 값을 읽는다.
+   */
+  ball: { x: number; y: number; owner: 'HOME' | 'AWAY'; tilt: number }
   /** 화면의 양상 지표가 읽는 누적 집계. 판정에는 쓰이지 않는다 */
   stats: {
     homeAttempt: number
