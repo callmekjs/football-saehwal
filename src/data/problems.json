@@ -1,0 +1,28 @@
+[
+  {
+    "id": "p02",
+    "title": "잠긴 문",
+    "order": 1,
+    "score": [1, 0],
+    "initialTactics": { "line": 0, "press": 0, "width": 0 },
+    "homeCount": 11,
+    "awayCount": 11,
+    "seed": 40712,
+    "objective": { "type": "SURVIVE", "bonusOnWin": false },
+    "minDefenderSpeed": 62,
+    "startStamina": { "DF04": 62, "MF06": 48, "FW09": 71, "DF02": 70, "MF08": 66 }
+  },
+  {
+    "id": "p04",
+    "title": "한 명이 없다",
+    "order": 4,
+    "score": [1, 0],
+    "initialTactics": { "line": 0, "press": 0, "width": 0 },
+    "homeCount": 10,
+    "awayCount": 11,
+    "seed": 51823,
+    "objective": { "type": "SURVIVE", "bonusOnWin": false },
+    "minDefenderSpeed": 58,
+    "startStamina": { "DF04": 55, "MF06": 41, "FW09": 60, "DF02": 63, "MF08": 58 }
+  }
+]
