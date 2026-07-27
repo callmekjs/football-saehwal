@@ -62,40 +62,67 @@ export function drawTick(rng: Rng): TickDraws {
  * 세트피스를 별도 채널로 두는 이유는 라인을 내릴 때 늘어나는 실점 경로가
  * 여기뿐이기 때문이다. 이것이 없으면 라인 낮음이 지배 전략이 된다.
  */
+export interface AttackOutcome {
+  homeGoals: number
+  awayGoals: number
+  /** 화면의 양상 지표가 읽는다. 판정에는 쓰이지 않는다 */
+  homeAttempt: number
+  awayAttempt: number
+  homeShot: number
+  awayShot: number
+  setPiece: number
+  behind: number
+}
+
 export function resolveAttacks(
   d: TickDraws,
   c: Coefficients,
   homeFactor: number,
   minDefenderSpeed: number,
-): { homeGoals: number; awayGoals: number } {
-  let homeGoals = 0
-  let awayGoals = 0
+): AttackOutcome {
+  const o: AttackOutcome = {
+    homeGoals: 0,
+    awayGoals: 0,
+    homeAttempt: 0,
+    awayAttempt: 0,
+    homeShot: 0,
+    awayShot: 0,
+    setPiece: 0,
+    behind: 0,
+  }
 
   // 상대 배후 침투 — 우리 수비수 중 가장 느린 선수가 확률을 직접 올린다
   const speedPenalty = 1 + (75 - minDefenderSpeed) / 100
   if (d.behind < BASE.B0 * c.behind * speedPenalty) {
+    o.behind += 1
+    o.awayShot += 1
     // 일대일까지 갈 확률 0.75, 그 슛의 xG 0.185 → 합쳐서 0.139
-    if (d.behindShot < XG.oneOnOne * XG.shotSelectOneOnOne) awayGoals += 1
+    if (d.behindShot < XG.oneOnOne * XG.shotSelectOneOnOne) o.awayGoals += 1
   }
 
   // 우리 공격 — 폭이 시도 "횟수"에 곱해진다
   if (d.homeAttempt < BASE.A0 * c.widthK) {
+    o.homeAttempt += 1
     if (d.homeEnter < BASE.P_ENTER * c.openness) {
-      if (d.homeShot < XG.boxCentre * c.entryXg * homeFactor) homeGoals += 1
+      o.homeShot += 1
+      if (d.homeShot < XG.boxCentre * c.entryXg * homeFactor) o.homeGoals += 1
     }
   }
 
   // 상대 오픈플레이
   if (d.awayAttempt < BASE.O0 * c.oppOpen) {
+    o.awayAttempt += 1
     if (d.awayEnter < BASE.P_ENTER_OPP) {
-      if (d.awayShot < XG.boxCentre) awayGoals += 1
+      o.awayShot += 1
+      if (d.awayShot < XG.boxCentre) o.awayGoals += 1
     }
   }
 
   // 세트피스 — 라인을 내릴수록 늘어난다. 화면에서는 코너 횟수로 읽힌다
   if (d.setPiece < BASE.S0 * c.setPiece) {
-    if (d.setPieceShot < XG.setPiece) awayGoals += 1
+    o.setPiece += 1
+    if (d.setPieceShot < XG.setPiece) o.awayGoals += 1
   }
 
-  return { homeGoals, awayGoals }
+  return o
 }

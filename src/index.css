@@ -1,0 +1,93 @@
+:root {
+  --bg: #14101f;
+  --panel: #1d1830;
+  --panel-2: #251e3c;
+  --border: #372c58;
+  --text: #e8e4f2;
+  --muted: #9a90b8;
+  --dim: #6d6389;
+  --accent: #3ecf8e;
+  --away: #e0564b;
+  --warn: #e8c33c;
+  --radius: 10px;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  /* 폰에서 손가락이 닿을 최소 크기. 이보다 작으면 조작이 실패한다 */
+  min-height: 44px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.panel > h2 {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06301f;
+  font-weight: 500;
+}
+
+.chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 폰이 기본. 좁은 화면에서는 세로로 쌓는다 */
+.layout {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+/* 피치를 먼저 보여준다. 조작 패널은 그 아래로 */
+.layout > :nth-child(2) { order: -1; }
+
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: 250px minmax(0, 1fr) 280px;
+    align-items: start;
+  }
+  .layout > :nth-child(2) { order: 0; }
+}

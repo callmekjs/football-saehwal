@@ -73,6 +73,21 @@ export interface MatchState {
   tactics: Tactics
   /** 우리 팀 포메이션. 바꾸면 확률이 즉시 바뀐다 */
   formation: FormationId
+  /**
+   * 볼 위치. x 0(우리 골대) ~ 1(상대 골대), y 0(위) ~ 1(아래).
+   * 판정에 쓰이지 않고 화면에만 쓰인다 — 이미 뽑은 난수에서 파생하므로
+   * 별도로 난수를 소비하지 않는다.
+   */
+  ball: { x: number; y: number }
+  /** 화면의 양상 지표가 읽는 누적 집계. 판정에는 쓰이지 않는다 */
+  stats: {
+    homeAttempt: number
+    awayAttempt: number
+    homeShot: number
+    awayShot: number
+    setPiece: number
+    behind: number
+  }
   players: PlayerState[]
   opponent: Mentality
   homeCount: number

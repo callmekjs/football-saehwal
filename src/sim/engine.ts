@@ -1,6 +1,7 @@
 import { createRng, type Rng } from './rng'
 import { resolveCoefficients } from './tactics'
-import { drawTick, resolveAttacks } from './attack'
+import { drawTick, resolveAttacks, type TickDraws } from './attack'
+import type { Coefficients } from './tactics'
 import { resolveEvents } from './events'
 import { drainTick, effectiveFactor } from './stamina'
 import {
@@ -11,7 +12,7 @@ import {
   minDefenderSpeed,
   onPitchCount,
 } from './squad'
-import { EVENTS, TOTAL_TICKS } from './constants'
+import { BASE, EVENTS, TOTAL_TICKS } from './constants'
 import type { Decision, MatchState, Mentality, PlayerState, Problem } from './types'
 
 /**
@@ -35,6 +36,8 @@ export function createState(problem: Problem): MatchState {
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: { ...problem.initialTactics },
     formation: problem.initialFormation,
+    ball: { x: 0.5, y: 0.5 },
+    stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },
     players,
     opponent: mentalityOf(problem.score),
     homeCount: onPitchCount(players),
@@ -64,6 +67,36 @@ function applySub(players: PlayerState[], out: string, inId: string): PlayerStat
     if (s.id === inId) return { ...s, onPitch: true }
     return s
   })
+}
+
+const clamp01 = (v: number) => (v < 0.04 ? 0.04 : v > 0.96 ? 0.96 : v)
+
+/**
+ * 볼의 화면상 위치.
+ *
+ * 판정에 쓰이지 않는다. 이미 뽑아둔 난수에서 파생하므로 별도로 난수를
+ * 소비하지 않고, 따라서 이 함수를 고쳐도 경기 결과가 변하지 않는다.
+ * 0.1초마다 최대 35미터씩 순간이동하면 축구로 안 보이므로 관성을 준다.
+ */
+function nextBall(
+  ball: { x: number; y: number },
+  d: TickDraws,
+  c: Coefficients,
+  scored: boolean,
+  conceded: boolean,
+): { x: number; y: number } {
+  if (scored || conceded) return { x: 0.5, y: 0.5 }
+
+  const weOwn = d.homeAttempt < BASE.A0 * c.widthK * 2.2
+  const theyOwn = d.awayAttempt < BASE.O0 * c.oppOpen * 2.2
+  const pull = weOwn ? 0.035 : theyOwn ? -0.035 : (0.5 - ball.x) * 0.012
+
+  // 폭을 벌리면 볼이 좌우로 더 벌어진다 — 레버 효과가 눈에 보인다
+  const spread = 0.5 + (d.homeEnter - 0.5) * Math.min(1, c.widthK * 0.5)
+  return {
+    x: clamp01(ball.x + pull + (d.setPiece - 0.5) * 0.01),
+    y: clamp01(ball.y + (spread - ball.y) * 0.06),
+  }
 }
 
 export function tick(state: MatchState, rng: Rng): MatchState {
@@ -113,11 +146,23 @@ export function tick(state: MatchState, rng: Rng): MatchState {
   if (attacks.homeGoals) log.push({ tick: state.tick, kind: 'GOAL' })
   if (attacks.awayGoals) log.push({ tick: state.tick, kind: 'CONCEDE' })
 
+  const ball = nextBall(state.ball, draws, c, attacks.homeGoals > 0, attacks.awayGoals > 0)
+
+  const s = state.stats
   return {
     ...state,
     tick: state.tick + 1,
     score,
     players,
+    ball,
+    stats: {
+      homeAttempt: s.homeAttempt + attacks.homeAttempt,
+      awayAttempt: s.awayAttempt + attacks.awayAttempt,
+      homeShot: s.homeShot + attacks.homeShot,
+      awayShot: s.awayShot + attacks.awayShot,
+      setPiece: s.setPiece + attacks.setPiece,
+      behind: s.behind + attacks.behind,
+    },
     log,
     pendingSubs: stillPending,
     homeCount: onPitchCount(players),
