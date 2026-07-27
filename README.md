@@ -69,7 +69,8 @@ Vite · React · TypeScript · Canvas 2D
 - [ ] 경기 분석 화면
 - [ ] 배포
 
-진행 상황은 [`docs/progress.md`](docs/progress.md)에 기록합니다.
+- 남은 일정과 체크리스트 — [`docs/progress.md`](docs/progress.md)
+- 무엇을 왜 그렇게 정했는지 — [`docs/worklog.md`](docs/worklog.md)
 
 ### 밸런스 검증
 
