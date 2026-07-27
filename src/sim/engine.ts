@@ -96,8 +96,10 @@ function nextBall(
   // 점유 전환. 압박이 강하면 우리가 더 자주 뺏고, 상대 진영 깊숙이
   // 들어갈수록 뺏기기 쉽다 — 공이 한쪽에 영원히 머물지 않는다.
   // 전환이 너무 잦으면 공이 가운데서만 왔다갔다 하다 끝난다.
+  // 공이 느려진 만큼 점유도 오래 간다. 전환이 잦으면 공이 상대 진영
+  // 깊숙이 가보지도 못하고 계속 가운데서만 왔다갔다 한다
   const attacking = ball.owner === 'HOME' ? ball.x : 1 - ball.x
-  const turnover = 0.012 + attacking * 0.04
+  const turnover = 0.005 + attacking * 0.022
   const bias = ball.owner === 'HOME' ? 1 / c.steal : c.steal
   let owner = ball.owner
   // 골문 앞까지 가면 반드시 끊긴다. 벽에 붙어 멈추는 것을 막는 장치
@@ -107,8 +109,12 @@ function nextBall(
 
   const dir = owner === 'HOME' ? 1 : -1
   const goal = owner === 'HOME' ? 0.94 : 0.06
-  // 골대에 가까워질수록 느려진다
-  const speed = 0.016 * (0.45 + Math.abs(goal - ball.x))
+  // 골대에 가까워질수록 느려진다.
+  //
+  // 이 값이 크면 공이 초속 15미터로 달려 선수(초속 7미터)가 영영 못
+  // 따라간다. 공만 레일 위를 달리고 사람은 늘 뒤처진 화면이 된다.
+  // 경기장을 가로지르는 데 9초쯤 걸리게 잡았다.
+  const speed = 0.009 * (0.45 + Math.abs(goal - ball.x))
 
   // 폭을 벌리면 볼이 좌우로 더 넓게 돈다 — 레버 효과가 눈에 보인다
   const lane = 0.5 + (d.penaltyShot - 0.5) * clamp(c.widthK, 0.5, 1.6)

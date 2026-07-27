@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { drawPitch, resetSmoothing } from '../render/pitch'
+import { drawPitch } from '../render/pitch'
+import { VisualMatch } from '../render/visual'
 import { FORMATION_IDS, getFormation, shapeOf, type FormationId } from '../sim/formations'
 import { BENCH, getPlayer } from '../sim/squad'
 import { TOTAL_TICKS } from '../sim/constants'
@@ -20,7 +21,7 @@ function clockOf(tick: number, kickoff: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-function Pitch({ state }: { state: MatchState }) {
+function Pitch({ state, seed }: { state: MatchState; seed: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -28,10 +29,19 @@ function Pitch({ state }: { state: MatchState }) {
   useLayoutEffect(() => {
     const canvas = ref.current
     if (!canvas) return
-    resetSmoothing()
+    const vm = new VisualMatch(stateRef.current, seed)
     let raf = 0
+    let last = performance.now()
 
     const render = () => {
+      const now = performance.now()
+      // 탭을 벗어났다 돌아오면 한 프레임에 몇 초가 밀려든다. 상한을 둔다
+      const dt = Math.min((now - last) / 1000, 0.05)
+      last = now
+
+      vm.sync(stateRef.current)
+      vm.advance(stateRef.current, dt)
+
       const parent = canvas.parentElement
       if (parent) {
         const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -46,14 +56,14 @@ function Pitch({ state }: { state: MatchState }) {
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-          drawPitch(ctx, stateRef.current, w, h)
+          drawPitch(ctx, vm, stateRef.current, w, h)
         }
       }
       raf = requestAnimationFrame(render)
     }
     raf = requestAnimationFrame(render)
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [seed])
 
   return <canvas ref={ref} style={{ display: 'block', width: '100%', borderRadius: 8 }} />
 }
@@ -343,7 +353,7 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
 
         <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
           <div className="panel" style={{ padding: 8 }}>
-            <Pitch state={state} />
+            <Pitch state={state} seed={problem.seed} />
           </div>
           <StatBars state={state} />
         </div>
