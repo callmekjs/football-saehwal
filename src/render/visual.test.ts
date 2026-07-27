@@ -33,6 +33,7 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
     mode: string
     ball: { x: number; y: number; willScore: boolean; toX: number; toY: number }
     celebrating: boolean
+    scoredBy: 'HOME' | 'AWAY' | null
     players: Array<{ id: string; x: number; y: number; v: number }>
   }> = []
 
@@ -55,6 +56,7 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
         toY: vm.ball.toY,
       },
       celebrating: vm.celebration !== null,
+      scoredBy: vm.celebration?.side ?? null,
       players: vm.players.map((p) => ({ id: p.id, x: p.x, y: p.y, v: Math.hypot(p.vx, p.vy) })),
     })
   }
@@ -331,6 +333,67 @@ describe('골 — 반드시 골대 안으로 들어간다', () => {
     for (const f of frames) {
       if (!f.celebrating) continue
       expect(f.ball.x <= 2 || f.ball.x >= PITCH_W - 2).toBe(true)
+    }
+  })
+})
+
+describe('킥오프 — 축구 규칙대로', () => {
+  const { frames } = watch()
+
+  /** 세리머니가 끝난 직후 프레임들 */
+  const restarts = frames
+    .map((f, i) => ({ f, i }))
+    .filter(({ i }) => i > 0 && frames[i - 1].celebrating && !frames[i].celebrating)
+
+  it('골 뒤에 반드시 재개한다', () => {
+    expect(restarts.length).toBeGreaterThan(0)
+  })
+
+  it('공이 센터서클에 놓인다', () => {
+    for (const { f } of restarts) {
+      expect(Math.abs(f.ball.x - PITCH_W / 2), '공의 앞뒤 위치').toBeLessThan(6)
+      expect(Math.abs(f.ball.y - PITCH_H / 2), '공의 좌우 위치').toBeLessThan(6)
+    }
+  })
+
+  it('먹힌 팀이 킥오프한다', () => {
+    // 축구 규칙이다. 넣은 팀이 다시 차면 안 된다
+    for (const { i } of restarts) {
+      const scoredBy = frames[i - 1].scoredBy!
+      const holder = frames[i].holder
+      expect(holder, '재개 시 공을 가진 선수가 없다').toBeTruthy()
+      const kickerSide = holder![0] === 'H' ? 'HOME' : 'AWAY'
+      expect(kickerSide, `${scoredBy} 가 넣었는데 ${kickerSide} 가 다시 찬다`).not.toBe(scoredBy)
+    }
+  })
+
+  it('차는 선수는 센터서클 안에 있다', () => {
+    for (const { f } of restarts) {
+      const kicker = f.players.find((p) => p.id === f.holder)!
+      expect(Math.hypot(kicker.x - PITCH_W / 2, kicker.y - PITCH_H / 2)).toBeLessThan(9.2)
+    }
+  })
+
+  it('킥오프 순간 양 팀이 자기 진영에 있다', () => {
+    for (const { f } of restarts) {
+      for (const p of f.players) {
+        if (p.id === f.holder) continue
+        if (p.id.startsWith('H')) {
+          expect(p.x, `우리 ${p.id} 가 상대 진영에 있다`).toBeLessThan(PITCH_W / 2 + 0.5)
+        } else {
+          expect(p.x, `상대 ${p.id} 가 우리 진영에 있다`).toBeGreaterThan(PITCH_W / 2 - 0.5)
+        }
+      }
+    }
+  })
+
+  it('재개 뒤 경기가 이어진다', () => {
+    // 재개하고 멈춰 있으면 안 된다
+    for (const { i } of restarts) {
+      const after = frames.slice(i + 1, i + 30)
+      if (after.length < 10) continue
+      const moved = after.some((f) => Math.abs(f.ball.x - PITCH_W / 2) > 4)
+      expect(moved, '재개 후 공이 움직이지 않는다').toBe(true)
     }
   })
 })

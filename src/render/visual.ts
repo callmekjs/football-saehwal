@@ -389,6 +389,12 @@ export class VisualMatch {
     return best
   }
 
+  /**
+   * 중앙 킥오프.
+   *
+   * 축구 규칙대로 **먹힌 팀이 센터서클에서 다시 시작한다.** 전원이 자기
+   * 진영으로 돌아가고, 차는 선수만 센터서클에 선다.
+   */
   private kickoff(side: 'HOME' | 'AWAY') {
     for (const p of this.players) {
       p.x = p.homeX
@@ -396,12 +402,20 @@ export class VisualMatch {
       p.vx = 0
       p.vy = 0
       p.recover = 0
+      // 킥오프 순간에는 양 팀이 하프라인을 넘지 않는다
+      if (p.side === 'HOME' && p.x > PITCH_W / 2 - 2) p.x = PITCH_W / 2 - 2 - (p.x - PITCH_W / 2) * 0.3
+      if (p.side === 'AWAY' && p.x < PITCH_W / 2 + 2) p.x = PITCH_W / 2 + 2 + (PITCH_W / 2 - p.x) * 0.3
+      p.x = clamp(p.x, 2, PITCH_W - 2)
     }
     this.ball.x = PITCH_W / 2
     this.ball.y = PITCH_H / 2
+    this.ball.mode = 'HELD'
+    this.ball.lift = 0
+
     const taker = this.nearestOf(side, { x: PITCH_W / 2, y: PITCH_H / 2 })
     if (taker) {
-      taker.x = PITCH_W / 2 - (side === 'HOME' ? 2 : -2)
+      // 차는 선수만 센터서클 안으로 들어온다
+      taker.x = PITCH_W / 2 - (side === 'HOME' ? 1.5 : -1.5)
       taker.y = PITCH_H / 2
       this.giveTo(taker)
     }
