@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { VisualMatch, PITCH_W, PITCH_H } from './visual'
+import { VisualMatch, PITCH_W, PITCH_H, GOAL_HALF, GOAL_MID } from './visual'
 import { createState, tick } from '../sim/engine'
 import { createRng } from '../sim/rng'
 import { TOTAL_TICKS } from '../sim/constants'
@@ -31,7 +31,8 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
     state: MatchState
     holder: string | null
     mode: string
-    ball: { x: number; y: number }
+    ball: { x: number; y: number; willScore: boolean; toX: number; toY: number }
+    celebrating: boolean
     players: Array<{ id: string; x: number; y: number; v: number }>
   }> = []
 
@@ -46,7 +47,14 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
       state: s,
       holder: vm.ball.holder,
       mode: vm.ball.mode,
-      ball: { x: vm.ball.x, y: vm.ball.y },
+      ball: {
+        x: vm.ball.x,
+        y: vm.ball.y,
+        willScore: vm.ball.willScore,
+        toX: vm.ball.toX,
+        toY: vm.ball.toY,
+      },
+      celebrating: vm.celebration !== null,
       players: vm.players.map((p) => ({ id: p.id, x: p.x, y: p.y, v: Math.hypot(p.vx, p.vy) })),
     })
   }
@@ -77,8 +85,11 @@ describe('공과 선수의 연결 — 출시 기준', () => {
     for (let i = 1; i < frames.length; i++) {
       if (frames[i].mode === 'PASS' && frames[i - 1].mode !== 'PASS') passes += 1
     }
-    // 15분 경기라면 수십 번은 오가야 한다
-    expect(passes).toBeGreaterThan(40)
+    // 관전자가 보는 것은 75초의 실시간 축구다. 실제 축구는 75초에 양 팀
+    // 합쳐 스무 번 안팎 주고받는다. 서른 번 밑으로 떨어지면 공이 한
+    // 사람에게 오래 머물러 정적으로 보인다.
+    expect(passes).toBeGreaterThan(30)
+    expect(passes).toBeLessThan(90)
   })
 
   it('공을 잡는 선수가 계속 바뀐다', () => {
@@ -201,11 +212,9 @@ describe('선수 움직임 — 출시 기준', () => {
 
   it('한 프레임에 순간이동하지 않는다', () => {
     for (let i = 1; i < frames.length; i++) {
-      // 골 후 재개는 전원이 자기 자리로 돌아가므로 제외한다
-      const scored =
-        frames[i].state.score[0] + frames[i].state.score[1] !==
-        frames[i - 1].state.score[0] + frames[i - 1].state.score[1]
-      if (scored) continue
+      // 세리머니가 끝나면 킥오프라 전원이 제자리로 돌아간다. 그 순간만 제외
+      const restart = frames[i - 1].celebrating && !frames[i].celebrating
+      if (restart) continue
       for (const p of frames[i].players) {
         const q = frames[i - 1].players.find((x) => x.id === p.id)!
         expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeLessThan(1.6)
@@ -257,6 +266,75 @@ describe('선수 움직임 — 출시 기준', () => {
   })
 })
 
+describe('골 — 반드시 골대 안으로 들어간다', () => {
+  const { frames } = watch()
+
+  /** 시뮬이 득점으로 판정한 슛만 모은다 */
+  const scoringShots = frames.filter(
+    (f, i) => f.mode === 'SHOT' && f.ball.willScore && (i === 0 || frames[i - 1].mode !== 'SHOT'),
+  )
+
+  it('경기 중 득점이 나온다', () => {
+    expect(scoringShots.length).toBeGreaterThan(0)
+  })
+
+  it('득점 슛은 골대 폭 안을 향한다', () => {
+    for (const f of scoringShots) {
+      expect(Math.abs(f.ball.toY - GOAL_MID), '골대 중앙에서의 거리').toBeLessThan(GOAL_HALF)
+    }
+  })
+
+  it('득점 슛은 골라인까지 간다', () => {
+    for (const f of scoringShots) {
+      const onLine = f.ball.toX <= 0.5 || f.ball.toX >= PITCH_W - 0.5
+      expect(onLine, `도착 x=${f.ball.toX.toFixed(1)}`).toBe(true)
+    }
+  })
+
+  it('막히는 슛은 골대 안으로 안 들어간다', () => {
+    const saved = frames.filter(
+      (f, i) => f.mode === 'SHOT' && !f.ball.willScore && (i === 0 || frames[i - 1].mode !== 'SHOT'),
+    )
+    expect(saved.length).toBeGreaterThan(0)
+    // 골키퍼 정면이거나 골대 옆으로 빗나간다
+    const inNet = saved.filter((f) => Math.abs(f.ball.toY - GOAL_MID) < 2.0)
+    const wide = saved.filter((f) => Math.abs(f.ball.toY - GOAL_MID) > GOAL_HALF)
+    expect(inNet.length + wide.length).toBe(saved.length)
+  })
+
+  it('공이 실제로 골망에 도달한다', () => {
+    // 슛이 중간에 사라지지 않고 골라인까지 날아가는지
+    let reached = false
+    for (let i = 1; i < frames.length; i++) {
+      if (frames[i - 1].mode === 'SHOT' && frames[i - 1].ball.willScore && frames[i].celebrating) {
+        const bx = frames[i].ball.x
+        expect(bx <= 1.5 || bx >= PITCH_W - 1.5, `공이 x=${bx.toFixed(1)} 에 멈췄다`).toBe(true)
+        expect(Math.abs(frames[i].ball.y - GOAL_MID)).toBeLessThan(GOAL_HALF + 0.5)
+        reached = true
+      }
+    }
+    expect(reached, '골망에 도달한 슛이 없다').toBe(true)
+  })
+
+  it('골이 들어가면 세리머니 뒤에 중앙에서 재개한다', () => {
+    let sawCelebration = false
+    for (let i = 1; i < frames.length; i++) {
+      if (frames[i - 1].celebrating && !frames[i].celebrating) {
+        sawCelebration = true
+        expect(Math.abs(frames[i].ball.x - PITCH_W / 2)).toBeLessThan(6)
+      }
+    }
+    expect(sawCelebration).toBe(true)
+  })
+
+  it('세리머니 동안은 공이 골망에 머문다', () => {
+    for (const f of frames) {
+      if (!f.celebrating) continue
+      expect(f.ball.x <= 2 || f.ball.x >= PITCH_W - 2).toBe(true)
+    }
+  })
+})
+
 describe('시뮬레이션과의 일치', () => {
   it('연출은 경기 결과를 바꾸지 않는다', () => {
     // 관전 계층은 한 방향으로만 흐른다. 시뮬을 건드리면 밸런스가 무너진다
@@ -269,16 +347,23 @@ describe('시뮬레이션과의 일치', () => {
     expect(watch().frames[TOTAL_TICKS - 1].state.score).toEqual(plain)
   })
 
-  it('시뮬이 골이라고 하면 화면도 중앙에서 재개한다', () => {
+  it('시뮬이 골이라고 하면 화면에서도 골이 들어간다', () => {
+    // 시뮬 점수가 오른 뒤 세리머니까지 이어져야 한다.
+    // 숫자만 바뀌고 화면은 그대로면 골이 사건으로 보이지 않는다
     const { frames } = watch()
+    let scoredAt = -1
     for (let i = 1; i < frames.length; i++) {
       const before = frames[i - 1].state.score
       const now = frames[i].state.score
       if (now[0] + now[1] !== before[0] + before[1]) {
-        expect(Math.abs(frames[i].ball.x - PITCH_W / 2)).toBeLessThan(12)
-        return
+        scoredAt = i
+        break
       }
     }
-    throw new Error('골이 한 번도 안 났다')
+    expect(scoredAt, '골이 한 번도 안 났다').toBeGreaterThan(0)
+
+    // 득점 직후 짧은 시간 안에 골망에 도달하고 세리머니가 뜬다
+    const window = frames.slice(scoredAt, scoredAt + 15)
+    expect(window.some((f) => f.celebrating), '세리머니가 뜨지 않았다').toBe(true)
   })
 })

@@ -1,4 +1,11 @@
-import { PITCH_H, PITCH_W, type VisualMatch, type VPlayer } from './visual'
+import {
+  GOAL_HALF,
+  GOAL_MID,
+  PITCH_H,
+  PITCH_W,
+  type VisualMatch,
+  type VPlayer,
+} from './visual'
 import type { MatchState } from '../sim/types'
 
 export const COLORS = {
@@ -49,6 +56,46 @@ function drawField(
     const base = side === 0 ? 1 : PITCH_W - 1
     ctx.strokeRect(X(base), Y(13.85), X(16.5 * flip), Y(40.3))
     ctx.strokeRect(X(base), Y(24.85), X(5.5 * flip), Y(18.3))
+  }
+
+  // 골대와 골망. 이게 없으면 슛이 어디로 들어가는지 알 수 없다
+  const depth = 2.4
+  for (const side of [0, 1]) {
+    const lineX = side === 0 ? 1 : PITCH_W - 1
+    const dir = side === 0 ? -1 : 1
+    const top = GOAL_MID - GOAL_HALF
+    const bot = GOAL_MID + GOAL_HALF
+
+    ctx.save()
+    ctx.fillStyle = 'rgba(255,255,255,0.10)'
+    ctx.fillRect(X(lineX), Y(top), X(depth * dir), Y(GOAL_HALF * 2))
+
+    // 골망 격자
+    ctx.strokeStyle = 'rgba(255,255,255,0.30)'
+    ctx.lineWidth = 1
+    for (let i = 1; i < 5; i++) {
+      const yy = top + ((bot - top) / 5) * i
+      ctx.beginPath()
+      ctx.moveTo(X(lineX), Y(yy))
+      ctx.lineTo(X(lineX + depth * dir), Y(yy))
+      ctx.stroke()
+    }
+    for (let i = 1; i < 3; i++) {
+      const xx = lineX + ((depth * dir) / 3) * i
+      ctx.beginPath()
+      ctx.moveTo(X(xx), Y(top))
+      ctx.lineTo(X(xx), Y(bot))
+      ctx.stroke()
+    }
+
+    // 골포스트
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = Math.max(2, sx * 0.42)
+    ctx.beginPath()
+    ctx.moveTo(X(lineX), Y(top))
+    ctx.lineTo(X(lineX), Y(bot))
+    ctx.stroke()
+    ctx.restore()
   }
 
   // 수비라인 표시 — 레버를 당기면 이 선이 움직인다. 개입이 즉시 보인다
@@ -179,6 +226,34 @@ export function drawPitch(
   ctx.strokeStyle = 'rgba(0,0,0,0.35)'
   ctx.lineWidth = 1
   ctx.stroke()
+
+  // 골 세리머니 — 골망이 밝아지고 문구가 뜬다
+  if (vm.celebration) {
+    const c = vm.celebration
+    const k = Math.min(1, c.life / 1.5)
+    ctx.save()
+    ctx.globalAlpha = k * 0.5
+    ctx.fillStyle = c.side === 'HOME' ? COLORS.home : COLORS.away
+    ctx.fillRect(
+      X(c.side === 'HOME' ? PITCH_W - 3.4 : 1),
+      Y(GOAL_MID - GOAL_HALF),
+      X(2.4),
+      Y(GOAL_HALF * 2),
+    )
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalAlpha = Math.min(1, k * 1.6)
+    ctx.fillStyle = c.side === 'HOME' ? COLORS.home : COLORS.away
+    ctx.font = `500 ${Math.round(h * 0.11)}px system-ui, sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(c.side === 'HOME' ? '골!' : '실점', w / 2, h * 0.42)
+    ctx.font = `400 ${Math.round(h * 0.045)}px system-ui, sans-serif`
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillText(c.side === 'HOME' ? '우리 팀이 넣었다' : '상대가 넣었다', w / 2, h * 0.56)
+    ctx.restore()
+  }
 
   // 태클·슛·골 순간 표시
   for (const f of vm.flashes) {

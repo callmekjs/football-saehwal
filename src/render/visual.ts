@@ -17,9 +17,16 @@ import type { MatchState, Position } from '../sim/types'
 export const PITCH_W = 105
 export const PITCH_H = 68
 
-/** 우리는 오른쪽(x=105) 골대를 공격한다 */
-const HOME_GOAL_X = 103
-const AWAY_GOAL_X = 2
+/**
+ * 우리는 오른쪽(x=105) 골대를 공격한다.
+ *
+ * 골대는 골라인 위에 있고 폭은 7.32미터다. 실제 규격을 써야 슛이 골대
+ * 안으로 들어가는지 밖으로 빗나가는지가 화면에서 구분된다.
+ */
+export const GOAL_LINE_HOME = 105
+export const GOAL_LINE_AWAY = 0
+export const GOAL_HALF = 3.66
+export const GOAL_MID = PITCH_H / 2
 
 const WALK = 1.4
 const ACCEL = 8.5
@@ -79,6 +86,8 @@ export interface VBall {
   targetId: string | null
   /** 날아가는 높이. 그림자와 크기에 쓰인다 */
   lift: number
+  /** 이 슛은 골로 끝난다. 시뮬이 이미 득점으로 판정한 슛이다 */
+  willScore: boolean
 }
 
 export interface Flash {
@@ -86,6 +95,16 @@ export interface Flash {
   x: number
   y: number
   life: number
+}
+
+/** 골이 들어간 직후의 연출 상태. 이게 없으면 골이 사건으로 안 보인다 */
+export interface Celebration {
+  side: 'HOME' | 'AWAY'
+  /** 남은 시간(초). 0이 되면 킥오프로 넘어간다 */
+  life: number
+  /** 공이 골망에 박힌 자리 */
+  x: number
+  y: number
 }
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
@@ -114,6 +133,8 @@ export class VisualMatch {
   players: VPlayer[] = []
   ball: VBall
   flashes: Flash[] = []
+  /** 골이 들어간 뒤의 세리머니. 이 동안은 경기가 멈춰 있다 */
+  celebration: Celebration | null = null
   private rng: Rng
   private decideIn = 0
   private lastStats = { homeShot: 0, awayShot: 0 }
@@ -137,6 +158,7 @@ export class VisualMatch {
       dur: 0,
       targetId: null,
       lift: 0,
+      willScore: false,
     }
     this.rebuild(state)
     this.lastScore = [...state.score] as [number, number]
@@ -282,29 +304,36 @@ export class VisualMatch {
       v.homeY = y
     })
 
-    // 골 — 시뮬이 점수를 올렸으면 그 장면을 만든다
-    const scored = state.score[0] - this.lastScore[0]
-    const conceded = state.score[1] - this.lastScore[1]
-    if (scored > 0 || conceded > 0) {
-      this.flash('GOAL', this.ball.x, this.ball.y)
-      this.kickoff(scored > 0 ? 'AWAY' : 'HOME')
+    // 세리머니 중에는 새 사건을 받지 않는다
+    if (this.celebration) {
       this.lastScore = [...state.score] as [number, number]
       this.lastStats = { homeShot: state.stats.homeShot, awayShot: state.stats.awayShot }
       this.lastOwner = state.ball.owner
       return
     }
 
-    // 슛 — 시뮬이 슈팅 상황을 셌으면 실제로 골대로 찬다
+    const scored = state.score[0] - this.lastScore[0]
+    const conceded = state.score[1] - this.lastScore[1]
     const newHomeShot = state.stats.homeShot - this.lastStats.homeShot
     const newAwayShot = state.stats.awayShot - this.lastStats.awayShot
+    this.lastScore = [...state.score] as [number, number]
     this.lastStats = { homeShot: state.stats.homeShot, awayShot: state.stats.awayShot }
+
+    // 골 — 시뮬이 점수를 올렸으면 실제로 골망에 꽂히는 슛을 만든다.
+    // 여기서 바로 킥오프로 넘기면 골이 사건으로 보이지 않는다
+    if (scored > 0 || conceded > 0) {
+      const side = scored > 0 ? 'HOME' : 'AWAY'
+      const shooter = this.pickShooter(side)
+      if (shooter) this.shoot(shooter, true)
+      this.lastOwner = state.ball.owner
+      return
+    }
+
+    // 슛 — 시뮬이 슈팅 상황을 셌으면 골대로 차되 막히거나 빗나간다
     if (newHomeShot > 0 || newAwayShot > 0) {
       const side = newHomeShot > 0 ? 'HOME' : 'AWAY'
-      const shooter =
-        this.byId(this.ball.holder)?.side === side
-          ? this.byId(this.ball.holder)!
-          : this.nearestOf(side, this.ball)
-      if (shooter) this.shoot(shooter)
+      const shooter = this.pickShooter(side)
+      if (shooter) this.shoot(shooter, false)
     }
 
     // 점유 전환 — 가장 가까운 상대가 뺏는 장면으로 만든다
@@ -320,6 +349,30 @@ export class VisualMatch {
         }
       }
     }
+  }
+
+  /**
+   * 슛을 쏠 선수를 고른다.
+   *
+   * 공을 가지고 있으면 그 선수가 쏜다. 아니면 상대 골대에 가장 가까운
+   * 공격 자원이 쏜다 — 자기 진영 수비수가 슛을 쏘면 축구로 안 보인다.
+   */
+  private pickShooter(side: 'HOME' | 'AWAY'): VPlayer | undefined {
+    const holder = this.byId(this.ball.holder)
+    if (holder?.side === side && holder.pos !== 'GK') return holder
+
+    const gx = this.goalX(side)
+    let best: VPlayer | undefined
+    let bd = Infinity
+    for (const p of this.players) {
+      if (p.side !== side || p.pos === 'GK' || p.pos === 'DF') continue
+      const d = Math.abs(p.x - gx)
+      if (d < bd) {
+        bd = d
+        best = p
+      }
+    }
+    return best ?? this.nearestOf(side, { x: gx, y: GOAL_MID })
   }
 
   private nearestOf(side: 'HOME' | 'AWAY', to: { x: number; y: number }): VPlayer | undefined {
@@ -354,23 +407,46 @@ export class VisualMatch {
     }
   }
 
+  /** 이 팀이 공격하는 골라인 */
   private goalX(side: 'HOME' | 'AWAY') {
-    return side === 'HOME' ? HOME_GOAL_X : AWAY_GOAL_X
+    return side === 'HOME' ? GOAL_LINE_HOME : GOAL_LINE_AWAY
   }
 
-  private shoot(shooter: VPlayer) {
+  /**
+   * 슛.
+   *
+   * 골로 끝날 슛은 골대 안쪽을 노리고, 아닌 슛은 골키퍼 정면이나 골대
+   * 옆으로 간다. 시뮬이 이미 득점 여부를 정해뒀으므로 여기서는 그 결과에
+   * 맞는 궤적을 그리기만 한다.
+   */
+  private shoot(shooter: VPlayer, willScore: boolean) {
     const gx = this.goalX(shooter.side)
-    const gy = 34 + (this.rng.next() - 0.5) * 12
+    let gy: number
+    if (willScore) {
+      // 골대 안쪽. 구석으로 갈수록 그림이 산다
+      const corner = this.rng.next() < 0.65 ? 1 : 0
+      const sign = this.rng.next() < 0.5 ? -1 : 1
+      gy = GOAL_MID + sign * (corner ? 2.2 + this.rng.next() * 1.2 : this.rng.next() * 1.6)
+    } else {
+      // 막히거나 빗나간다. 골대 폭 바로 바깥이나 골키퍼 정면
+      const wide = this.rng.next() < 0.45
+      const sign = this.rng.next() < 0.5 ? -1 : 1
+      gy = wide
+        ? GOAL_MID + sign * (GOAL_HALF + 0.8 + this.rng.next() * 3)
+        : GOAL_MID + sign * this.rng.next() * 2
+    }
+
     const d = Math.hypot(gx - shooter.x, gy - shooter.y)
     this.ball.mode = 'SHOT'
     this.ball.holder = null
     this.ball.fromX = shooter.x
     this.ball.fromY = shooter.y
     this.ball.toX = gx
-    this.ball.toY = gy
+    this.ball.toY = clamp(gy, 2, PITCH_H - 2)
     this.ball.t = 0
-    this.ball.dur = clamp(d / SHOT_SPEED, 0.2, SHOT_MAX_T)
+    this.ball.dur = clamp(d / SHOT_SPEED, 0.25, SHOT_MAX_T)
     this.ball.targetId = null
+    this.ball.willScore = willScore
     this.flash('SHOT', shooter.x, shooter.y)
   }
 
@@ -597,12 +673,26 @@ export class VisualMatch {
 
       if (k >= 1) {
         if (b.mode === 'SHOT') {
-          // 골은 sync 가 처리한다. 여기 도달했다면 막혔거나 빗나간 것이다
-          const side = b.toX > 52 ? 'AWAY' : 'HOME'
-          const gk = this.players.find((p) => p.side === side && p.pos === 'GK')
-          this.flash('SAVE', b.x, b.y)
-          if (gk) this.giveTo(gk)
-          else b.mode = 'LOOSE'
+          const conceding = b.toX > 52 ? 'AWAY' : 'HOME'
+          if (b.willScore) {
+            // 골망에 꽂힌다. 공은 골 안에 그대로 두고 잠시 멈춘다
+            b.mode = 'LOOSE'
+            b.holder = null
+            b.lift = 0
+            this.flash('GOAL', b.x, b.y)
+            // 75초짜리 경기다. 세리머니가 길면 플레이 시간을 잡아먹는다
+            this.celebration = {
+              side: conceding === 'AWAY' ? 'HOME' : 'AWAY',
+              life: 1.5,
+              x: b.x,
+              y: b.y,
+            }
+          } else {
+            const gk = this.players.find((p) => p.side === conceding && p.pos === 'GK')
+            this.flash('SAVE', b.x, b.y)
+            if (gk) this.giveTo(gk)
+            else b.mode = 'LOOSE'
+          }
         } else {
           // 패스 도착. 더 가까운 상대가 있으면 가로챈다
           const receiver = this.byId(b.targetId)
@@ -636,15 +726,33 @@ export class VisualMatch {
   /** 관전 장면을 dt 초만큼 진행시킨다 */
   advance(state: MatchState, dt: number) {
     const step = Math.min(dt, 0.05)
-    this.setTargets(state)
 
+    for (const f of this.flashes) f.life -= step
+    this.flashes = this.flashes.filter((f) => f.life > 0)
+
+    // 세리머니 중에는 공이 골망에 있고 선수들은 제자리로 돌아간다
+    if (this.celebration) {
+      this.celebration.life -= step
+      for (const p of this.players) {
+        p.tx = p.homeX
+        p.ty = p.homeY
+        this.movePlayer(p, step)
+      }
+      this.ball.x = this.celebration.x
+      this.ball.y = this.celebration.y
+      if (this.celebration.life <= 0) {
+        const restartFor = this.celebration.side === 'HOME' ? 'AWAY' : 'HOME'
+        this.celebration = null
+        this.kickoff(restartFor)
+      }
+      return
+    }
+
+    this.setTargets(state)
     const holder = this.byId(this.ball.holder)
     if (holder && this.ball.mode === 'HELD') this.decide(holder, step)
 
     for (const p of this.players) this.movePlayer(p, step)
     this.moveBall(step)
-
-    for (const f of this.flashes) f.life -= step
-    this.flashes = this.flashes.filter((f) => f.life > 0)
   }
 }
