@@ -10,6 +10,7 @@
   --away: #e0564b;
   --warn: #e8c33c;
   --radius: 10px;
+  --display: 'Black Han Sans', system-ui, sans-serif;
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
@@ -73,6 +74,374 @@ button {
 }
 
 .chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── 메인 화면 — 방송 그래픽 문법 ─────────────────────── */
+
+.home {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 0 18px 46px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 2px 14px;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+.wordmark::before {
+  content: '';
+  width: 9px;
+  height: 22px;
+  background: var(--accent);
+  transform: skewX(-14deg);
+  box-shadow: 0 0 14px rgba(62, 207, 142, 0.55);
+}
+
+.topchip {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+/* 타이틀 뒤에서 진짜 경기가 돌아간다. 첫인상은 여기서 갈린다 */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  min-height: min(62vh, 500px);
+  display: grid;
+  align-items: center;
+}
+
+.hero-pitch {
+  position: absolute;
+  inset: 0;
+  filter: brightness(0.55) saturate(0.9);
+}
+
+.hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(100deg, rgba(20, 16, 31, 0.95) 8%, rgba(20, 16, 31, 0.55) 46%, rgba(20, 16, 31, 0.1) 78%),
+    linear-gradient(to top, var(--bg) 0%, transparent 26%);
+}
+
+/* 방송 화면의 주사선. 은은해야 한다 */
+.hero-scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.022) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+}
+
+.hero-inner {
+  position: relative;
+  padding: clamp(28px, 6vw, 64px);
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  max-width: 640px;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  background: rgba(20, 16, 31, 0.65);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  animation: rise 0.5s ease both;
+}
+
+.live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff4d4d;
+  box-shadow: 0 0 10px rgba(255, 77, 77, 0.9);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.hero-title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(46px, 9.5vw, 86px);
+  line-height: 1.04;
+  letter-spacing: 0.01em;
+  text-shadow: 0 6px 34px rgba(0, 0, 0, 0.7);
+  animation: rise 0.55s 0.06s ease both;
+}
+
+.hero-title em {
+  font-style: normal;
+  color: var(--accent);
+  text-shadow: 0 0 34px rgba(62, 207, 142, 0.45);
+}
+
+.hero-sub {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--text);
+  opacity: 0.88;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8);
+  animation: rise 0.55s 0.12s ease both;
+}
+
+.hero-cta {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  animation: rise 0.55s 0.18s ease both;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #06301f;
+  font-weight: 700;
+  font-size: 16px;
+  padding: 13px 34px;
+  border-radius: 4px;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  box-shadow: 0 6px 28px rgba(62, 207, 142, 0.35);
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+  text-decoration: none;
+}
+
+.cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 8px 32px rgba(62, 207, 142, 0.5);
+}
+
+.cta:active { transform: translateY(1px); }
+
+.cta.ghost {
+  background: rgba(20, 16, 31, 0.55);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.cta.ghost:hover { border-color: var(--accent); box-shadow: none; }
+
+/* 국면 보드 */
+.board { margin-top: 34px; }
+
+.board-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 2px 12px;
+}
+
+.board-head::before {
+  content: '';
+  width: 8px;
+  height: 20px;
+  background: var(--accent);
+  transform: skewX(-14deg) translateY(3px);
+}
+
+.board-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 24px;
+}
+
+.board-head span {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.fixtures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.fixture {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  padding: 0 0 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.fixture:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* 카드 상단의 사선 밴드 — 중계 자막 하단바의 문법 */
+.fx-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.fx-band b {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.fx-main {
+  display: grid;
+  gap: 4px;
+  padding: 6px 14px 0;
+}
+
+.fx-score {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.fx-score em {
+  font-style: normal;
+  color: var(--dim);
+  margin: 0 8px;
+}
+
+.fx-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.fx-sum {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  min-height: 2.6em;
+}
+
+.fx-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 14px;
+}
+
+.tagchip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  background: rgba(62, 207, 142, 0.14);
+  color: var(--accent);
+}
+
+.tagchip.dim { background: var(--panel-2); color: var(--muted); }
+.tagchip.warn { background: rgba(232, 195, 60, 0.13); color: var(--warn); }
+
+.fx-cta {
+  margin: 4px 14px 0;
+  justify-self: start;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.fx-cta i { font-style: normal; }
+
+/* 하단 뉴스 티커 */
+.ticker {
+  overflow: hidden;
+  margin-top: 32px;
+  border-block: 1px solid var(--border);
+  background: var(--panel);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+.ticker-track {
+  display: inline-flex;
+  white-space: nowrap;
+  padding: 11px 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  animation: tick 34s linear infinite;
+}
+
+.ticker-track span { padding-right: 2em; }
+
+.foot {
+  margin: 26px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.7;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes tick {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track, .live i, .live, .hero-title, .hero-sub, .hero-cta {
+    animation: none;
+  }
+}
+
+/* ── 경기 화면 ─────────────────────────────────────── */
 
 /* 폰이 기본. 좁은 화면에서는 세로로 쌓는다 */
 .layout {
