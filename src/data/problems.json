@@ -5,12 +5,13 @@
     "order": 1,
     "score": [1, 0],
     "initialTactics": { "line": 0, "press": 0, "width": 0 },
-    "homeCount": 11,
-    "awayCount": 11,
-    "seed": 40712,
     "objective": { "type": "SURVIVE", "bonusOnWin": false },
-    "minDefenderSpeed": 62,
-    "startStamina": { "DF04": 62, "MF06": 48, "FW09": 71, "DF02": 70, "MF08": 66 }
+    "seed": 40712,
+    "subsLeft": 3,
+    "staminaOverrides": { "DF04": 62, "MF06": 48, "FW09": 58, "MF08": 61 },
+    "booked": ["MF06"],
+    "unavailable": [],
+    "awayCount": 11
   },
   {
     "id": "p04",
@@ -18,11 +19,12 @@
     "order": 4,
     "score": [1, 0],
     "initialTactics": { "line": 0, "press": 0, "width": 0 },
-    "homeCount": 10,
-    "awayCount": 11,
-    "seed": 51823,
     "objective": { "type": "SURVIVE", "bonusOnWin": false },
-    "minDefenderSpeed": 58,
-    "startStamina": { "DF04": 55, "MF06": 41, "FW09": 60, "DF02": 63, "MF08": 58 }
+    "seed": 51823,
+    "subsLeft": 2,
+    "staminaOverrides": { "DF04": 55, "DF05": 60, "MF06": 41, "MF08": 52, "FW09": 49 },
+    "booked": ["MF06"],
+    "unavailable": ["DF03"],
+    "awayCount": 11
   }
 ]

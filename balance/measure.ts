@@ -15,7 +15,7 @@ import type { Decision, Level, Objective, Problem } from '../src/sim/types'
  * 튜플과 Level 에 맞지 않는다. 통째로 캐스팅하면 국면 데이터에 오타가
  * 있어도 조용히 통과하므로, 필드마다 명시적으로 옮기면서 검사한다.
  */
-function toProblem(p: (typeof raw)[number]): Problem {
+export function toProblem(p: (typeof raw)[number]): Problem {
   const level = (v: number, field: string): Level => {
     if (v !== 0 && v !== 1 && v !== 2) {
       throw new Error(`${p.id}: ${field} 는 0·1·2 중 하나여야 하는데 ${v} 다`)
@@ -28,7 +28,16 @@ function toProblem(p: (typeof raw)[number]): Problem {
   }
 
   return {
-    ...p,
+    id: p.id,
+    title: p.title,
+    order: p.order,
+    seed: p.seed,
+    subsLeft: p.subsLeft,
+    awayCount: p.awayCount,
+    booked: [...p.booked],
+    unavailable: [...p.unavailable],
+    // JSON 은 국면마다 키가 달라 유니온으로 읽힌다. 명시적으로 좁힌다
+    staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
     score: [p.score[0], p.score[1]],
     initialTactics: {
       line: level(p.initialTactics.line, 'line'),
@@ -39,7 +48,7 @@ function toProblem(p: (typeof raw)[number]): Problem {
   }
 }
 
-const problems = raw.map(toProblem)
+export const problems = raw.map(toProblem)
 
 const SEEDS = 400
 

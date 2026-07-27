@@ -1,0 +1,46 @@
+{
+  "_note": "전부 창작된 가상 선수다. 실존 인물·팀과 무관하며 이름을 쓰지 않는다. 식별은 등번호와 포지션으로만 한다.",
+
+  "positionDefaults": {
+    "GK": { "speed": 55, "stamina0": 85, "finishing": 0.70 },
+    "DF": { "speed": 70, "stamina0": 78, "finishing": 0.80 },
+    "MF": { "speed": 72, "stamina0": 74, "finishing": 1.00 },
+    "FW": { "speed": 75, "stamina0": 72, "finishing": 1.15 }
+  },
+
+  "home": [
+    { "num": 1,  "pos": "GK", "speed": 55, "stamina0": 88 },
+    { "num": 2,  "pos": "DF", "speed": 74, "stamina0": 76 },
+    { "num": 3,  "pos": "DF", "speed": 76, "stamina0": 74 },
+    { "num": 4,  "pos": "DF", "speed": 62, "stamina0": 71 },
+    { "num": 5,  "pos": "DF", "speed": 68, "stamina0": 73 },
+    { "num": 6,  "pos": "MF", "speed": 66, "stamina0": 64 },
+    { "num": 7,  "pos": "MF", "speed": 79, "stamina0": 70 },
+    { "num": 8,  "pos": "MF", "speed": 71, "stamina0": 68 },
+    { "num": 10, "pos": "MF", "speed": 73, "stamina0": 69, "finishing": 1.05 },
+    { "num": 9,  "pos": "FW", "speed": 72, "stamina0": 66, "finishing": 1.20 },
+    { "num": 11, "pos": "FW", "speed": 77, "stamina0": 67, "finishing": 1.10 }
+  ],
+
+  "bench": [
+    { "num": 15, "pos": "DF", "speed": 81, "stamina0": 100 },
+    { "num": 17, "pos": "MF", "speed": 70, "stamina0": 100 },
+    { "num": 19, "pos": "MF", "speed": 74, "stamina0": 100, "finishing": 1.15 },
+    { "num": 22, "pos": "FW", "speed": 69, "stamina0": 100, "finishing": 1.30 },
+    { "num": 13, "pos": "FW", "speed": 83, "stamina0": 100, "finishing": 1.00 }
+  ],
+
+  "away": [
+    { "num": 1,  "pos": "GK", "speed": 57 },
+    { "num": 2,  "pos": "DF", "speed": 72 },
+    { "num": 3,  "pos": "DF", "speed": 75 },
+    { "num": 4,  "pos": "DF", "speed": 69 },
+    { "num": 5,  "pos": "DF", "speed": 71 },
+    { "num": 6,  "pos": "MF", "speed": 70 },
+    { "num": 7,  "pos": "MF", "speed": 80 },
+    { "num": 8,  "pos": "MF", "speed": 74 },
+    { "num": 10, "pos": "MF", "speed": 76 },
+    { "num": 9,  "pos": "FW", "speed": 78 },
+    { "num": 11, "pos": "FW", "speed": 82 }
+  ]
+}

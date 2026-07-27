@@ -2,6 +2,13 @@ import { createRng, type Rng } from './rng'
 import { resolveCoefficients } from './tactics'
 import { drawTick, resolveAttacks } from './attack'
 import { drainTick, effectiveFactor } from './stamina'
+import {
+  bestFinishing,
+  initialPlayers,
+  meanStamina,
+  minDefenderSpeed,
+  onPitchCount,
+} from './squad'
 import { TOTAL_TICKS } from './constants'
 import type { Decision, MatchState, Mentality, Problem } from './types'
 
@@ -19,42 +26,40 @@ export function mentalityOf(score: [number, number]): Mentality {
 }
 
 export function createState(problem: Problem): MatchState {
+  const players = initialPlayers(problem)
   return {
     tick: 0,
     score: [...problem.score] as [number, number],
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: { ...problem.initialTactics },
-    stamina: { ...problem.startStamina },
+    players,
     opponent: mentalityOf(problem.score),
-    homeCount: problem.homeCount,
+    homeCount: onPitchCount(players),
     awayCount: problem.awayCount,
+    subsLeft: problem.subsLeft,
   }
 }
 
-function meanStamina(stamina: Record<string, number>): number {
-  const values = Object.values(stamina)
-  if (values.length === 0) return 100
-  return values.reduce((a, b) => a + b, 0) / values.length
-}
-
-export function tick(state: MatchState, problem: Problem, rng: Rng): MatchState {
+export function tick(state: MatchState, rng: Rng): MatchState {
   const c = resolveCoefficients(state.tactics, state.opponent, state.awayCount < 11)
+
+  const players = state.players.map((s) =>
+    s.onPitch && !s.out ? { ...s, stamina: drainTick(s.stamina, c.drain) } : s,
+  )
+
   const next: MatchState = {
     ...state,
     score: [...state.score] as [number, number],
-    stamina: { ...state.stamina },
+    players,
   }
 
-  for (const id of Object.keys(next.stamina)) {
-    next.stamina[id] = drainTick(next.stamina[id], c.drain)
-  }
-
-  const homeFactor = effectiveFactor(meanStamina(next.stamina))
+  // 능력치를 명단에서 읽는다. 수비수가 교체되면 배후 실점 확률이 즉시 바뀐다
+  const homeFactor = effectiveFactor(meanStamina(players)) * bestFinishing(players)
   const { homeGoals, awayGoals } = resolveAttacks(
     drawTick(rng),
     c,
     homeFactor,
-    problem.minDefenderSpeed,
+    minDefenderSpeed(players),
   )
 
   next.score[0] += homeGoals
@@ -99,7 +104,7 @@ export function simulate(
       else if (d.type === 'PRESS') state.tactics.press = d.value
       else state.tactics.width = d.value
     }
-    state = tick(state, problem, rng)
+    state = tick(state, rng)
   }
 
   return { final: state, passed: judge(state, problem.objective) }
