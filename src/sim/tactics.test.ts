@@ -14,16 +14,20 @@ describe('resolveCoefficients', () => {
   })
 
   it('라인을 올리면 배후 위험과 진입 가치가 함께 오른다', () => {
-    const c = resolveCoefficients(t(2, 1, 1), 'BALANCED', false)
-    expect(c.behind).toBeCloseTo(2.2)
-    expect(c.entryXg).toBeCloseTo(1.3)
-    expect(c.setPiece).toBeCloseTo(0.6)
+    const high = resolveCoefficients(t(2, 1, 1), 'BALANCED', false)
+    const mid = resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
+    expect(high.behind).toBeGreaterThan(mid.behind * 1.5)
+    expect(high.entryXg).toBeGreaterThan(mid.entryXg)
+    expect(high.setPiece).toBeLessThan(mid.setPiece)
   })
 
   it('라인을 내리면 배후는 줄지만 세트피스가 크게 는다', () => {
-    const c = resolveCoefficients(t(0, 1, 1), 'BALANCED', false)
-    expect(c.behind).toBeCloseTo(0.45)
-    expect(c.setPiece).toBeCloseTo(2.8)
+    // 정확한 값이 아니라 방향과 크기를 본다. 세트피스 승수는 밸런싱에서
+    // 조정되는 값이라 숫자를 박아두면 튜닝할 때마다 테스트가 깨진다.
+    const low = resolveCoefficients(t(0, 1, 1), 'BALANCED', false)
+    const mid = resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
+    expect(low.behind).toBeLessThan(mid.behind * 0.6)
+    expect(low.setPiece).toBeGreaterThan(mid.setPiece * 2)
   })
 
   it('상대가 뭉쳐 있을수록 넓게가 강해진다', () => {

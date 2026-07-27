@@ -16,10 +16,10 @@ export const TOTAL_TICKS = 750
 export const BASE = {
   /** 우리 전진 시도 — 750틱에 13.5회 */
   A0: 0.018,
-  /** 상대 전진 시도 — 750틱에 8.3회 */
-  O0: 0.011,
-  /** 상대 배후 침투 시도 — 750틱에 1.5회 */
-  B0: 0.002,
+  /** 상대 전진 시도 — 750틱에 7.1회 */
+  O0: 0.0095,
+  /** 상대 배후 침투 시도 — 750틱에 1.2회 */
+  B0: 0.0016,
   /** 세트피스 획득 — 750틱에 4.5회 */
   S0: 0.006,
   /** 전진 시도가 슈팅 상황까지 갈 확률 */
@@ -38,7 +38,7 @@ export const BASE = {
  * 최적값이 전 국면에서 '보통'으로 수렴해 축이 죽는다.
  */
 export const LINE = [
-  { behind: 0.45, steal: 0.8, drain: 0.9, entryXg: 0.7, setPiece: 2.8 },
+  { behind: 0.45, steal: 0.8, drain: 0.9, entryXg: 0.7, setPiece: 3.4 },
   { behind: 1.0, steal: 1.0, drain: 1.0, entryXg: 1.0, setPiece: 1.0 },
   { behind: 2.2, steal: 1.25, drain: 1.15, entryXg: 1.3, setPiece: 0.6 },
 ] as const
