@@ -1,5 +1,19 @@
 [
   {
+    "id": "p01",
+    "title": "길이 막혔다",
+    "order": 2,
+    "score": [0, 1],
+    "initialTactics": { "line": 1, "press": 1, "width": 0 },
+    "objective": { "type": "EQUALIZE", "bonusOnWin": true },
+    "seed": 33104,
+    "subsLeft": 3,
+    "staminaOverrides": { "DF04": 66, "MF06": 55, "FW09": 61, "MF08": 63 },
+    "booked": [],
+    "unavailable": [],
+    "awayCount": 11
+  },
+  {
     "id": "p02",
     "title": "잠긴 문",
     "order": 1,

@@ -34,12 +34,13 @@ describe('resolveCoefficients', () => {
     const parked = resolveCoefficients(t(1, 1, 2), 'PARK_BUS', false)
     const open = resolveCoefficients(t(1, 1, 2), 'ALL_OUT', false)
     expect(parked.widthK).toBeGreaterThan(open.widthK)
-    expect(parked.widthK).toBeCloseTo(1.35)
+    expect(parked.widthK).toBeGreaterThan(1.2)
   })
 
   it('상대가 뭉쳐 있을 때 좁게는 손해다', () => {
-    const c = resolveCoefficients(t(1, 1, 0), 'PARK_BUS', false)
-    expect(c.widthK).toBeCloseTo(0.75)
+    const narrow = resolveCoefficients(t(1, 1, 0), 'PARK_BUS', false)
+    const normal = resolveCoefficients(t(1, 1, 1), 'PARK_BUS', false)
+    expect(narrow.widthK).toBeLessThan(normal.widthK * 0.85)
   })
 
   it('상대가 올라와 있으면 폭의 차이가 크게 줄어든다', () => {
@@ -65,5 +66,29 @@ describe('resolveCoefficients', () => {
     expect(c.steal).toBeCloseTo(1.4)
     expect(c.drain).toBeCloseTo(1.8)
     expect(c.foul).toBeCloseTo(1.5)
+  })
+
+  it('폭을 벌리면 중앙이 열린다', () => {
+    // 이 대가가 없으면 넓게가 공짜가 되어 전 국면에서 정답이 되고,
+    // 만능 조합이 생겨 "판마다 다른 판단이 필요하다"가 무너진다.
+    const wide = resolveCoefficients(t(1, 1, 2), 'BALANCED', false)
+    const narrow = resolveCoefficients(t(1, 1, 0), 'BALANCED', false)
+    expect(wide.oppOpen).toBeGreaterThan(narrow.oppOpen * 1.3)
+  })
+
+  it('폭은 공격 이득과 수비 대가가 같은 방향으로 움직인다', () => {
+    // 넓게가 공격에 좋으면 수비에 나쁘고, 좁게는 그 반대여야 교환이 성립한다
+    const wide = resolveCoefficients(t(1, 1, 2), 'PARK_BUS', false)
+    const narrow = resolveCoefficients(t(1, 1, 0), 'PARK_BUS', false)
+    expect(wide.widthK).toBeGreaterThan(narrow.widthK)
+    expect(wide.oppOpen).toBeGreaterThan(narrow.oppOpen)
+  })
+
+  it('우리가 열 명이면 상대의 모든 공격 경로가 살아난다', () => {
+    const eleven = resolveCoefficients(t(1, 1, 1), 'ALL_OUT', false, false)
+    const ten = resolveCoefficients(t(1, 1, 1), 'ALL_OUT', false, true)
+    expect(ten.behind).toBeGreaterThan(eleven.behind)
+    expect(ten.oppOpen).toBeGreaterThan(eleven.oppOpen)
+    expect(ten.setPiece).toBeGreaterThan(eleven.setPiece)
   })
 })

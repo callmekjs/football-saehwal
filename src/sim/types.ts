@@ -56,6 +56,14 @@ export interface Objective {
   bonusOnWin: boolean
 }
 
+/** 지시했지만 아직 데드볼을 기다리는 교체 */
+export interface PendingSub {
+  out: string
+  in: string
+  /** 이 틱에 반영된다 */
+  atTick: number
+}
+
 export interface MatchState {
   tick: number
   /** [우리, 상대] */
@@ -66,6 +74,16 @@ export interface MatchState {
   homeCount: number
   awayCount: number
   subsLeft: number
+  pendingSubs: PendingSub[]
+  /** 경기 중 일어난 사건 기록. 코멘터리와 분석 화면이 읽는다 */
+  log: MatchEventLog[]
+}
+
+export interface MatchEventLog {
+  tick: number
+  kind: 'FOUL' | 'CARD' | 'SEND_OFF' | 'PENALTY' | 'INJURY' | 'SUB' | 'GOAL' | 'CONCEDE'
+  target?: string
+  detail?: string
 }
 
 export interface Problem {
@@ -95,10 +113,10 @@ export interface Problem {
 /**
  * 감독의 개입 하나. 결과가 아니라 이것을 저장해야 경기를 재현할 수 있다.
  *
- * 교체(SUB)는 수요일에 추가된다.
+ * 레버(LINE·PRESS·WIDTH)는 확률에 곱해지는 승수라 곱셈 순서가 없다.
+ * 순서가 실제로 의미를 갖는 것은 교체(SUB)뿐이다 — 카드는 유한하고
+ * 회수할 수 없으며, 반영에 시간이 걸린다.
  */
-export type Decision = {
-  tick: number
-  type: 'LINE' | 'PRESS' | 'WIDTH'
-  value: Level
-}
+export type Decision =
+  | { tick: number; type: 'LINE' | 'PRESS' | 'WIDTH'; value: Level }
+  | { tick: number; type: 'SUB'; out: string; in: string }

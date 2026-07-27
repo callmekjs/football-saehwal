@@ -50,7 +50,15 @@ export function toProblem(p: (typeof raw)[number]): Problem {
 
 export const problems = raw.map(toProblem)
 
-const SEEDS = 400
+/**
+ * 시드 수는 조합 간 차이를 판별할 수 있을 만큼 커야 한다.
+ * 400개면 60% 근처에서 표준오차가 약 2.4%p라, 조합끼리 1~2%p 차이는
+ * 노이즈와 구분되지 않는다. 1200개면 약 1.4%p 로 내려간다.
+ */
+const SEEDS = 1200
+
+/** 통과율 p 의 표준오차 */
+const stderr = (p: number) => Math.sqrt((p * (1 - p)) / SEEDS)
 
 /** 합격 기준 — docs/design.md 10장 */
 const NOOP_MAX = 0.5
@@ -75,54 +83,75 @@ const set = (line: Level, press: Level, width: Level): Decision[] => [
   { tick: 0, type: 'WIDTH', value: width },
 ]
 
-/** 27조합을 전부 돌려 최선을 찾는다. 정답 경로를 손으로 적지 않아도 된다 */
-function best(base: Problem) {
-  let top = { label: '', rate: -1 }
-  let bottom = { label: '', rate: 2 }
+/** 27조합을 전부 돌려 순위를 낸다. 정답 경로를 손으로 적지 않아도 된다 */
+function sweep(base: Problem) {
+  const rows: Array<{ label: string; rate: number }> = []
   for (let l = 0; l <= 2; l++) {
     for (let p = 0; p <= 2; p++) {
       for (let w = 0; w <= 2; w++) {
         const { rate } = measure(base, set(l as Level, p as Level, w as Level))
-        const label = `${l}/${p}/${w}`
-        if (rate > top.rate) top = { label, rate }
-        if (rate < bottom.rate) bottom = { label, rate }
+        rows.push({ label: `${l}/${p}/${w}`, rate })
       }
     }
   }
-  return { top, bottom }
+  rows.sort((a, b) => b.rate - a.rate)
+  return rows
 }
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 
-console.log(`시드 ${SEEDS}개 × 국면 ${problems.length}개 × 27조합\n`)
-console.log('국면            무개입   최선(조합)      격차     스프레드  판정')
-console.log('─'.repeat(68))
+console.log(`시드 ${SEEDS}개 × 국면 ${problems.length}개 × 27조합`)
+console.log(`조합은 라인/압박/폭. 0=낮음·약·좁게, 1=보통·중, 2=높음·강·넓게\n`)
 
 let allPassed = true
+const winners: Array<{ title: string; top: string }> = []
 
 for (const p of problems) {
   const noop = measure(p, [])
-  const { top, bottom } = best(p)
+  const rows = sweep(p)
+  const top = rows[0]
+  const bottom = rows[rows.length - 1]
   const gap = top.rate - noop.rate
-  const spread = top.rate - bottom.rate
   const ok = noop.rate <= NOOP_MAX && gap >= GAP_MIN
   if (!ok) allPassed = false
+  winners.push({ title: p.title, top: top.label })
 
+  // 1위와 통계적으로 구분되지 않는 조합은 공동 1위로 본다
+  const margin = 2 * Math.sqrt(stderr(top.rate) ** 2 + stderr(rows[1].rate) ** 2)
+  const tied = rows.filter((r) => top.rate - r.rate < margin)
+
+  console.log(`■ ${p.title}  ${ok ? '합격' : '미달'}`)
   console.log(
-    `${p.title.padEnd(14)} ${pct(noop.rate).padStart(6)}  ` +
-      `${pct(top.rate).padStart(6)} (${top.label})  ` +
-      `${(gap * 100).toFixed(1).padStart(5)}%p  ` +
-      `${(spread * 100).toFixed(1).padStart(6)}%p  ` +
-      `${ok ? '합격' : '미달'}`,
+    `   무개입 ${pct(noop.rate)} → 최선 ${pct(top.rate)} (${top.label})   ` +
+      `격차 ${(gap * 100).toFixed(1)}%p   스프레드 ${((top.rate - bottom.rate) * 100).toFixed(1)}%p`,
   )
   console.log(
-    `${' '.repeat(14)} 평균 득점 ${noop.home.toFixed(2)} · 실점 ${noop.away.toFixed(2)} ` +
+    `   평균 득점 ${noop.home.toFixed(2)} · 실점 ${noop.away.toFixed(2)} ` +
       `(합계 ${(noop.home + noop.away).toFixed(2)}골 / 15분)`,
   )
+  console.log(
+    `   상위 5: ${rows
+      .slice(0, 5)
+      .map((r) => `${r.label} ${pct(r.rate)}`)
+      .join('  ')}`,
+  )
+  console.log(
+    `   최하위: ${bottom.label} ${pct(bottom.rate)}   ` +
+      `1위와 구분 안 되는 조합 ${tied.length}개 (오차 ±${(margin * 100).toFixed(1)}%p)`,
+  )
+  console.log()
 }
 
-console.log('─'.repeat(68))
+console.log('─'.repeat(72))
 console.log(`기준: 무개입 ${pct(NOOP_MAX)} 이하 · 격차 ${pct(GAP_MIN)} 이상`)
 console.log(allPassed ? '전 국면 합격' : '미달 국면 있음 — src/sim/constants.ts 를 조정한다')
+
+// 국면마다 정답이 달라야 "판마다 다른 판단이 필요하다"가 성립한다
+const distinct = new Set(winners.map((w) => w.top))
+console.log(
+  distinct.size === 1
+    ? `주의: 전 국면의 최선 조합이 ${[...distinct][0]} 로 동일하다 — 만능 조합이 존재한다`
+    : `국면별 최선 조합: ${winners.map((w) => `${w.title} ${w.top}`).join(' · ')}`,
+)
 
 if (!allPassed) process.exitCode = 1

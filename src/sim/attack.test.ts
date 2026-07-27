@@ -32,14 +32,24 @@ function average(tactics: Tactics, mentality: Mentality, n = 400) {
 }
 
 describe('drawTick', () => {
-  it('매 틱 정확히 10개를 소비한다', () => {
+  it('뽑는 개수가 슬롯 수와 정확히 일치한다', () => {
+    // 조건 분기 안에서 난수를 뽑으면 분기가 갈릴 때마다 이후 수열이 밀려
+    // 재현이 조용히 깨진다. 슬롯을 추가할 때 이 테스트가 개수를 지킨다.
+    const slots = Object.keys(drawTick(createRng(1))).length
+
     const a = createRng(1)
     drawTick(a)
     const afterOne = a.next()
 
     const b = createRng(1)
-    for (let i = 0; i < 10; i++) b.next()
+    for (let i = 0; i < slots; i++) b.next()
     expect(afterOne).toEqual(b.next())
+  })
+
+  it('슬롯이 서로 다른 값을 낸다', () => {
+    const d = drawTick(createRng(1))
+    const values = Object.values(d)
+    expect(new Set(values).size).toBe(values.length)
   })
 })
 

@@ -93,21 +93,27 @@ describe('simulate — 선수 상태', () => {
     expect(end.players.find((p) => p.id === b.id)!.stamina).toBe(b.stamina0)
   })
 
-  it('느린 수비수가 빠지면 실점이 준다', () => {
+  it('느린 수비수를 빠른 수비수로 바꾸면 실점이 준다', () => {
     // 명단의 속도가 실제로 계산에 들어가는지 확인한다.
     // 이 게임의 대표 승부처가 이 연결 위에 서 있다.
-    const conceded = (unavailable: string[]) => {
+    //
+    // 빼기만 하면 열 명이 되어 커버 공백 계수가 붙으므로 속도 이득이
+    // 묻힌다. 교체로 인원을 유지한 채 속도만 바꿔서 비교해야 한다.
+    const slowest = HOME_XI.filter((p) => p.pos === 'DF').sort((a, b) => a.speed - b.speed)[0]
+    const fastest = BENCH.filter((p) => p.pos === 'DF').sort((a, b) => b.speed - a.speed)[0]
+
+    const conceded = (decisions: Decision[]) => {
       let total = 0
-      for (let s = 0; s < 300; s++) {
-        total += simulate(
-          { ...P, seed: 80000 + s, unavailable, initialTactics: { line: 2, press: 1, width: 1 } },
-          [],
-        ).final.score[1]
+      const attacking: Problem = { ...P, initialTactics: { line: 2, press: 1, width: 1 } }
+      for (let s = 0; s < 400; s++) {
+        total += simulate({ ...attacking, seed: 80000 + s }, decisions).final.score[1]
       }
       return total
     }
-    // DF04(62)가 가장 느리다. 빼면 다음으로 느린 DF05(68)가 기준이 된다
-    expect(conceded(['DF04'])).toBeLessThan(conceded([]))
+
+    expect(
+      conceded([{ tick: 0, type: 'SUB', out: slowest.id, in: fastest.id }]),
+    ).toBeLessThan(conceded([]))
   })
 })
 

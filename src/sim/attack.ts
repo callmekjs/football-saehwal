@@ -2,7 +2,7 @@ import { BASE, XG } from './constants'
 import type { Rng } from './rng'
 import type { Coefficients } from './tactics'
 
-/** 한 틱 분량의 난수 10개. 슬롯 이름은 소비 순서를 그대로 따른다 */
+/** 한 틱 분량의 난수 18개. 슬롯 이름은 소비 순서를 그대로 따른다 */
 export interface TickDraws {
   behind: number
   behindShot: number
@@ -14,10 +14,18 @@ export interface TickDraws {
   awayShot: number
   setPiece: number
   setPieceShot: number
+  foul: number
+  foulTarget: number
+  card: number
+  penalty: number
+  penaltyShot: number
+  sendOff: number
+  injury: number
+  injuryTarget: number
 }
 
 /**
- * 매 틱 정확히 10개를 고정 순서로 뽑는다.
+ * 매 틱 정확히 18개를 고정 순서로 뽑는다.
  *
  * 조건 분기 안에서 뽑으면 분기가 갈릴 때마다 이후 수열이 밀려 재현이
  * 조용히 깨진다. 필요 없는 슬롯도 반드시 뽑아서 버린다.
@@ -36,6 +44,14 @@ export function drawTick(rng: Rng): TickDraws {
     awayShot: rng.next(),
     setPiece: rng.next(),
     setPieceShot: rng.next(),
+    foul: rng.next(),
+    foulTarget: rng.next(),
+    card: rng.next(),
+    penalty: rng.next(),
+    penaltyShot: rng.next(),
+    sendOff: rng.next(),
+    injury: rng.next(),
+    injuryTarget: rng.next(),
   }
 }
 

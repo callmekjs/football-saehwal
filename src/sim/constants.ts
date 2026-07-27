@@ -14,10 +14,10 @@ export const TOTAL_TICKS = 750
 
 /** 기본 발생 확률 (틱당). 승수는 여기에 곱해진다 */
 export const BASE = {
-  /** 우리 전진 시도 — 750틱에 13.5회 */
-  A0: 0.018,
-  /** 상대 전진 시도 — 750틱에 7.1회 */
-  O0: 0.0095,
+  /** 우리 전진 시도 — 750틱에 18회 */
+  A0: 0.024,
+  /** 상대 전진 시도 — 750틱에 6.0회 */
+  O0: 0.008,
   /** 상대 배후 침투 시도 — 750틱에 1.2회 */
   B0: 0.0016,
   /** 세트피스 획득 — 750틱에 4.5회 */
@@ -38,7 +38,7 @@ export const BASE = {
  * 최적값이 전 국면에서 '보통'으로 수렴해 축이 죽는다.
  */
 export const LINE = [
-  { behind: 0.45, steal: 0.8, drain: 0.9, entryXg: 0.7, setPiece: 3.4 },
+  { behind: 0.45, steal: 0.8, drain: 0.9, entryXg: 0.58, setPiece: 4.2 },
   { behind: 1.0, steal: 1.0, drain: 1.0, entryXg: 1.0, setPiece: 1.0 },
   { behind: 2.2, steal: 1.25, drain: 1.15, entryXg: 1.3, setPiece: 0.6 },
 ] as const
@@ -51,16 +51,22 @@ export const PRESS = [
 ] as const
 
 /**
- * 수비 폭. 상대 밀집도에 연동한다.
+ * 수비 폭. 공격 쪽 이득과 수비 쪽 대가가 함께 걸린다.
  *
- * 넓게가 항상 좋으면 축이 죽고, 항상 나쁘면 국면 1·5의 정답이 사라진다.
- * 상대가 뭉쳐 있을 때만 강하게 만들면 하나의 계수로 지키는 판과 쫓는 판의
- * 정답이 반대가 된다. 이 축이 국면 간 부호가 뒤집히는 유일한 축이다.
+ * base·congestion 은 우리 전진 시도 횟수에 곱해진다. 상대가 뭉쳐 있을 때만
+ * 넓게가 강해지도록 밀집도에 연동한다.
+ *
+ * oppOpen 이 그 대가다. 벌리면 중앙이 열려 상대 오픈플레이가 늘고, 좁히면
+ * 중앙이 막힌다. **이 열이 없으면 넓게가 공짜가 되어 전 국면에서 넓게가
+ * 정답이 되고, 만능 조합이 생겨 "판마다 다른 판단이 필요하다"가 무너진다.**
+ *
+ * 이 대가 때문에 지키는 판(SURVIVE)은 좁게, 쫓는 판(EQUALIZE)은 넓게로
+ * 정답이 갈린다. 국면 간 부호가 뒤집히는 유일한 축이다.
  */
 export const WIDTH = {
-  narrow: { base: 0.95, congestion: -0.2 },
-  normal: { base: 1.0, congestion: 0.0 },
-  wide: { base: 1.05, congestion: 0.3 },
+  narrow: { base: 0.95, congestion: -0.35, oppOpen: 0.78 },
+  normal: { base: 1.0, congestion: 0.0, oppOpen: 1.0 },
+  wide: { base: 1.05, congestion: 0.65, oppOpen: 1.28 },
 } as const
 
 /** 상대 성향별 계수. congestion 은 0(활짝 열림) ~ 1(꽉 막힘) */
@@ -94,6 +100,31 @@ export const STAMINA = {
   cliffPenalty: 0.85,
   floorFactor: 0.55,
   rangeFactor: 0.45,
+} as const
+
+/**
+ * 경기 중 사건.
+ *
+ * 퇴장 해저드가 압박 축이 값을 갖는 유일한 통로다. 경고 보유 선수가
+ * 피치 위에 있을 때만 발동하고, "압박을 올리고 싶은데 올리면 안 되는"
+ * 긴장을 만든다. 이것이 없으면 압박은 체력만 깎는 축이 되어 국면마다
+ * 정답이 갈리지 않는다.
+ */
+export const EVENTS = {
+  /** 파울 발생. 틱당. 압박 승수가 곱해진다 */
+  foulBase: 0.0025,
+  /** 파울이 경고로 이어질 확률 */
+  cardOnFoul: 0.18,
+  /** 파울이 페널티킥으로 이어질 확률 (자기 진영 박스 내) */
+  penaltyOnFoul: 0.02,
+  /** 경고 보유 선수가 피치에 있고 강 압박일 때. 틱당. 750틱 누적 약 23% */
+  sendOffHazard: 0.00035,
+  /** 이 체력 아래에서 부상 위험이 활성화된다 */
+  injuryThreshold: 25,
+  /** 임계 이하에서 틱당 부상 확률 */
+  injuryHazard: 0.0004,
+  /** 교체가 반영되기까지의 지연. 10Hz 기준 6초 */
+  subDelayTicks: 60,
 } as const
 
 /** 수적 변화 보정 */

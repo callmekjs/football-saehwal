@@ -36,6 +36,7 @@ export function resolveCoefficients(
   tactics: Tactics,
   mentality: Mentality,
   oppTenMan: boolean,
+  homeTenMan = false,
 ): Coefficients {
   const line = LINE[tactics.line]
   const press = PRESS[tactics.press]
@@ -47,14 +48,22 @@ export function resolveCoefficients(
     ment.congestion + (oppTenMan ? COUNT_PENALTY.oppTenManCongestion : 0),
   )
 
+  // 우리가 열 명이면 담당 구역이 넓어져 상대의 모든 공격 경로가 살아난다
+  const cover = homeTenMan ? COUNT_PENALTY.tenManCover : 1
+
   return {
-    behind: line.behind * ment.behind,
+    behind: line.behind * ment.behind * cover,
     steal: line.steal * press.steal,
     drain: line.drain * press.drain,
     entryXg: line.entryXg,
-    setPiece: line.setPiece,
+    setPiece: line.setPiece * cover,
+    // 폭을 벌리면 중앙이 열린다. 이 대가가 없으면 넓게가 공짜가 된다
     oppOpen:
-      press.oppOpen * ment.oppVolume * (oppTenMan ? COUNT_PENALTY.oppTenManVolume : 1),
+      press.oppOpen *
+      width.oppOpen *
+      ment.oppVolume *
+      cover *
+      (oppTenMan ? COUNT_PENALTY.oppTenManVolume : 1),
     foul: press.foul,
     widthK: width.base + width.congestion * congestion,
     openness: ment.openness,
