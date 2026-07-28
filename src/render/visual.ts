@@ -128,7 +128,7 @@ export interface VBall {
  * 튕기는 실내 경기처럼 보인다.
  */
 export interface Restart {
-  kind: 'THROW_IN' | 'GOAL_KICK' | 'CORNER'
+  kind: 'THROW_IN' | 'GOAL_KICK' | 'CORNER' | 'FREE_KICK'
   /** 다시 넣는 팀 */
   side: 'HOME' | 'AWAY'
   x: number
@@ -195,6 +195,8 @@ export class VisualMatch {
   private lastOwner: 'HOME' | 'AWAY' = 'HOME'
   private lastFormation = ''
   private lastHomeCount = 11
+  /** 시뮬 사건 기록을 어디까지 읽었는지 */
+  private lastLogLen = 0
   /** 관전 시계 (초). 추격조 유지 시간 계산에 쓴다 */
   private clock = 0
   /** 압박 게이지. 상대가 발밑에 붙어 있던 시간이 쌓인다 */
@@ -388,8 +390,13 @@ export class VisualMatch {
     if (this.celebration) {
       this.lastStats = { homeShot: state.stats.homeShot, awayShot: state.stats.awayShot }
       this.lastOwner = state.ball.owner
+      // 세리머니 중에 난 반칙은 흘려보낸다. 밀렸다가 재개 직후에 한꺼번에
+      // 프리킥으로 터지면 무슨 일이 일어난 건지 알 수 없다
+      this.lastLogLen = state.log.length
       return
     }
+
+    this.syncFouls(state)
 
     const scored = state.score[0] - this.lastScore[0]
     const conceded = state.score[1] - this.lastScore[1]
@@ -426,6 +433,35 @@ export class VisualMatch {
         }
       }
     }
+  }
+
+  /**
+   * 반칙을 프리킥으로 옮긴다.
+   *
+   * 시뮬은 반칙을 세고 경고와 퇴장까지 처리하지만, 화면에서는 아무 일도
+   * 일어나지 않았다. 통계로만 존재하는 반칙은 관전자에게는 없는 일이다.
+   * 실제 축구는 반칙이 나면 휘슬이 울리고 그 자리에서 다시 시작한다.
+   */
+  private syncFouls(state: MatchState) {
+    for (let i = this.lastLogLen; i < state.log.length; i++) {
+      const e = state.log[i]
+      if (e.kind !== 'FOUL' || !e.target) continue
+      // 이미 공이 죽어 있으면 반칙이 날 수 없다. 여기서 또 걸면 재개를
+      // 기다리던 공이 반칙 지점으로 순간이동한다
+      if (this.restart) continue
+      // 페널티로 이어진 반칙은 득점 쪽으로 처리된다. 여기서 또 멈추면
+      // 골 장면과 프리킥이 겹친다
+      if (state.log.some((x) => x.tick === e.tick && x.kind === 'PENALTY')) continue
+      let at: VPlayer | undefined
+      try {
+        at = this.byId(`H${getPlayer(e.target).num}`)
+      } catch {
+        at = undefined
+      }
+      // 반칙은 우리 선수가 범한다. 차는 쪽은 상대다
+      if (at) this.beginRestart('FREE_KICK', 'AWAY', clamp(at.x, 2, PITCH_W - 2), clamp(at.y, 2, PITCH_H - 2))
+    }
+    this.lastLogLen = state.log.length
   }
 
   /**
@@ -468,6 +504,9 @@ export class VisualMatch {
     // 이미 올라갔으므로 골 장면은 반드시 나와야 한다. 실측으로 골 하나가
     // 뒤이어 들어온 평범한 슛에 밀려 통째로 사라졌다
     if (this.pendingShot?.willScore && !willScore) return
+    // 골이 났으면 밖으로 나간 공을 다시 넣을 이유가 없다. 어차피 다음은
+    // 킥오프다. 재개를 붙들고 있으면 골 장면이 그만큼 밀린다
+    if (willScore) this.restart = null
     const holder = this.byId(this.ball.holder)
     if (this.ball.mode === 'HELD' && holder?.side === side && holder.pos !== 'GK') {
       this.shoot(holder, willScore)
@@ -636,7 +675,7 @@ export class VisualMatch {
     this.ball.lift = 0
     this.ball.x = px
     this.ball.y = py
-    this.restart = { kind, side, x: px, y: py, wait: 0.5, takerId: taker?.id ?? null, age: 0 }
+    this.restart = { kind, side, x: px, y: py, wait: 0.35, takerId: taker?.id ?? null, age: 0 }
   }
 
   /**
@@ -670,7 +709,7 @@ export class VisualMatch {
     if (r.wait > 0) return
     // 차는 선수가 공에 닿아야 재개된다. 아무도 못 가면(퇴장 등) 오래
     // 붙잡혀 있을 수 없으므로 보호 시간을 둔다
-    if (taker && dist(taker, r) < 2.0) {
+    if (taker && dist(taker, r) < 2.6) {
       this.restart = null
       this.giveTo(taker)
     } else if (r.age > 4) {
@@ -790,14 +829,14 @@ export class VisualMatch {
       // 시드에서도 이후 수열이 밀려 재현이 조용히 깨진다
       const ang = this.rng.next() * Math.PI * 2
       const off = 2 + this.rng.next() * 4
-      const toMarker = this.rng.next() < 0.5
+      const toMarker = this.rng.next() < 0.72
       const marker = this.players.reduce<VPlayer | null>((m, o) => {
         if (o.side === to.side || o.pos === 'GK') return m
         return !m || dist(o, to) < dist(m, to) ? o : m
       }, null)
       if (toMarker && marker) {
-        tx = clamp(marker.x + Math.cos(ang) * 1.6, -6, PITCH_W + 6)
-        ty = clamp(marker.y + Math.sin(ang) * 1.6, -6, PITCH_H + 6)
+        tx = clamp(marker.x + Math.cos(ang) * 1.2, -6, PITCH_W + 6)
+        ty = clamp(marker.y + Math.sin(ang) * 1.2, -6, PITCH_H + 6)
       } else {
         tx = clamp(tx + Math.cos(ang) * off, -6, PITCH_W + 6)
         ty = clamp(ty + Math.sin(ang) * off, -6, PITCH_H + 6)
