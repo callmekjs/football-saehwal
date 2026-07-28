@@ -498,8 +498,21 @@ button {
 
 /* ── 경기 화면 ─────────────────────────────────────── */
 
+/*
+ * 경기장 너비의 상한. 두 가지에 동시에 걸린다.
+ *
+ * **세로** — 캔버스 높이는 너비에 묶여 있다(105:68). 너비를 키우면 세로가
+ * 화면 밖으로 나가고, 전술 줄이 접혀 경기 중에 스크롤해야 조작할 수 있는
+ * 화면이 된다. 위아래로 반드시 들어가야 하는 것(점수판 · 기록 줄 · 전술
+ * 줄 · 여백 = 약 416px)을 뺀 높이에서 역으로 너비를 구한다. 1.544 는
+ * 105/68 이다.
+ *
+ * **가로** 는 격자가 알아서 막는다. 양옆 열의 최소 너비(320px · 280px)가
+ * 먼저 자리를 잡으므로 경기장은 남는 만큼만 가져간다.
+ */
 .match-screen {
-  max-width: 1280px;
+  --pitch-w: clamp(520px, calc((100vh - 416px) * 1.544 + 16px), 1100px);
+  max-width: 1760px;
   min-width: 0;
   margin: 0 auto;
   padding: 10px 14px 28px;
@@ -511,10 +524,10 @@ button {
   z-index: 10;
   min-height: 54px;
   display: grid;
-  grid-template-columns: 46px minmax(70px, 0.7fr) minmax(170px, 1fr) minmax(58px, 0.7fr);
+  grid-template-columns: 46px auto auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px 4px 5px;
+  gap: 10px;
+  padding: 4px 12px 4px 5px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: rgba(19, 29, 40, 0.96);
@@ -560,28 +573,37 @@ button {
 .match-score strong { font-size: 23px; font-variant-numeric: tabular-nums; }
 .match-subs { justify-self: end; color: var(--muted); font-size: 12px; white-space: nowrap; }
 
-.match-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(330px, 380px);
-  gap: 14px;
-  margin-top: 14px;
-  align-items: start;
+/* 넓은 화면의 점수판에만 붙는 요약. 좁은 화면은 아래 .match-brief 가 맡는다 */
+.match-meta {
+  display: none;
+  min-width: 0;
+  gap: 18px;
 }
 
-.match-main,
-.match-console,
-.player-controls,
-.info-panels {
+.match-meta span {
   min-width: 0;
   display: grid;
-  gap: 12px;
-  align-content: start;
+  gap: 1px;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+}
+
+.match-meta b {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .match-brief {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
+  margin-top: 10px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -592,7 +614,7 @@ button {
   min-width: 0;
   display: grid;
   gap: 3px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   background: var(--panel);
 }
 
@@ -610,72 +632,11 @@ button {
   white-space: nowrap;
 }
 
-.pitch-card { padding: 8px; }
-
-/*
- * 급수 타임 안내.
- *
- * 킥오프 전 화면이 "설정 메뉴"가 아니라 "경기 안의 한 장면"으로 읽혀야
- * 한다. 감독이 선수들을 불러 모아 지시하는 시간이라는 것을 한 줄로
- * 말해주면, 왜 지금은 다 만질 수 있고 왜 휘슬 뒤에는 시계가 안 멈추는지가
- * 함께 설명된다.
- */
-.hydration-note {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.65;
-}
-
-.hydration-note b { color: var(--accent); font-weight: 600; }
-
-.kickoff-button {
-  min-height: 58px;
-  display: grid;
-  place-items: center;
-  gap: 1px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #08271a;
-  font-size: 17px;
-  font-weight: 800;
-  box-shadow: 0 10px 26px rgba(100, 212, 155, 0.22);
-}
-
-.kickoff-button small { font-size: 10px; font-weight: 550; opacity: 0.72; }
-
-.match-result {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-
-.match-result.failed { border-left-color: var(--away); }
-.match-result > div { display: grid; gap: 2px; }
-.match-result span { color: var(--dim); font-size: 11px; }
-.match-result strong { color: var(--accent); font-size: 20px; }
-.match-result.failed strong { color: var(--away); }
-
-.match-console {
-  position: sticky;
-  top: 76px;
-}
-
 .control-tabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
+  margin-top: 10px;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -696,52 +657,312 @@ button {
   color: #08271a;
 }
 
-.control-tabs button:disabled { opacity: 0.35; cursor: not-allowed; }
-.control-panel { min-width: 0; }
-
-.formation-panel-body {
+.match-grid {
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  margin-top: 12px;
+  min-width: 0;
 }
 
-.formation-grid {
+.match-col { min-width: 0; }
+.pane { min-width: 0; }
+
+/*
+ * 캔버스가 상자를 꽉 채운다.
+ *
+ * 연출 쪽은 캔버스 너비를 부모의 `clientWidth` 로 잡는데 그 값은 안쪽
+ * 여백까지 포함한다. 그래서 상자에 여백을 주면 캔버스가 여백만큼 넘쳐
+ * 나가 좌우가 잘렸다 — 잔디 양끝이 실제로 잘려 있었다. 여백을 0 으로
+ * 두면 두 값이 같아진다.
+ */
+.pitch-card {
+  padding: 0;
+  overflow: hidden;
+  max-width: min(100%, var(--pitch-w));
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* ── 옆에 세우는 세로 전술판 ─────────────────────────── */
+
+.squad-panel,
+.away-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel > h2 b {
+  float: right;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* 포메이션 고르기. 전술판 안에 둔다 — 고른 결과가 바로 아래에 보인다 */
+.formation-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 9px 10px 6px;
 }
 
 .formation-choice {
   min-width: 0;
-  min-height: 46px;
-  padding: 7px 4px;
+  min-height: 44px;
+  padding: 4px 2px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.formation-summary {
+.squad-caption {
+  margin: 0;
+  padding: 2px 12px 8px;
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.squad-caption b { color: var(--accent); font-size: 12px; }
+
+/*
+ * 판 자체. 잔디 줄무늬와 하프라인만 둔다 — 카드가 주인공이라
+ * 배경이 시선을 끌면 등번호를 읽는 데 방해가 된다.
+ */
+.squad-shape {
+  position: relative;
+  flex: 1 1 auto;
+  /*
+   * 카드가 겹치지 않는 최소 높이.
+   *
+   * 세로로 가장 빡빡한 자리는 4-4-2 다이아몬드의 수비(x 22)와 홀딩(x 33)
+   * 이다. 정의역 76 에서 11 만큼 떨어져 있으니 안쪽 높이의 14.5% 이고,
+   * 44px 을 확보하려면 안쪽이 304px, 위아래 여백 52px 을 더해 356px 이다.
+   */
+  min-height: 356px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.022) 0 26px,
+      transparent 26px 52px
+    ),
+    linear-gradient(to bottom, rgba(100, 212, 155, 0.07), rgba(100, 212, 155, 0.02)),
+    var(--panel-2);
+}
+
+.squad-shape::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.squad-shape::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 84px;
+  height: 84px;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+/* 카드 중심이 놓이는 영역. 카드는 여기서 22px 까지 넘쳐 나온다 */
+.squad-field {
+  position: absolute;
+  inset: 26px 24px;
+}
+
+.squad-card {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
   display: grid;
-  gap: 3px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  background: var(--panel-2);
+  align-content: center;
+  justify-items: center;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  min-height: 44px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  transition: top 0.32s ease, left 0.32s ease, border-color 0.12s, background 0.12s;
 }
 
-.formation-summary strong { color: var(--accent); font-size: 14px; }
-.formation-summary span { color: var(--muted); font-size: 11px; line-height: 1.45; }
-.formation-summary small { color: var(--dim); font-size: 10px; }
+.squad-card[data-order='on'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+}
+
+.squad-card[data-warn='on'] { border-color: var(--warn); }
+
+.squad-card[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #06301f;
+  box-shadow: 0 0 0 3px rgba(100, 212, 155, 0.28);
+}
+
+.squad-card:disabled { cursor: default; opacity: 0.72; }
+.squad-card.away { border-color: color-mix(in srgb, var(--away) 45%, var(--border)); }
+
+.squad-num { font-size: 15px; font-weight: 700; line-height: 1.05; }
+
+/* 꼬리표는 세 글자를 넘지 않는다. 44px 카드 안에서 잘리면 안 된다 */
+.squad-tag {
+  max-width: 42px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.squad-card[data-warn='on'] .squad-tag { color: var(--warn); }
+.squad-card[data-order='on'] .squad-tag { color: var(--accent); }
+.squad-card[aria-pressed='true'] .squad-tag { color: #06301f; }
+
+.squad-stamina {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.squad-stamina i { display: block; height: 100%; background: var(--accent); }
+.squad-stamina i[data-low='on'] { background: var(--away); }
+
+/* 상대 카드는 누를 수 없다. 표적이 아니므로 작아도 된다 */
+.away .squad-card,
+.squad-card.away {
+  width: 38px;
+  height: 38px;
+  min-height: 0;
+  cursor: default;
+  background: color-mix(in srgb, var(--away) 16%, var(--panel));
+}
+
+.squad-card.away .squad-num { font-size: 14px; }
+.away-note {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* 선수 카드를 누르면 여기만 바뀐다. 판은 그대로 남는다 */
+/*
+ * 선수 카드를 누르면 여기만 바뀐다. 판은 그대로 남는다.
+ *
+ * 높이를 고정하는 이유가 있다. 여기가 늘었다 줄었다 하면 위의 전술판이
+ * 같이 흔들려서, 지시를 거는 사이 카드가 통째로 움직인다. 경기 중에
+ * 그건 오조작이 된다.
+ */
+.squad-orders {
+  display: grid;
+  gap: 6px;
+  min-height: 104px;
+  align-content: start;
+  padding: 9px 10px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.squad-orders-head { color: var(--muted); font-size: 11.5px; }
+.squad-orders-head b { color: var(--accent); }
+
+.squad-order-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.squad-order-grid .chip {
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.squad-order-list { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.squad-active {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel-2));
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.squad-empty { color: var(--dim); font-size: 11px; }
+
+.squad-note {
+  min-height: 14px;
+  color: var(--warn);
+  font-size: 11px;
+}
+
+/* ── 가운데 열 ──────────────────────────────────────── */
+
+.center-info {
+  display: grid;
+  gap: 12px;
+}
+
+.stat-panel,
+.log-panel { min-width: 0; }
+
+.stat-rows { padding: 8px 12px 10px; display: grid; gap: 7px; align-content: start; }
+.stat-row { display: grid; gap: 3px; }
+
+.stat-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-track {
+  display: flex;
+  height: 6px;
+  gap: 2px;
+  background: var(--panel-2);
+  border-radius: 3px;
+}
+
+.log-rows { padding: 7px 12px 9px; display: grid; gap: 4px; align-content: start; }
+.log-empty { font-size: 12px; color: var(--dim); }
+.log-row { font-size: 12px; display: flex; gap: 8px; }
+.log-min { color: var(--dim); min-width: 34px; }
 
 .tactics-presets {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 6px;
   padding: 10px;
 }
 
 .tactic-preset {
   min-width: 0;
-  min-height: 66px;
+  min-height: 58px;
   display: grid;
   align-content: center;
   gap: 3px;
@@ -749,17 +970,14 @@ button {
   text-align: left;
 }
 
-.tactic-preset:last-child { grid-column: 1 / -1; }
 .tactic-preset strong { font-size: 13px; }
 .tactic-preset small { color: var(--dim); font-size: 10px; line-height: 1.35; }
 .tactic-preset[aria-pressed='true'] small { color: #174b36; }
 
-.advanced-tactics {
-  border-top: 1px solid var(--border);
-}
+.advanced-tactics { border-top: 1px solid var(--border); }
 
 .advanced-tactics summary {
-  min-height: 46px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -770,33 +988,303 @@ button {
 
 .lever-list {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 10px;
   padding: 0 10px 10px;
 }
 
-.lever-row { display: grid; gap: 5px; }
+.lever-row { display: grid; gap: 5px; align-content: start; }
 .lever-row > span { color: var(--muted); font-size: 11px; }
 .lever-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .lever-options .chip { min-width: 0; padding: 8px 4px; text-align: center; }
 
-.situation-panel > div {
+/* ── 벤치 ───────────────────────────────────────────── */
+
+.bench-body { padding: 9px 10px 10px; display: grid; gap: 8px; }
+.bench-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.bench-chip {
+  flex: 1 1 58px;
+  min-width: 58px;
   display: grid;
-  gap: 5px;
+  gap: 1px;
+  justify-items: center;
+  padding: 6px 4px;
+}
+
+.bench-num { font-size: 15px; font-weight: 600; }
+.bench-sub { font-size: 10px; white-space: nowrap; }
+.bench-note { font-size: 12px; color: var(--warn); }
+
+.bench-pending {
+  padding: 6px 10px;
+  display: grid;
+  gap: 2px;
+  background: var(--panel-2);
+  font-size: 12px;
+  color: var(--warn);
+}
+
+/* ── 오른쪽 아래 — 지금 눌러야 하는 것 ─────────────────── */
+
+.side-note-body {
+  display: grid;
+  gap: 8px;
   padding: 12px;
 }
 
-.situation-panel strong { font-size: 15px; }
-.situation-panel span { color: var(--accent); font-size: 13px; }
-.situation-panel small { color: var(--muted); font-size: 11px; line-height: 1.55; }
+.side-note-body > strong { font-size: 15px; }
+.side-note-body > span { color: var(--accent); font-size: 13px; }
+.side-note-body > small { color: var(--dim); font-size: 10.5px; line-height: 1.55; }
+
+.side-note.result { border-left: 4px solid var(--accent); }
+.side-note.result.failed { border-left-color: var(--away); }
+.result-verdict { color: var(--accent); font-size: 22px; }
+.side-note.result.failed .result-verdict { color: var(--away); }
+
+.side-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.side-facts span {
+  display: grid;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.side-facts b { color: var(--text); font-size: 13px; letter-spacing: 0; }
+
+.side-orders {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.side-orders li {
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+.side-orders li.dim { background: var(--panel-2); color: var(--dim); }
+
+/*
+ * 급수 타임 안내.
+ *
+ * 킥오프 전 화면이 "설정 메뉴"가 아니라 "경기 안의 한 장면"으로 읽혀야
+ * 한다. 감독이 선수들을 불러 모아 지시하는 시간이라는 것을 한 줄로
+ * 말해주면, 왜 지금은 다 만질 수 있고 왜 휘슬 뒤에는 시계가 안 멈추는지가
+ * 함께 설명된다.
+ */
+.hydration-note {
+  margin: 0;
+  padding: 10px 11px;
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.hydration-note b { color: var(--accent); font-weight: 600; }
+
+.kickoff-button {
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #08271a;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 10px 26px rgba(100, 212, 155, 0.22);
+}
+
+.kickoff-button small { font-size: 10px; font-weight: 550; opacity: 0.72; }
+
+/*
+ * 감독 보고서는 열 안에 밀어 넣지 않고 아래에 통째로 편다.
+ *
+ * 다만 한 줄이 1400px 이 되면 눈이 다음 줄 첫 글자를 못 찾는다. 넓어진
+ * 폭은 줄 길이가 아니라 **칸 수**로 쓴다 — 장면 카드를 셋씩 늘어놓고,
+ * 문단은 읽히는 길이에서 끊는다.
+ */
+.match-report { margin-top: 12px; }
+
+@media (min-width: 1240px) {
+  .match-report .coach-findings { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .match-report .coach-prescriptions li,
+  .match-report .analysis-caption,
+  .match-report .analysis-advice p { max-width: 900px; }
+  .match-report .analysis-verdict { max-width: 1000px; }
+}
+
+/* ── 넓은 화면 — 3열 ────────────────────────────────── */
+
+/*
+ * 1240px 부터 3열이다.
+ *
+ * 왼쪽 전술판은 카드가 44px 표적이라 3-5-2 처럼 한 줄에 다섯이 서는
+ * 배치에서 겹치지 않으려면 320px 이 필요하다. 오른쪽 상대 판은 누를 수
+ * 없어 280px 이면 된다. 가운데 경기장이 520px 아래로 내려가면 관전이
+ * 성립하지 않는다. 320 + 520 + 280 + 여백 = 1180px 이고, 여기에 여유를
+ * 두어 1240px 을 경계로 삼았다. 그 아래는 열을 접고 탭으로 나눈다.
+ */
+@media (min-width: 1240px) {
+  .match-brief,
+  .control-tabs { display: none; }
+
+  .match-meta { display: flex; }
+
+  /*
+   * 가운데가 먼저 자리를 잡고 남는 폭을 양옆이 나눈다.
+   *
+   * 양옆에 최대 너비를 주면 그쪽이 먼저 부풀어서 경기장이 굶는다 —
+   * 실측으로 1512px 화면에서 가운데가 561px 까지 줄었다. 가운데를
+   * 고정폭 트랙으로 두면 격자가 그 폭을 먼저 채우고 나머지를 양옆에
+   * 나눠 준다.
+   */
+  .match-grid {
+    grid-template-columns:
+      minmax(320px, 1fr)
+      minmax(0, var(--pitch-w))
+      minmax(280px, 1fr);
+    gap: 14px;
+    justify-content: center;
+    align-items: stretch;
+  }
+
+  .match-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .match-col > .pane { display: block; }
+  .match-col > .pane.center-info { display: grid; }
+
+  /*
+   * 경기장은 절대 눌리지 않는다.
+   *
+   * 캔버스 높이는 화소로 박혀 있는데 상자가 세로로 눌리면 `overflow:
+   * hidden` 이 잔디 아래쪽을 잘라낸다. 열이 넘치면 넘치게 두는 편이
+   * 경기장이 잘리는 것보다 낫다.
+   */
+  .pitch-card { flex: 0 0 auto; }
+
+  /* 전술판과 상대 판이 열의 남는 높이를 먹는다. 아래가 비면 안 된다 */
+  .match-col.left > .pane:first-child,
+  .match-col.right > .pane:first-child {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+  }
+
+  .match-col.left > .pane:first-child > .panel,
+  .match-col.right > .pane:first-child > .panel { flex: 1 1 auto; }
+
+  /*
+   * 기록 줄은 낮게 눌러 둔다.
+   *
+   * 여기서 1px 을 더 쓰면 경기장이 1.5px 좁아진다 — 캔버스 높이가 너비에
+   * 묶여 있기 때문이다. 기록은 다섯 번째 우선순위이므로 경기장에서
+   * 높이를 빼앗으면 안 된다. 네 항목을 두 줄로 접고, 이벤트는 최근
+   * 넷만 보이고 나머지는 안에서 굴린다.
+   */
+  .center-info { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .stat-rows { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 14px; }
+  .log-rows { max-height: 96px; overflow-y: auto; }
+  .tactic-preset { min-height: 54px; }
+  .tactics-presets { padding: 8px 10px; }
+
+  /* 전술 다섯은 한 줄이어야 한다. 두 줄이 되면 경기장이 그만큼 작아진다 */
+  .tactics-presets { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+  .side-note { flex: 0 0 auto; }
+}
+
+/* ── 좁은 화면 — 한 열 + 탭 ─────────────────────────── */
+
+/*
+ * 열을 접으면 네 영역이 한 줄로 늘어서서 경기 중에 화면을 끝까지 내려야
+ * 조작할 수 있게 된다. 그래서 좁은 화면에서만 탭으로 한 번에 하나만 편다.
+ * 경기장과 지금 눌러야 하는 버튼은 탭과 무관하게 항상 위에 남는다.
+ */
+@media (max-width: 1239px) {
+  .match-grid { grid-template-columns: minmax(0, 1fr); }
+
+  /* 열 껍데기를 걷어내 자식들이 직접 한 줄로 선다 */
+  .match-col { display: contents; }
+
+  .pane { display: none; }
+
+  .match-grid[data-tab='SQUAD'] .pane[data-pane='SQUAD'],
+  .match-grid[data-tab='TACTICS'] .pane[data-pane='TACTICS'],
+  .match-grid[data-tab='AWAY'] .pane[data-pane='AWAY'],
+  .match-grid[data-tab='INFO'] .pane[data-pane='INFO'] {
+    display: grid;
+    gap: 12px;
+  }
+
+  /*
+   * 경기장 → 펼친 조작 영역 → 상황 패널.
+   *
+   * 조작이 경기장 바로 아래여야 한다. 급수 타임 안내와 재개 버튼을
+   * 그 사이에 끼우면 전술 버튼이 300px 만큼 아래로 밀려서, 경기 중에
+   * 화면을 내려야 조작할 수 있게 된다. 안내와 버튼은 다 걸고 난 뒤에
+   * 누르는 것이므로 맨 아래가 맞다.
+   */
+  .pitch-card { order: 1; }
+  .pane { order: 2; }
+  .side-note { order: 3; }
+
+  .squad-shape { min-height: 420px; }
+}
+
+@media (min-width: 720px) and (max-width: 1239px) {
+  .center-info { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/*
+ * 900~1239px — 두 칸.
+ *
+ * 이 폭에서 한 줄로 쌓으면 경기장이 세로 상한에 먼저 걸려서, 옆으로
+ * 400px 넘게 빈 띠가 남는다. 경기장 옆에 펼친 조작 영역을 세우면 그
+ * 띠가 쓸모를 얻고 조작이 경기장과 같은 높이에 온다. 340px 은 선수
+ * 전술판이 44px 카드로 겹치지 않는 최소 폭(320px)에 여유를 더한 값이다.
+ */
+@media (min-width: 900px) and (max-width: 1239px) {
+  .match-grid {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    align-items: start;
+  }
+
+  .pitch-card { grid-column: 1; grid-row: 1; }
+  .side-note { grid-column: 1; grid-row: 2; }
+  .pane { grid-column: 2; grid-row: 1 / span 2; }
+}
 
 @media (max-width: 799px) {
   .match-screen { padding: 6px 8px 24px; }
 
   .match-scorebar {
     top: 4px;
-    grid-template-columns: 44px 58px minmax(138px, 1fr) 52px;
-    gap: 4px;
-    padding-right: 7px;
+    grid-template-columns: 44px auto minmax(0, 1fr) auto;
+    gap: 6px;
+    padding-right: 8px;
   }
 
   .match-clock { gap: 3px; font-size: 11px; }
@@ -805,30 +1293,19 @@ button {
   .match-score strong { font-size: 20px; }
   .match-score span, .match-subs { font-size: 10px; }
 
-  .match-workspace {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-top: 10px;
-  }
-
-  .match-main { gap: 9px; }
+  .match-grid { gap: 10px; margin-top: 10px; }
   .match-brief > div { padding: 8px; }
   .match-brief span { font-size: 9px; }
   .match-brief strong { font-size: 11px; }
-  .pitch-card { padding: 6px; }
 
-  .match-console {
-    position: static;
-    gap: 8px;
-  }
+  .control-tabs { position: sticky; top: 60px; z-index: 8; }
 
-  .control-tabs {
-    position: sticky;
-    top: 64px;
-    z-index: 8;
-  }
-
+  .squad-shape { min-height: 400px; }
   .tactics-presets { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squad-card { transition: none; }
 }
 
 /* 경기 한 번의 운과 감독의 판단을 분리해서 보여준다 */

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Pitch } from './Pitch'
-import { FORMATION_IDS, getFormation, shapeOf, type FormationId } from '../sim/formations'
+import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
 import { BENCH, getPlayer } from '../sim/squad'
-import { judge, MAX_ORDERS } from '../sim/engine'
+import { judge } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
@@ -35,49 +35,6 @@ const inAddedTime = (tick: number, kickoff: number) =>
 
 /** 이 국면의 추가시간(분). 90분을 넘겨 끝나는 만큼이다 */
 export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
-
-function FormationPanel({
-  current,
-  onChange,
-  tenMen,
-}: {
-  current: FormationId
-  onChange: (f: FormationId) => void
-  tenMen: boolean
-}) {
-  const shape = shapeOf(current)
-  const selected = getFormation(current)
-  return (
-    <section className="panel">
-      <h2>우리 포메이션 {tenMen && <span style={{ color: 'var(--away)' }}>· 10명</span>}</h2>
-      <div className="formation-panel-body">
-        <div className="formation-grid">
-          {FORMATION_IDS.map((id) => {
-            const f = getFormation(id)
-            return (
-              <button
-                key={id}
-                className="chip formation-choice"
-                aria-pressed={id === current}
-                title={f.hint}
-                onClick={() => onChange(id)}
-              >
-                {f.label}
-              </button>
-            )
-          })}
-        </div>
-        <div className="formation-summary">
-          <strong>{selected.label}</strong>
-          <span>{selected.hint}</span>
-          <small>
-            수비 {shape.DF} · 중원 {shape.MF} · 공격 {shape.FW} · 즉시 반영
-          </small>
-        </div>
-      </div>
-    </section>
-  )
-}
 
 /**
  * 이름 붙은 전술 — 레버 세 개를 한 번에 세운다.
@@ -118,7 +75,7 @@ function Levers({
   const matched = PRESETS.find((p) => p.v.every((x, i) => x === current[i]))
 
   return (
-    <section className="panel">
+    <section className="panel tactics-panel">
       <h2>
         전술
         {matched ? (
@@ -171,7 +128,7 @@ function Levers({
 }
 
 /**
- * 경기 기록. FM의 좌우 마주보는 막대를 그대로 가져왔다.
+ * 경기 기록. 좌우로 마주보는 막대다.
  *
  * 전부 엔진이 실제로 센 횟수다. 레버를 당기면 몇 초 안에 이 숫자가
  * 움직이고, 그것이 "내가 뭘 바꿨는지"를 알려주는 주 채널이다.
@@ -186,30 +143,22 @@ function StatBars({ state }: { state: MatchState }) {
   ]
 
   return (
-    <section className="panel">
+    <section className="panel stat-panel">
       <h2>경기 기록</h2>
-      <div style={{ padding: '10px 12px', display: 'grid', gap: 9 }}>
+      <div className="stat-rows">
         {rows.map(([label, home, away, oneSided]) => {
           const total = home + away
           const hp = total === 0 ? 0.5 : home / total
           return (
-            <div key={label} style={{ display: 'grid', gap: 3 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontSize: 11,
-                  color: 'var(--muted)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              >
+            <div key={label} className="stat-row">
+              <div className="stat-head">
                 <span>{oneSided ? '' : home}</span>
                 <span>{label}</span>
                 <span style={{ color: oneSided && away > 0 ? 'var(--away)' : undefined }}>
                   {away}
                 </span>
               </div>
-              <div style={{ display: 'flex', height: 6, gap: 2, background: 'var(--panel-2)', borderRadius: 3 }}>
+              <div className="stat-track">
                 <div style={{ flex: hp, background: 'var(--accent)', borderRadius: 3 }} />
                 <div style={{ flex: 1 - hp, background: 'var(--away)', borderRadius: 3 }} />
               </div>
@@ -233,174 +182,32 @@ const EVENT_TEXT: Record<string, string> = {
 }
 
 function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
-  const shown = state.log.filter((e) => e.kind !== 'FOUL').slice(-7).reverse()
+  const shown = state.log.filter((e) => e.kind !== 'FOUL').slice(-8).reverse()
   return (
-    <section className="panel" style={{ minHeight: 120 }}>
+    <section className="panel log-panel">
       <h2>경기 이벤트</h2>
-      <div style={{ padding: '8px 12px', display: 'grid', gap: 5 }}>
-        {shown.length === 0 && (
-          <span style={{ fontSize: 12, color: 'var(--dim)' }}>아직 특이사항 없음</span>
-        )}
+      <div className="log-rows">
+        {shown.length === 0 && <span className="log-empty">아직 특이사항 없음</span>}
         {shown.map((e, i) => (
-          <div key={`${e.tick}-${i}`} style={{ fontSize: 12, display: 'flex', gap: 8 }}>
-            <span style={{ color: 'var(--dim)', minWidth: 34 }}>
+          <div key={`${e.tick}-${i}`} className="log-row">
+            <span className="log-min">
               {Math.floor(kickoff + (e.tick / TOTAL_TICKS) * 15)}'
             </span>
-            <span style={{ color: e.kind === 'GOAL' ? 'var(--accent)' : e.kind === 'CONCEDE' ? 'var(--away)' : 'var(--text)' }}>
+            <span
+              style={{
+                color:
+                  e.kind === 'GOAL'
+                    ? 'var(--accent)'
+                    : e.kind === 'CONCEDE'
+                      ? 'var(--away)'
+                      : 'var(--text)',
+              }}
+            >
               {EVENT_TEXT[e.kind] ?? e.kind}
               {e.target && <span style={{ color: 'var(--dim)' }}> · {getPlayer(e.target).num}번</span>}
             </span>
           </div>
         ))}
-      </div>
-    </section>
-  )
-}
-
-const ORDER_LABELS: Record<Exclude<PlayerOrder, 'NONE'>, { name: string; hint: string }> = {
-  DROP_BACK: { name: '내려서라', hint: '수비로 내려간다. 발이 빠르면 배후가 막힌다' },
-  PUSH_UP: { name: '올라가라', hint: '공격으로 올라간다. 골 넣을 사람이 하나 는다' },
-  HOLD: { name: '골문 앞', hint: '공이 반대편에 있어도 골문 앞에 남는다' },
-  BACK_OFF: { name: '물러서라', hint: '달려들지 않고 자리를 지킨다. 경고·퇴장을 피한다' },
-  CONSERVE: { name: '아껴 뛰어라', hint: '전력으로 안 뛴다. 체력이 덜 닳는다' },
-}
-
-/** 지시가 걸린 선수 칩에 붙는 짧은 꼬리표 */
-const ORDER_TAG: Record<Exclude<PlayerOrder, 'NONE'>, string> = {
-  DROP_BACK: '↓수비',
-  PUSH_UP: '↑공격',
-  HOLD: '골문',
-  BACK_OFF: '물러',
-  CONSERVE: '아껴',
-}
-
-/**
- * 손볼 이유가 있는 선수를 칩에서 알려준다.
- *
- * 실시간 화면에서 진짜 병목은 조작 비용이 아니라 **판을 읽는 비용**이다.
- * 75초 동안 열한 명의 체력과 경고를 눈으로 훑을 시간이 없다. 급소를 칩이
- * 스스로 말하면 읽는 비용이 0이 되고, 그래도 실행은 여전히 두 번 탭이라
- * 손가락을 내리는 사이 뜻이 바뀌는 오조작이 원리적으로 불가능하다.
- */
-function alertOf(s: MatchState['players'][number], press: Level): string | null {
-  if (s.stamina < 25) return '부상 위험'
-  if (s.booked && press === 2) return '퇴장 위험'
-  if (s.stamina < 35) return '지쳤다'
-  if (s.booked) return '경고'
-  return null
-}
-
-/**
- * 선수 지시 — 이 시뮬레이션에서 유일하게 **판 위의 한 점**을 고르는 조작.
- *
- * 레버와 포메이션은 팀 전체에 걸린다. 그것만으로는 "지금 저 선수 하나에게
- * 무엇을 시킨다"가 75초 동안 한 번도 성립하지 않는다.
- *
- * 문법은 하나다 — **선수 칩 1탭 → 행동 칩 1탭.** 같은 자리에서 칩만 바뀌므로
- * 손가락이 60px 움직이고, 조작하는 2초 동안 경기장이 통째로 시야에 남는다.
- * 모달이나 하단 시트를 쓰면 지시하느라 경기를 못 보는데, 실시간 화면에서
- * 그건 조작이 아니라 방해다.
- *
- * 경기장 위를 탭하게 하지 않는다. 폰에서 선수 원의 반지름은 7픽셀이라
- * 손가락 표적이 되지 못한다.
- */
-function Orders({
-  state,
-  onOrder,
-}: {
-  state: MatchState
-  onOrder: (target: string, order: PlayerOrder) => string | null
-}) {
-  const [picked, setPicked] = useState<string | null>(null)
-  const [note, setNote] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!note) return
-    const t = setTimeout(() => setNote(null), 2200)
-    return () => clearTimeout(t)
-  }, [note])
-
-  // 지시 모드에 갇힌 채 경기를 놓치는 실패를 막는다. 3초 무입력이면 되돌아간다
-  useEffect(() => {
-    if (!picked) return
-    const t = setTimeout(() => setPicked(null), 3000)
-    return () => clearTimeout(t)
-  }, [picked])
-
-  const onPitch = state.players.filter((s) => s.onPitch && !s.out)
-  const active = onPitch.filter((s) => s.order !== 'NONE')
-  const cur = picked ? onPitch.find((s) => s.id === picked) : null
-
-  return (
-    <section className="panel">
-      <h2>
-        선수 지시 {active.length}/{MAX_ORDERS}
-        {cur ? (
-          <span style={{ color: 'var(--accent)' }}> — {getPlayer(cur.id).num}번에게 무엇을</span>
-        ) : (
-          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 선수부터 고르세요</span>
-        )}
-      </h2>
-
-      <div style={{ padding: 10, display: 'grid', gap: 8 }}>
-        {cur ? (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {(Object.keys(ORDER_LABELS) as Array<Exclude<PlayerOrder, 'NONE'>>).map((o) => (
-              <button
-                key={o}
-                className="chip"
-                aria-pressed={cur.order === o}
-                title={ORDER_LABELS[o].hint}
-                onClick={() => {
-                  const err = onOrder(cur.id, cur.order === o ? 'NONE' : o)
-                  setNote(
-                    err ??
-                      (cur.order === o
-                        ? `${getPlayer(cur.id).num}번 지시 해제`
-                        : `${getPlayer(cur.id).num}번 — ${ORDER_LABELS[o].name}`),
-                  )
-                  setPicked(null)
-                }}
-                style={{ flex: '1 1 96px', textAlign: 'center', display: 'grid', gap: 1 }}
-              >
-                <span style={{ fontSize: 14 }}>{ORDER_LABELS[o].name}</span>
-                <span style={{ fontSize: 10, color: 'var(--dim)' }}>
-                  {cur.order === o ? '누르면 해제' : ''}
-                </span>
-              </button>
-            ))}
-            <button
-              className="chip"
-              onClick={() => setPicked(null)}
-              style={{ minWidth: 54, textAlign: 'center' }}
-            >
-              취소
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {onPitch.map((s) => {
-              const p = getPlayer(s.id)
-              const alert = alertOf(s, state.tactics.press)
-              return (
-                <button
-                  key={s.id}
-                  className="chip"
-                  aria-pressed={s.order !== 'NONE'}
-                  onClick={() => setPicked(s.id)}
-                  style={{ minWidth: 54, textAlign: 'center', display: 'grid', gap: 1 }}
-                >
-                  <span style={{ fontSize: 15 }}>{p.num}</span>
-                  <span style={{ fontSize: 10, color: alert ? 'var(--warn)' : undefined }}>
-                    {s.order !== 'NONE' ? ORDER_TAG[s.order] : (alert ?? p.pos)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {note && <span style={{ fontSize: 12, color: 'var(--warn)' }}>{note}</span>}
       </div>
     </section>
   )
@@ -425,11 +232,11 @@ function Bench({
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
 
   return (
-    <section className="panel">
+    <section className="panel bench-panel">
       <h2>
         벤치 · 교체 {state.subsLeft}장 남음
         {picked ? (
-          <span style={{ color: 'var(--accent)' }}> — 나갈 선수를 고르세요</span>
+          <span style={{ color: 'var(--accent)' }}> — 나갈 선수를</span>
         ) : (
           <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 넣을 선수부터</span>
         )}
@@ -437,16 +244,7 @@ function Bench({
 
       {/* 교체는 6초 뒤에 반영된다. 그 사이 아무 표시가 없으면 안 눌린 줄 안다 */}
       {state.pendingSubs.length > 0 && (
-        <div
-          style={{
-            padding: '6px 10px',
-            display: 'grid',
-            gap: 2,
-            background: 'var(--panel-2)',
-            fontSize: 12,
-            color: 'var(--warn)',
-          }}
-        >
+        <div className="bench-pending">
           {state.pendingSubs.map((p) => (
             <span key={p.in}>
               {getPlayer(p.out).num}번 → {getPlayer(p.in).num}번 · 준비 중{' '}
@@ -455,22 +253,21 @@ function Bench({
           ))}
         </div>
       )}
-      <div style={{ padding: 10, display: 'grid', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="bench-body">
+        <div className="bench-row">
           {BENCH.map((b) => {
             const s = state.players.find((p) => p.id === b.id)!
             const used = s.onPitch || s.out
             return (
               <button
                 key={b.id}
-                className="chip"
+                className="chip bench-chip"
                 aria-pressed={picked === b.id}
                 disabled={used || state.subsLeft <= 0}
                 onClick={() => setPicked(picked === b.id ? null : b.id)}
-                style={{ minWidth: 62, textAlign: 'center', display: 'grid', gap: 1 }}
               >
-                <span style={{ fontSize: 16, fontWeight: 500 }}>{b.num}</span>
-                <span style={{ fontSize: 10 }}>
+                <span className="bench-num">{b.num}</span>
+                <span className="bench-sub">
                   {b.pos} · 속도 {b.speed}
                 </span>
               </button>
@@ -479,67 +276,42 @@ function Bench({
         </div>
 
         {picked && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div className="bench-row">
             {onPitch.map((s) => {
               const p = getPlayer(s.id)
               return (
                 <button
                   key={s.id}
-                  className="chip"
+                  className="chip bench-chip"
                   onClick={() => {
                     const err = onSub(s.id, picked)
                     setNote(err ?? `${p.num}번 → ${getPlayer(picked).num}번`)
                     setPicked(null)
                   }}
-                  style={{ minWidth: 54, textAlign: 'center', display: 'grid', gap: 1 }}
                 >
-                  <span style={{ fontSize: 15 }}>{p.num}</span>
-                  <span style={{ fontSize: 10 }}>체력 {Math.round(s.stamina)}</span>
+                  <span className="bench-num">{p.num}</span>
+                  <span className="bench-sub">체력 {Math.round(s.stamina)}</span>
                 </button>
               )
             })}
           </div>
         )}
 
-        {note && <span style={{ fontSize: 12, color: 'var(--warn)' }}>{note}</span>}
+        {note && <span className="bench-note">{note}</span>}
       </div>
     </section>
   )
 }
 
-type ControlTab = 'TACTICS' | 'FORMATION' | 'PLAYERS' | 'INFO'
+/** 좁은 화면에서만 쓰는 탭. 넓은 화면은 네 영역을 한꺼번에 편다 */
+type ControlTab = 'TACTICS' | 'SQUAD' | 'AWAY' | 'INFO'
 
 const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
   { id: 'TACTICS', label: '전술' },
-  { id: 'FORMATION', label: '포메이션' },
-  { id: 'PLAYERS', label: '선수' },
+  { id: 'SQUAD', label: '선수' },
+  { id: 'AWAY', label: '상대' },
   { id: 'INFO', label: '기록' },
 ]
-
-function SituationPanel({
-  problem,
-  kickoff,
-  objective,
-}: {
-  problem: Problem
-  kickoff: number
-  objective: string
-}) {
-  return (
-    <section className="panel situation-panel">
-      <h2>상황 설명</h2>
-      <div>
-        <strong>{problem.title}</strong>
-        <span>{objective}</span>
-        <small>
-          후반 {kickoff}분 시작 · 추가시간 {addedTimeOf(kickoff)}분
-          <br />
-          앞 감독이 걸어둔 지시를 물려받았습니다.
-        </small>
-      </div>
-    </section>
-  )
-}
 
 export function MatchScreen({
   problem,
@@ -579,6 +351,8 @@ export function MatchScreen({
       preset.v[1] === state.tactics.press &&
       preset.v[2] === state.tactics.width,
   )
+  const setup = `${state.formation} · ${activePreset?.name ?? '직접 맞춤'}`
+  const orderCount = state.players.filter((s) => s.onPitch && !s.out && s.order !== 'NONE').length
 
   return (
     <div className="match-screen">
@@ -599,35 +373,90 @@ export function MatchScreen({
           </strong>
           <span>상대</span>
         </div>
+        {/* 넓은 화면에서만. 좁은 화면은 아래 요약 줄이 같은 일을 한다 */}
+        <div className="match-meta">
+          <span>
+            목표<b>{objective}</b>
+          </span>
+          <span>
+            현재 설정<b>{setup}</b>
+          </span>
+        </div>
         <span className="match-subs">교체 {state.subsLeft}</span>
       </header>
 
-      <div className="match-workspace">
-        <main className="match-main">
-          <div className="match-brief">
-            <div>
-              <span>현재 상황</span>
-              <strong>{problem.title}</strong>
-            </div>
-            <div>
-              <span>목표</span>
-              <strong>{objective}</strong>
-            </div>
-            <div>
-              <span>현재 설정</span>
-              <strong>
-                {state.formation} · {activePreset?.name ?? '직접 맞춤'}
-              </strong>
-            </div>
+      {/* 좁은 화면 전용 요약 줄 */}
+      <div className="match-brief">
+        <div>
+          <span>현재 상황</span>
+          <strong>{problem.title}</strong>
+        </div>
+        <div>
+          <span>목표</span>
+          <strong>{objective}</strong>
+        </div>
+        <div>
+          <span>현재 설정</span>
+          <strong>{setup}</strong>
+        </div>
+      </div>
+
+      {/*
+        탭은 **좁은 화면 전용**이다. 넓은 화면은 좌우 패널을 동시에 펴므로
+        한 번에 하나만 여는 탭이 오히려 방해가 된다.
+      */}
+      <nav className="control-tabs" aria-label="감독 메뉴">
+        {CONTROL_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            aria-pressed={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {/*
+        넓은 화면의 3열 배치.
+
+        가운데가 경기장이고 가장 큰 면적을 갖는다. 왼쪽은 **우리 선수를
+        누르는 곳**, 오른쪽은 상대 배치와 지금 눌러야 할 버튼이다. 좁은
+        화면에서는 열이 무너지고 위 탭이 한 영역씩 연다.
+      */}
+      <div className="match-grid" data-tab={activeTab}>
+        <div className="match-col left">
+          <div className="pane" data-pane="SQUAD">
+            <SquadPanel
+              state={state}
+              locked={phase === 'DONE'}
+              onOrder={setOrder}
+              onFormation={setFormation}
+            />
+          </div>
+          <div className="pane" data-pane="SQUAD">
+            <Bench state={state} onSub={substitute} />
+          </div>
+        </div>
+
+        <div className="match-col center">
+          <div className="pane center-info" data-pane="INFO">
+            <StatBars state={state} />
+            <Log state={state} kickoff={kickoff} />
           </div>
 
           <div className="panel pitch-card">
-            <Pitch
-              state={state}
-              seed={problem.seed}
-              live={phase === 'RUNNING'}
-              onScore={setShown}
-            />
+            <Pitch state={state} seed={problem.seed} live={phase === 'RUNNING'} onScore={setShown} />
+          </div>
+
+          <div className="pane" data-pane="TACTICS">
+            <Levers tactics={state.tactics} onSet={setLever} />
+          </div>
+        </div>
+
+        <div className="match-col right">
+          <div className="pane" data-pane="AWAY">
+            <AwayPanel state={state} />
           </div>
 
           {/*
@@ -637,29 +466,73 @@ export function MatchScreen({
             이 설정이 있어야 "왜 경기 전에 다 만질 수 있는가"가 설명된다.
           */}
           {phase === 'READY' && (
-            <>
-              <p className="hydration-note">
-                <b>급수 타임</b> — 지금은 시계가 멈춰 있습니다. 포메이션 · 전술 · 선수 지시를
-                모두 걸어두고 나가세요. 휘슬이 울리면 <b>75초 동안 멈추지 않습니다.</b>
-              </p>
-              <button
-                className="kickoff-button"
-                onClick={() => {
-                  start()
-                  setActiveTab('TACTICS')
-                }}
-              >
-                지시 끝 · 경기 재개
-                <small>이후 시계는 멈추지 않습니다</small>
-              </button>
-            </>
+            <section className="panel side-note">
+              <h2>급수 타임</h2>
+              <div className="side-note-body">
+                <strong>{problem.title}</strong>
+                <span>{objective}</span>
+                <p className="hydration-note">
+                  지금은 <b>시계가 멈춰</b> 있습니다. 왼쪽 전술판에서 선수 지시와 포메이션을,
+                  가운데에서 전술을 모두 걸어두고 나가세요. 휘슬이 울리면{' '}
+                  <b>75초 동안 멈추지 않습니다.</b>
+                </p>
+                <small>
+                  후반 {kickoff}분 시작 · 추가시간 {addedTimeOf(kickoff)}분 · 앞 감독이 걸어둔
+                  지시를 물려받았습니다
+                </small>
+                <button
+                  className="kickoff-button"
+                  onClick={() => {
+                    start()
+                    setActiveTab('TACTICS')
+                  }}
+                >
+                  지시 끝 · 경기 재개
+                  <small>이후 시계는 멈추지 않습니다</small>
+                </button>
+              </div>
+            </section>
+          )}
+
+          {phase === 'RUNNING' && (
+            <section className="panel side-note">
+              <h2>지금 걸려 있는 것</h2>
+              <div className="side-note-body">
+                <div className="side-facts">
+                  <span>
+                    포메이션<b>{state.formation}</b>
+                  </span>
+                  <span>
+                    전술<b>{activePreset?.name ?? '직접 맞춤'}</b>
+                  </span>
+                  <span>
+                    선수 지시<b>{orderCount}명</b>
+                  </span>
+                  <span>
+                    교체<b>{state.subsLeft}장</b>
+                  </span>
+                </div>
+                <ul className="side-orders">
+                  {state.players
+                    .filter((s) => s.onPitch && !s.out && s.order !== 'NONE')
+                    .map((s) => (
+                      <li key={s.id}>
+                        {getPlayer(s.id).num}번 ·{' '}
+                        {ORDER_LABELS[s.order as Exclude<PlayerOrder, 'NONE'>].name}
+                      </li>
+                    ))}
+                  {orderCount === 0 && <li className="dim">걸린 개별 지시 없음</li>}
+                </ul>
+                <small>시계는 멈추지 않습니다. 되돌릴 수 없습니다.</small>
+              </div>
+            </section>
           )}
 
           {phase === 'DONE' && (
-            <section className={`match-result ${passed ? 'passed' : 'failed'}`}>
-              <div>
-                <span>경기 종료</span>
-                <strong>
+            <section className={`panel side-note result ${passed ? 'passed' : 'failed'}`}>
+              <h2>경기 종료</h2>
+              <div className="side-note-body">
+                <strong className="result-verdict">
                   {problem.objective.type === 'SURVIVE'
                     ? passed
                       ? '지켜냈다'
@@ -668,87 +541,32 @@ export function MatchScreen({
                       ? '따라잡았다'
                       : '실패했다'}
                 </strong>
+                <span>
+                  {problem.title} · {objective}
+                </span>
+                <small>아래 감독 보고서에서 무엇이 결과를 갈랐는지 볼 수 있습니다.</small>
+                <button
+                  className="kickoff-button"
+                  onClick={() => {
+                    reset()
+                    setActiveTab('TACTICS')
+                  }}
+                >
+                  다시 도전
+                  <small>같은 국면을 처음부터</small>
+                </button>
               </div>
-              <button
-                className="chip"
-                onClick={() => {
-                  reset()
-                  setActiveTab('TACTICS')
-                }}
-              >
-                다시 도전
-              </button>
             </section>
           )}
-
-          {phase === 'DONE' && (
-            <AnalysisPanel
-              problem={problem}
-              decisions={decisions.current}
-              kickoff={kickoff}
-            />
-          )}
-        </main>
-
-        <aside className="match-console">
-          <nav className="control-tabs" aria-label="감독 메뉴">
-            {CONTROL_TABS.map((tab) => {
-              /*
-               * 킥오프 전은 **급수 타임**이다. 감독이 선수들을 불러 모아
-               * 지시하는 시간이므로 선수 지시가 열려 있어야 한다.
-               *
-               * 전에는 경기 중에만 열려 있었다. 그러면 75초짜리 경기가
-               * 시작된 뒤에야 선수를 고르고 지시를 걸게 되어, 가장 바쁜
-               * 시간에 화면을 들여다보느라 경기를 못 본다. 포메이션과
-               * 전술은 킥오프 전에 되는데 선수 지시만 막혀 있어 일관성도
-               * 없었다.
-               *
-               * 끝난 뒤에는 닫는다. 이미 끝난 경기에 지시할 수는 없다.
-               */
-              const disabled = tab.id === 'PLAYERS' && phase === 'DONE'
-              return (
-                <button
-                  key={tab.id}
-                  aria-pressed={activeTab === tab.id}
-                  disabled={disabled}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              )
-            })}
-          </nav>
-
-          <div className="control-panel">
-            {activeTab === 'TACTICS' && <Levers tactics={state.tactics} onSet={setLever} />}
-            {activeTab === 'FORMATION' && (
-              <FormationPanel
-                current={state.formation}
-                onChange={setFormation}
-                tenMen={state.homeCount < 11}
-              />
-            )}
-            {/*
-              급수 타임(킥오프 전)에도 열어둔다. 감독이 선수들을 불러 모아
-              지시하는 시간이므로 여기서 다 걸어두고 나가야 한다.
-              끝난 경기에는 지시할 수 없으므로 DONE 에서만 닫는다.
-            */}
-            {activeTab === 'PLAYERS' && phase !== 'DONE' && (
-              <div className="player-controls">
-                <Orders state={state} onOrder={setOrder} />
-                <Bench state={state} onSub={substitute} />
-              </div>
-            )}
-            {activeTab === 'INFO' && (
-              <div className="info-panels">
-                <SituationPanel problem={problem} kickoff={kickoff} objective={objective} />
-                <StatBars state={state} />
-                <Log state={state} kickoff={kickoff} />
-              </div>
-            )}
-          </div>
-        </aside>
+        </div>
       </div>
+
+      {/* 감독 보고서는 길다. 열 안에 밀어 넣지 않고 아래에 통째로 편다 */}
+      {phase === 'DONE' && (
+        <div className="match-report">
+          <AnalysisPanel problem={problem} decisions={decisions.current} kickoff={kickoff} />
+        </div>
+      )}
     </div>
   )
 }
