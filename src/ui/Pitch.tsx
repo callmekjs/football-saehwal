@@ -4,6 +4,21 @@ import { VisualMatch } from '../render/visual'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { MatchState } from '../sim/types'
 
+/** 시뮬 한 틱이 연출에서 차지하는 시간. 엔진은 100ms 마다 한 번 돈다 */
+const TICK_SECONDS = 0.1
+/** 연출을 한 번에 진행시키는 폭. 물리와 판단이 이 간격으로 돈다 */
+const STEP = 1 / 60
+/**
+ * 한 프레임에 따라잡을 수 있는 연출 시간.
+ *
+ * 초당 60프레임이면 실시간의 스물네 배까지 따라잡을 수 있고, 초당
+ * 다섯 프레임으로 떨어져도 두 배는 된다. 무제한으로 두면 탭을 오래
+ * 비웠다 돌아왔을 때 한 프레임에서 브라우저가 몇 초씩 멈춘다.
+ */
+const CATCHUP_PER_FRAME = 0.4
+/** 이보다 더 뒤처지면 따라잡기를 포기하고 시각을 맞춘다 */
+const MAX_LAG = 1.5
+
 /**
  * 경기 화면의 피치. 시뮬 상태를 구독해 관전 연출을 그린다.
  *
@@ -32,19 +47,47 @@ export function Pitch({
   useLayoutEffect(() => {
     const canvas = ref.current
     if (!canvas) return
-    const vm = new VisualMatch(stateRef.current, seed)
+    let vm = new VisualMatch(stateRef.current, seed)
     let raf = 0
-    let last = performance.now()
+    /** 연출이 지금까지 소화한 시간(초) */
+    let vmTime = 0
 
     const render = () => {
-      const now = performance.now()
-      // 탭을 벗어났다 돌아오면 한 프레임에 몇 초가 밀려든다. 상한을 둔다
-      const dt = Math.min((now - last) / 1000, 0.05)
-      // 멈춰 있는 동안에도 갱신해야 재개 순간에 몇 초가 한꺼번에 밀려들지 않는다
-      last = now
+      const st = stateRef.current
+      /**
+       * 연출은 **시뮬 시계를 따라간다.**
+       *
+       * 전에는 프레임 간 실제 경과 시간으로 진행했고, 한 프레임에 최대
+       * 0.05초로 잘랐다. 프레임이 밀리면 연출이 그만큼 뒤처지고 **영영
+       * 따라잡지 못한다.** 시뮬은 절대 시각으로 750틱을 정확히 도는데
+       * 연출만 느려지므로, 실측으로 시뮬이 90분을 지나는 동안 화면은
+       * 2초밖에 진행하지 못했다. 교체를 눌러도 화면에서 선수가 안 바뀌고,
+       * 골이 나도 장면이 안 나오는 것이 전부 이 한 가지 원인이었다.
+       *
+       * 한 틱은 100ms 다. 목표 시각은 언제나 `tick × 0.1초`이고, 뒤처진
+       * 만큼 한 프레임 안에서 여러 번 나눠 진행해 따라잡는다.
+       */
+      const target = st.tick * TICK_SECONDS
 
-      vm.sync(stateRef.current)
-      if (liveRef.current) vm.advance(stateRef.current, dt)
+      // 경기가 처음부터 다시 시작됐다. 지난 경기의 연출을 이어 그리면 안 된다
+      if (target + 0.5 < vmTime) {
+        vm = new VisualMatch(st, seed)
+        vmTime = target
+      }
+
+      vm.sync(st)
+      if (liveRef.current) {
+        let budget = CATCHUP_PER_FRAME
+        while (vmTime + 1e-6 < target && budget > 0) {
+          const s = Math.min(STEP, target - vmTime)
+          vm.advance(st, s)
+          vmTime += s
+          budget -= s
+        }
+        // 그래도 못 따라잡을 만큼 밀렸으면 포기하고 시각을 맞춘다.
+        // 뒤처진 채로 두면 교체와 골 장면이 몇 십 초씩 늦게 나온다
+        if (target - vmTime > MAX_LAG) vmTime = target - MAX_LAG
+      }
 
       const parent = canvas.parentElement
       if (parent) {
