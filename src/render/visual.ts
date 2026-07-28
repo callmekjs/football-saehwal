@@ -334,6 +334,13 @@ export class VisualMatch {
   private lastLineup = ''
   /** 교체로 들어오는 선수가 처음 설 자리(터치라인). rebuild 가 읽어 간다 */
   private entryAt = new Map<string, { x: number; y: number }>()
+  /**
+   * 스로인을 던질 선수.
+   *
+   * 이 선수가 공을 내보낼 때는 **발이 아니라 손이다.** 표시가 없으면
+   * 스로인이 평범한 패스가 되어 초속 26미터짜리 40미터 롱볼이 나온다.
+   */
+  private throwBy: string | null = null
   /** 시뮬 사건 기록을 어디까지 읽었는지 (반칙 → 프리킥) */
   private lastLogLen = 0
   /**
@@ -513,6 +520,8 @@ export class VisualMatch {
 
   private giveTo(p: VPlayer) {
     const b = this.ball
+    // 공 주인이 바뀌면 스로인 예약은 사라진다. 재개할 때 다시 건다
+    this.throwBy = null
     b.mode = 'HELD'
     b.holder = p.id
     b.targetId = null
@@ -1150,12 +1159,94 @@ export class VisualMatch {
     if (taker && dist(taker, r) < 2.6) {
       this.restart = null
       this.giveTo(taker)
+      this.armThrow(r.kind, taker)
     } else if (r.age > 4) {
       const alt = this.nearestOf(r.side, r) ?? taker
       this.restart = null
-      if (alt) this.giveTo(alt)
-      else this.ball.mode = 'LOOSE'
+      if (alt) {
+        this.giveTo(alt)
+        this.armThrow(r.kind, alt)
+      } else this.ball.mode = 'LOOSE'
     }
+  }
+
+  /** 스로인이면 다음 릴리스를 손으로 던지게 표시해둔다 */
+  private armThrow(kind: Restart['kind'], taker: VPlayer) {
+    if (kind !== 'THROW_IN') return
+    this.throwBy = taker.id
+    // 던지는 데 오래 안 걸린다. 라인 밖에 오래 서 있으면 대형이 어긋난다
+    this.decideIn = 0.25 + this.rng.next() * 0.3
+  }
+
+  /**
+   * 스로인을 받을 동료를 고른다.
+   *
+   * 던져서 닿는 거리여야 한다. 20미터 밖으로 던져놓고 아무도 못 받으면
+   * 그건 스로인이 아니라 공을 버리는 것이다.
+   */
+  private chooseThrowTarget(thrower: VPlayer): VPlayer | null {
+    const dir = thrower.side === 'HOME' ? 1 : -1
+    let best: VPlayer | null = null
+    let bestScore = -Infinity
+    let nearest: VPlayer | null = null
+    for (const p of this.players) {
+      if (p.side !== thrower.side || p.id === thrower.id || p.pos === 'GK') continue
+      const d = dist(p, thrower)
+      if (!nearest || d < dist(nearest, thrower)) nearest = p
+      // 실제 스로인 거리는 10~20미터다. 롱스로우도 30미터 남짓이다
+      if (d < 5 || d > 20) continue
+      const marker = this.players.reduce((m, o) => {
+        if (o.side === thrower.side) return m
+        return Math.min(m, dist(o, p))
+      }, Infinity)
+      const score = ((p.x - thrower.x) * dir) * 0.5 + Math.min(marker, 12) * 1.4 - d * 0.2
+      if (score > bestScore) {
+        bestScore = score
+        best = p
+      }
+    }
+    return best ?? nearest
+  }
+
+  /**
+   * 스로인 — 발이 아니라 손이다.
+   *
+   * 두 손으로 머리 위에서 던지므로 발로 차는 것보다 확실히 느리고 가깝다.
+   * 실제 스로인 거리는 10~20미터, 릴리스 속도는 초속 8~14미터다(패스는
+   * 13~26미터다). 머리 위(2.1m)에서 놓으므로 낮은 포물선을 그린다.
+   */
+  private throwIn(thrower: VPlayer) {
+    const to = this.chooseThrowTarget(thrower)
+    if (!to) {
+      this.decideIn = 0.3
+      return
+    }
+    // 던진 공은 발로 찬 공만큼 정확하지 않다. 받는 선수 발밑을 노린다
+    const tx = clamp(to.x + to.vx * 0.25, 1, PITCH_W - 1)
+    const ty = clamp(to.y + to.vy * 0.25, 1, PITCH_H - 1)
+    const d = Math.hypot(tx - thrower.x, ty - thrower.y)
+    const speed = clamp(7 + d * 0.34, 8, 14)
+
+    // 손을 떠나는 높이. 머리 위로 넘겨 던진다
+    const release = 2.1
+    const t = d / speed
+    // 그 시간 안에 땅에 닿도록 수직 속도를 잡는다: release + vz·t − ½g·t² = 0
+    const vz = clamp((GRAVITY * t * t * 0.5 - release) / Math.max(t, 0.2), 0, 7)
+
+    // 던진 공도 100% 붙지는 않는다. 거리가 멀수록 나빠진다
+    let targetId: string | null = to.id
+    const ang = this.rng.next() * Math.PI * 2
+    const off = 1.5 + this.rng.next() * 2.5
+    let ax = tx
+    let ay = ty
+    if (this.rng.next() >= clamp(0.95 - Math.max(0, d - 8) * 0.012, 0.7, 0.95)) {
+      ax = clamp(tx + Math.cos(ang) * off, -4, PITCH_W + 4)
+      ay = clamp(ty + Math.sin(ang) * off, -4, PITCH_H + 4)
+      targetId = null
+    }
+
+    this.kickBall(thrower, ax, ay, speed, vz, 'PASS', targetId, 'PASS')
+    this.ball.z = release
   }
 
   /** 이 팀이 공격하는 골라인 */
@@ -1333,6 +1424,13 @@ export class VisualMatch {
     this.decideIn -= dt
     if (this.decideIn > 0) return
 
+    // 스로인은 손으로 던진다. 발로 차면 초속 26미터짜리 롱볼이 나온다
+    if (this.throwBy === holder.id) {
+      this.throwBy = null
+      this.throwIn(holder)
+      return
+    }
+
     const target = this.choosePass(holder)
 
     // 골키퍼는 공을 몰고 나가지 않는다. 잡으면 앞으로 차낸다.
@@ -1402,8 +1500,9 @@ export class VisualMatch {
    */
   private updatePressure(holder: VPlayer, dt: number) {
     // 골키퍼가 공을 잡고 있으면 아무도 못 뺏는다. 규칙(경기 규칙 12조)이
-    // 골키퍼가 공을 놓는 것을 방해하지 못하게 한다
-    if (holder.pos === 'GK') return
+    // 골키퍼가 공을 놓는 것을 방해하지 못하게 한다.
+    // 스로인을 던지려는 선수도 마찬가지다 — 공은 아직 죽어 있다
+    if (holder.pos === 'GK' || this.throwBy === holder.id) return
     let nearest = Infinity
     let crowd = 0
     let taker: VPlayer | undefined

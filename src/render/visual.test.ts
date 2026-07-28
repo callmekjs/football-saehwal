@@ -40,9 +40,12 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
       /** 속력(초당 미터) */
       v: number
       willScore: boolean
+      fromX: number
+      fromY: number
       toX: number
       toY: number
       kick: string
+      lastTouch: string
     }
     celebrating: boolean
     restart: { kind: string; side: string; x: number; y: number } | null
@@ -68,9 +71,12 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
         z: vm.ball.z,
         v: Math.hypot(vm.ball.vx, vm.ball.vy),
         willScore: vm.ball.willScore,
+        fromX: vm.ball.fromX,
+        fromY: vm.ball.fromY,
         toX: vm.ball.toX,
         toY: vm.ball.toY,
         kick: vm.ball.kick,
+        lastTouch: vm.ball.lastTouch,
       },
       celebrating: vm.celebration !== null,
       restart: vm.restart
@@ -912,13 +918,25 @@ describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
       const isShot = now.mode === 'SHOT'
       const isPass = now.mode === 'PASS' && now.ball.kick === 'PASS'
       if (!isShot && !isPass) continue
-      const p = prev.players.find((x) => x.id === prev.holder)!
       // 골키퍼의 골킥·펀트는 공격 판단이 아니다
       if (prev.holder === 'H1' || prev.holder === 'A1') continue
-      const gx = GOAL_OF(prev.holder)
+      /**
+       * 슛은 **실제로 찬 지점**(ball.fromX/fromY)으로 잰다.
+       *
+       * 직전 프레임의 볼 소유자로 재면 안 된다. 시뮬이 골이라고 알렸는데
+       * 그 팀 선수가 아무도 골대 근처에 없으면 연출이 공을 다른 선수에게
+       * 넘기고 쏘는데, 그 한 틱 안에 소유자가 바뀌므로 엉뚱한 사람의
+       * 자리로 재게 된다 — 실측으로 105미터짜리 슛이 잡혔다.
+       */
+      const p = prev.players.find((x) => x.id === prev.holder)!
+      // 찬 팀도 실제로 찬 쪽(lastTouch)으로 본다. 한 틱 안에 소유가
+      // 바뀌면 직전 소유자와 실제 슈터의 팀이 다를 수 있다
+      const side = isShot ? (now.ball.lastTouch === 'HOME' ? 'H' : 'A') : prev.holder[0]
+      const gx = GOAL_OF(side)
+      const from = isShot ? { x: now.ball.fromX, y: now.ball.fromY } : { x: p.x, y: p.y }
       kicks.push({
-        side: prev.holder[0],
-        goalDist: Math.hypot(gx - p.x, PITCH_H / 2 - p.y),
+        side,
+        goalDist: Math.hypot(gx - from.x, PITCH_H / 2 - from.y),
         kind: isShot ? 'SHOT' : 'PASS',
       })
     }
@@ -1380,6 +1398,70 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
       if (o.kind === 'CORNER') {
         expect(o.x === 0 || o.x === PITCH_W, `코너 x=${o.x}`).toBe(true)
         expect(o.y === 0 || o.y === PITCH_H, `코너 y=${o.y}`).toBe(true)
+      }
+    }
+  })
+
+  it('스로인이 실제로 나온다', () => {
+    // 공이 터치라인까지 가지 않으면 스로인 코드는 죽은 코드다
+    const t = opens.filter((o) => o.kind === 'THROW_IN')
+    expect(t.length, `여섯 판 동안의 스로인 ${t.length}회`).toBeGreaterThan(0)
+  })
+
+  it('스로인은 공이 나간 바로 그 지점에서 넣는다', () => {
+    // 라인을 따라 저만치 옮겨서 던지면 규칙 위반이다
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        if (!fs[i].restart || fs[i - 1].restart) continue
+        if (fs[i].restart!.kind !== 'THROW_IN') continue
+        // 한 틱(0.1초) 사이 공은 최대 2~3미터를 간다
+        expect(
+          Math.abs(fs[i].restart!.x - fs[i - 1].ball.x),
+          `공은 x=${fs[i - 1].ball.x.toFixed(1)} 에서 나갔는데 x=${fs[i].restart!.x.toFixed(1)} 에서 던진다`,
+        ).toBeLessThan(5)
+      }
+    }
+  })
+
+  it('스로인은 발이 아니라 손이다 — 느리고 가깝다', () => {
+    /**
+     * 두 손으로 머리 위에서 던지므로 발로 차는 것보다 확실히 느리다.
+     * 실제 스로인은 10~20미터, 릴리스 속도 초속 8~14미터다. 발로 찬
+     * 패스는 13~26미터다. 이 구분이 없으면 스로인이 40미터 롱볼이 된다.
+     */
+    const throws: Array<{ d: number; v: number }> = []
+    for (const fs of MULTI) {
+      let armed = false
+      for (let i = 1; i < fs.length; i++) {
+        if (fs[i - 1].restart?.kind === 'THROW_IN' && !fs[i].restart) armed = true
+        if (!armed) continue
+        if (fs[i].mode === 'PASS') {
+          throws.push({
+            d: Math.hypot(fs[i].ball.toX - fs[i].ball.fromX, fs[i].ball.toY - fs[i].ball.fromY),
+            v: fs[i].ball.v,
+          })
+          armed = false
+        } else if (fs[i].mode === 'SHOT') armed = false
+      }
+    }
+    expect(throws.length, '스로인 표본').toBeGreaterThan(0)
+    for (const t of throws) {
+      // 롱스로우도 30미터 남짓이다
+      expect(t.d, `던진 거리 ${t.d.toFixed(1)}m`).toBeLessThan(26)
+      // 발로 찬 패스의 최저 속도가 13m/s 다. 손은 그보다 느려야 한다
+      expect(t.v, `던진 속도 ${t.v.toFixed(1)}m/s`).toBeLessThan(15)
+    }
+  })
+
+  it('스로인은 마지막에 건드린 팀의 상대가 던진다', () => {
+    // 축구 규칙이다. 내보낸 팀이 다시 넣으면 안 된다
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        if (!fs[i].restart || fs[i - 1].restart) continue
+        if (fs[i].restart!.kind !== 'THROW_IN') continue
+        const kicker = fs[i - 1].ball.lastTouch
+        expect(fs[i].restart!.side, `${kicker} 가 내보냈는데 ${fs[i].restart!.side} 가 던진다`)
+          .not.toBe(kicker)
       }
     }
   })
