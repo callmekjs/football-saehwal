@@ -116,6 +116,14 @@ export interface VPlayer {
    */
   stx: number
   sty: number
+  /**
+   * 대형에서 이 선수가 맡은 자리 번호.
+   *
+   * 배열 순서로 자리를 나눠주면 교체 한 번에 뒤쪽 선수가 전부 한 칸씩
+   * 밀린다. 자리 번호를 선수에게 붙여두면 뛰던 선수는 자리를 지키고
+   * 새로 들어온 선수만 빈자리를 받는다.
+   */
+  slot: number
   /** 이 자리가 원래 자기 자리 */
   homeX: number
   homeY: number
@@ -218,6 +226,23 @@ export interface Downed {
   span: number
 }
 
+/**
+ * 교체로 걸어 나가는 선수.
+ *
+ * 시뮬에서는 이미 빠졌지만 화면에서는 터치라인까지 걸어 나간다. 이게
+ * 없으면 선수가 그 자리에서 소리 없이 다른 사람으로 바뀐다.
+ */
+export interface Leaving {
+  num: number
+  x: number
+  y: number
+  /** 걸어 나갈 터치라인 위의 지점 */
+  tx: number
+  ty: number
+  life: number
+  span: number
+}
+
 /** 골이 들어간 직후의 연출 상태. 이게 없으면 골이 사건으로 안 보인다 */
 export interface Celebration {
   side: 'HOME' | 'AWAY'
@@ -279,13 +304,36 @@ export class VisualMatch {
   restart: Restart | null = null
   /** 부상·퇴장으로 빠졌지만 아직 화면에 쓰러져 있는 선수 */
   downed: Downed[] = []
+  /** 교체로 걸어 나가는 중인 선수 */
+  leaving: Leaving[] = []
+  /**
+   * 교체 때문에 플레이가 멈춰 있는 시간(초).
+   *
+   * **경기 시계가 멈추는 것이 아니다.** 시뮬은 절대 시각으로 750틱을
+   * 계속 돌린다("시계는 멈추지 않는다"는 이 게임의 전제다). 화면의 공만
+   * 잠깐 데드볼이 되어 교체가 눈에 보이게 한다 — 골킥·프리킥에서 이미
+   * 쓰고 있는 방식과 같다.
+   */
+  subPause = 0
+  /** 방금 들어온 선수의 등번호. 화면에 잠깐 표시한다 */
+  entering: number[] = []
   private rng: Rng
   private decideIn = 0
   private lastStats = { homeShot: 0, awayShot: 0 }
   private lastScore: [number, number] = [0, 0]
   private lastOwner: 'HOME' | 'AWAY' = 'HOME'
   private lastFormation = ''
-  private lastHomeCount = 11
+  /**
+   * 마지막으로 화면에 그린 우리 팀 명단.
+   *
+   * 전에는 **인원 수**만 봤다. 열한 명이 열한 명으로 유지되는 교체는
+   * 인원도 포메이션도 안 바뀌므로 화면이 통째로 갱신되지 않았다 — 나간
+   * 선수가 계속 뛰고 들어온 선수는 나타나지 않았다. 실측으로 경기의 76%
+   * 동안 화면 명단과 시뮬 명단이 어긋나 있었다.
+   */
+  private lastLineup = ''
+  /** 교체로 들어오는 선수가 처음 설 자리(터치라인). rebuild 가 읽어 간다 */
+  private entryAt = new Map<string, { x: number; y: number }>()
   /** 시뮬 사건 기록을 어디까지 읽었는지 (반칙 → 프리킥) */
   private lastLogLen = 0
   /**
@@ -345,7 +393,14 @@ export class VisualMatch {
     this.kickoff('HOME')
   }
 
-  /** 포메이션·인원이 바뀌면 자리를 다시 만든다 */
+  /** 지금 피치 위 우리 선수의 화면 id 목록 */
+  private lineupOf(state: MatchState): string[] {
+    return state.players
+      .filter((s) => s.onPitch && !s.out)
+      .map((s) => `H${getPlayer(s.id).num}`)
+  }
+
+  /** 명단·포메이션이 바뀌면 자리를 다시 만든다 */
   private rebuild(state: MatchState) {
     const tenMen = state.homeCount < 11
     const onPitch = state.players.filter((s) => s.onPitch && !s.out)
@@ -362,30 +417,59 @@ export class VisualMatch {
     const keep = new Map(this.players.map((p) => [p.id, p]))
     const next: VPlayer[] = []
 
-    slots.forEach((slot, i) => {
-      const s = onPitch[i]
+    /**
+     * 자리 나누기.
+     *
+     * 전에는 `onPitch[i]` 를 `slots[i]` 에 붙였다 — **배열 순서**다.
+     * 명단에서 빠진 선수는 배열에서 사라지고 새로 들어온 선수는 맨 뒤에
+     * 붙으므로, 교체 한 번에 뒤쪽 선수 전원이 한 칸씩 밀려 대형이 통째로
+     * 어긋났다. 이제 **뛰던 선수는 쓰던 자리를 그대로 지키고**, 빈자리는
+     * 새로 들어온 선수가 받는다. 빈자리가 여럿이면 포지션이 맞는 자리를
+     * 먼저 준다 — 수비수가 최전방 자리를 받으면 안 된다.
+     */
+    const taken: Array<(typeof onPitch)[number] | null> = new Array(slots.length).fill(null)
+    const rest: typeof onPitch = []
+    for (const s of onPitch) {
+      const prev = keep.get(`H${getPlayer(s.id).num}`)
+      const k = prev?.slot
+      if (k !== undefined && k >= 0 && k < slots.length && taken[k] === null) taken[k] = s
+      else rest.push(s)
+    }
+    for (const s of rest) {
+      const pos = getPlayer(s.id).pos
+      let k = taken.findIndex((v, i) => v === null && slots[i].pos === pos)
+      if (k < 0) k = taken.findIndex((v) => v === null)
+      if (k >= 0) taken[k] = s
+    }
+
+    taken.forEach((s, i) => {
       if (!s) return
+      const slot = slots[i]
       const num = getPlayer(s.id).num
       const id = `H${num}`
       const prev = keep.get(id)
+      // 새로 들어온 선수는 터치라인에서 걸어 들어온다
+      const entry = this.entryAt.get(id)
+      this.entryAt.delete(id)
       next.push({
         id,
         num,
         side: 'HOME',
         pos: slot.pos,
-        x: prev?.x ?? slot.x,
-        y: prev?.y ?? slot.y,
+        x: prev?.x ?? entry?.x ?? slot.x,
+        y: prev?.y ?? entry?.y ?? slot.y,
         vx: prev?.vx ?? 0,
         vy: prev?.vy ?? 0,
         tx: slot.x,
         ty: slot.y,
-        stx: prev?.stx ?? slot.x,
-        sty: prev?.sty ?? slot.y,
+        stx: prev?.stx ?? entry?.x ?? slot.x,
+        sty: prev?.sty ?? entry?.y ?? slot.y,
+        slot: i,
         homeX: slot.x,
         homeY: slot.y,
         top: TOP_SPEED[slot.pos],
-        stamina: s?.stamina ?? 100,
-        booked: s?.booked ?? false,
+        stamina: s.stamina,
+        booked: s.booked,
         recover: prev?.recover ?? 0,
       })
     })
@@ -408,6 +492,7 @@ export class VisualMatch {
         ty: y,
         stx: prev?.stx ?? x,
         sty: prev?.sty ?? y,
+        slot: i,
         homeX: x,
         homeY: y,
         top: TOP_SPEED[pos],
@@ -419,7 +504,7 @@ export class VisualMatch {
 
     this.players = next
     this.lastFormation = state.formation
-    this.lastHomeCount = state.homeCount
+    this.lastLineup = this.lineupOf(state).join(',')
   }
 
   private byId(id: string | null): VPlayer | undefined {
@@ -536,36 +621,34 @@ export class VisualMatch {
     // 목록에서 사라져 어디에 쓰러졌는지 알 방법이 없다
     this.captureDowned(state)
 
-    if (state.formation !== this.lastFormation || state.homeCount !== this.lastHomeCount) {
+    // **명단이 바뀌면** 다시 짠다. 인원 수만 보면 열한 명이 열한 명으로
+    // 유지되는 교체를 놓친다 — 그게 "교체가 화면에 안 나온다"의 정체였다
+    if (state.formation !== this.lastFormation || this.lineupOf(state).join(',') !== this.lastLineup) {
       this.rebuild(state)
     }
 
-    // 체력·경고를 갱신한다. 지친 선수는 실제로 느려진다
     const onPitch = state.players.filter((s) => s.onPitch && !s.out)
     const slots = state.homeCount < 11
       ? slotsForTenMen(state.formation)
       : getFormation(state.formation).slots
-    slots.forEach((_, i) => {
-      const s = onPitch[i]
-      if (!s) return
-      const v = this.byId(`H${getPlayer(s.id).num}`)
-      if (v) {
-        v.stamina = s.stamina
-        v.booked = s.booked
-      }
-    })
 
-    // 수비라인·폭 설정을 자기 자리에 반영한다
+    // 체력·경고를 갱신한다. 지친 선수는 실제로 느려진다
+    const byNum = new Map(onPitch.map((s) => [`H${getPlayer(s.id).num}`, s]))
     const lineShift = (state.tactics.line - 1) * 8
     const widthScale = 0.8 + state.tactics.width * 0.18
-    slots.forEach((slot, i) => {
-      const s = onPitch[i]
-      if (!s) return
-      const v = this.byId(`H${getPlayer(s.id).num}`)
-      if (!v || slot.pos === 'GK') return
+    for (const v of this.players) {
+      if (v.side !== 'HOME') continue
+      const s = byNum.get(v.id)
+      if (!s) continue
+      v.stamina = s.stamina
+      v.booked = s.booked
+      // 수비라인·폭 설정을 자기 자리에 반영한다.
+      // 자리는 배열 순서가 아니라 선수에게 붙어 있는 자리 번호로 찾는다
+      const slot = slots[v.slot]
+      if (!slot || slot.pos === 'GK') continue
       v.homeX = slot.x + lineShift
       v.homeY = 34 + (slot.y - 34) * widthScale
-    })
+    }
     const mood = state.opponent === 'ALL_OUT' ? -13 : state.opponent === 'PARK_BUS' ? 11 : 0
     AWAY_SHAPE.forEach(([pos, x, y], i) => {
       const v = this.byId(`A${AWAY_NUMS[i]}`)
@@ -639,6 +722,11 @@ export class VisualMatch {
   private captureDowned(state: MatchState) {
     for (let i = this.downLogLen; i < state.log.length; i++) {
       const e = state.log[i]
+      // 교체 — 나가는 선수는 걸어 나가고 들어오는 선수는 터치라인에서 들어온다
+      if (e.kind === 'SUB' && e.detail) {
+        this.beginSub(e.detail, e.target)
+        continue
+      }
       if ((e.kind !== 'INJURY' && e.kind !== 'SEND_OFF') || !e.target) continue
       let v: VPlayer | undefined
       try {
@@ -661,6 +749,50 @@ export class VisualMatch {
       })
     }
     this.downLogLen = state.log.length
+  }
+
+  /**
+   * 교체 장면을 시작한다.
+   *
+   * 시뮬은 대기 6초가 지난 그 틱에 명단을 바꿔버린다. 그대로 그리면
+   * 선수가 그 자리에서 소리 없이 다른 사람으로 바뀐다. 실제 축구는
+   * 경기가 멈추고, 나가는 선수가 걸어 나가고, 들어오는 선수가 들어온다.
+   *
+   * 멈추는 시간은 **1.2초**다. 근거: 이 화면은 게임 내 15분을 75초로
+   * 압축하므로 압축비가 12:1이고, 실제 교체 20~30초는 2초 남짓이다.
+   * 그런데 교체 카드가 세 장이라 2초씩이면 6초, 75초의 8%가 죽는다.
+   * 공이 발에 있는 시간이 이 화면의 생명이라 1.2초로 잡았다(세 장 = 4.8%).
+   */
+  private beginSub(outId: string, inId: string | undefined) {
+    let out: VPlayer | undefined
+    try {
+      out = this.byId(`H${getPlayer(outId).num}`)
+    } catch {
+      out = undefined
+    }
+    if (!out) return
+    // 가까운 터치라인으로 걸어 나간다
+    const ty = out.y < PITCH_H / 2 ? -1.5 : PITCH_H + 1.5
+    this.leaving.push({
+      num: out.num,
+      x: out.x,
+      y: out.y,
+      tx: out.x,
+      ty,
+      life: 1.6,
+      span: 1.6,
+    })
+    if (inId) {
+      try {
+        const num = getPlayer(inId).num
+        // 들어오는 선수는 나간 선수가 나간 그 자리로 들어온다
+        this.entryAt.set(`H${num}`, { x: out.x, y: clamp(ty, 0.6, PITCH_H - 0.6) })
+        this.entering.push(num)
+      } catch {
+        /* 명단에 없는 선수는 무시한다 */
+      }
+    }
+    this.subPause = 1.2
   }
 
   /**
@@ -1746,6 +1878,39 @@ export class VisualMatch {
     // 골 뒤에 쓰러진 선수가 몇 초 더 누워 있다
     for (const d of this.downed) d.life -= step
     this.downed = this.downed.filter((d) => d.life > 0)
+
+    // 나가는 선수는 터치라인까지 걸어 나간다
+    for (const l of this.leaving) {
+      l.life -= step
+      const k = Math.min(1, step * 2.2)
+      l.x += (l.tx - l.x) * k
+      l.y += (l.ty - l.y) * k
+    }
+    this.leaving = this.leaving.filter((l) => l.life > 0)
+
+    /**
+     * 교체 — 플레이가 잠깐 멈춘다.
+     *
+     * 시뮬은 계속 돌아간다. 멈추는 것은 화면의 공뿐이다. 이 몇 초가
+     * 없으면 선수가 그 자리에서 소리 없이 다른 사람으로 바뀐다.
+     *
+     * 들어오는 선수만 움직인다 — 터치라인에서 자기 자리로 뛰어 들어간다.
+     */
+    // 공이 날아가는 중이면 도착할 때까지 기다렸다 멈춘다. 공중에서
+    // 얼어붙은 공은 고장난 화면과 구분되지 않는다
+    const flying = this.ball.mode === 'PASS' || this.ball.mode === 'SHOT'
+    if (this.subPause > 0 && !flying) {
+      this.subPause -= step
+      this.setTargets(state)
+      for (const p of this.players) {
+        if (p.side !== 'HOME' || !this.entering.includes(p.num)) continue
+        p.stx += (p.tx - p.stx) * Math.min(1, step * 5)
+        p.sty += (p.ty - p.sty) * Math.min(1, step * 5)
+        this.movePlayer(p, step)
+      }
+      if (this.subPause <= 0) this.entering = []
+      return
+    }
 
     // 세리머니 중에는 공이 골망에 있고 선수들은 제자리로 돌아간다
     if (this.celebration) {

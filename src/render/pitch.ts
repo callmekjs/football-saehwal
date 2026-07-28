@@ -4,6 +4,7 @@ import {
   PITCH_H,
   PITCH_W,
   type Downed,
+  type Leaving,
   type VisualMatch,
   type VPlayer,
 } from './visual'
@@ -304,6 +305,74 @@ function drawPlayer(
 }
 
 /**
+ * 교체 화살표.
+ *
+ * 나가는 선수는 아래로 향한 빨간 삼각형, 들어오는 선수는 위로 향한 초록
+ * 삼각형이다. 축구 중계가 쓰는 그 기호다.
+ */
+function drawSubArrow(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  s: number,
+  going: boolean,
+) {
+  const w = s * 0.85
+  const h = s * 1.1
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, s, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(10,14,24,0.82)'
+  ctx.fill()
+  ctx.beginPath()
+  if (going) {
+    ctx.moveTo(cx - w / 2, cy - h / 2)
+    ctx.lineTo(cx + w / 2, cy - h / 2)
+    ctx.lineTo(cx, cy + h / 2)
+  } else {
+    ctx.moveTo(cx - w / 2, cy + h / 2)
+    ctx.lineTo(cx + w / 2, cy + h / 2)
+    ctx.lineTo(cx, cy - h / 2)
+  }
+  ctx.closePath()
+  ctx.fillStyle = going ? COLORS.cardRed : COLORS.home
+  ctx.fill()
+  ctx.restore()
+}
+
+/** 교체로 걸어 나가는 선수 */
+function drawLeaving(
+  ctx: CanvasRenderingContext2D,
+  l: Leaving,
+  r: number,
+  X: (v: number) => number,
+  Y: (v: number) => number,
+) {
+  const cx = X(l.x)
+  const cy = Y(l.y)
+  const fade = Math.min(1, l.life / 0.7)
+
+  ctx.save()
+  ctx.globalAlpha = 0.7 * fade
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = COLORS.home
+  ctx.fill()
+  ctx.fillStyle = COLORS.homeText
+  ctx.font = `500 ${Math.round(r * 1.05)}px system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(l.num), cx, cy + 0.5)
+  ctx.restore()
+
+  ctx.save()
+  ctx.globalAlpha = fade
+  const s = badgeSize(r)
+  drawSubArrow(ctx, cx + badgeOffset(r, s) * 0.78, cy - badgeOffset(r, s) * 0.78, s, true)
+  ctx.restore()
+}
+
+/**
  * 쓰러진 선수.
  *
  * 시뮬에서는 이미 빠졌지만 몇 초 동안 화면에 남는다. 이게 없으면 부상도
@@ -372,13 +441,22 @@ export function drawPitch(
     ctx.restore()
   }
 
-  // 쓰러진 선수를 먼저 그린다. 뛰는 선수가 그 위를 지나간다
+  // 쓰러진 선수와 나가는 선수를 먼저 그린다. 뛰는 선수가 그 위를 지나간다
   for (const d of vm.downed) {
     drawDowned(ctx, d, r, X, Y)
+  }
+  for (const l of vm.leaving) {
+    drawLeaving(ctx, l, r, X, Y)
   }
 
   for (const p of vm.players) {
     drawPlayer(ctx, p, b.holder === p.id, r, X, Y)
+    // 방금 들어온 선수에게는 초록 화살표가 붙는다
+    if (p.side === 'HOME' && vm.entering.includes(p.num)) {
+      const s = badgeSize(r)
+      const o = badgeOffset(r, s) * 0.78
+      drawSubArrow(ctx, X(p.x) + o, Y(p.y) - o, s, false)
+    }
   }
 
   // 공. 떠 있는 동안은 땅에 그림자를 남기고 조금 커진다.

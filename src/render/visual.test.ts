@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { VisualMatch, PITCH_W, PITCH_H, GOAL_HALF, GOAL_MID } from './visual'
-import { createState, tick } from '../sim/engine'
+import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
-import { TOTAL_TICKS } from '../sim/constants'
+import { getPlayer } from '../sim/squad'
+import { EVENTS, TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, Problem } from '../sim/types'
 
 const P: Problem = {
@@ -1106,6 +1107,168 @@ describe('부상·퇴장 — 사람이 소리 없이 사라지지 않는다', ()
     // 없는 선수가 그려졌다 — 화면에서 실제로 0번이 뛰고 있었다
     for (const r of runs) {
       for (const p of r.players) expect(p.num, `${p.id} 의 등번호`).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('교체 — 진짜로 선수가 바뀐다', () => {
+  /** 정해진 틱에 교체를 걸고 관전한다. 실제 화면에서 하는 것과 같은 경로다 */
+  const PLAN = [
+    { at: 120, out: 'DF04', in: 'DF15' },
+    { at: 300, out: 'MF06', in: 'MF17' },
+    { at: 480, out: 'FW09', in: 'FW22' },
+  ]
+
+  const runs = [0, 1, 2].map((off) => {
+    const seed = P.seed + off
+    const rng = createRng(seed)
+    let s = createState({ ...P, seed })
+    const vm = new VisualMatch(s, seed)
+    const frames: Array<{
+      simNums: number[]
+      vmNums: number[]
+      paused: boolean
+      leaving: Array<{ num: number; y: number }>
+      home: Array<{ num: number; homeX: number; homeY: number }>
+    }> = []
+    const done = new Set<number>()
+
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      for (const p of PLAN) {
+        if (i === p.at && !done.has(p.at) && !checkSub(s, p.out, p.in)) {
+          done.add(p.at)
+          s = {
+            ...s,
+            subsLeft: s.subsLeft - 1,
+            pendingSubs: [...s.pendingSubs, { out: p.out, in: p.in, atTick: i + EVENTS.subDelayTicks }],
+          }
+        }
+      }
+      s = tick(s, rng)
+      vm.sync(s)
+      for (let f = 0; f < 6; f++) vm.advance(s, 1 / 60)
+      frames.push({
+        simNums: s.players
+          .filter((x) => x.onPitch && !x.out)
+          .map((x) => getPlayer(x.id).num)
+          .sort((a, b) => a - b),
+        vmNums: vm.players
+          .filter((p) => p.side === 'HOME')
+          .map((p) => p.num)
+          .sort((a, b) => a - b),
+        paused: vm.subPause > 0 && vm.ball.mode !== 'PASS' && vm.ball.mode !== 'SHOT',
+        leaving: vm.leaving.map((l) => ({ num: l.num, y: l.y })),
+        home: vm.players
+          .filter((p) => p.side === 'HOME')
+          .map((p) => ({ num: p.num, homeX: p.homeX, homeY: p.homeY })),
+      })
+    }
+    return { frames, subs: s.log.filter((e) => e.kind === 'SUB').length }
+  })
+
+  it('교체가 실제로 일어난다', () => {
+    // 안 일어나는 것을 고쳤다고 할 수 없다
+    for (const r of runs) expect(r.subs, '시뮬이 반영한 교체').toBe(PLAN.length)
+  })
+
+  it('화면 명단이 시뮬 명단과 항상 같다', () => {
+    /**
+     * 이것이 "교체가 안 된다"의 정체였다.
+     *
+     * 재구성 조건이 "포메이션이 바뀌었나 / 인원이 줄었나"뿐이라, 열한 명이
+     * 열한 명으로 유지되는 교체는 둘 다 해당하지 않아 화면이 갱신되지
+     * 않았다. 실측으로 경기의 76%(4500프레임 중 3420) 동안 나간 선수가
+     * 계속 뛰고 들어온 선수는 화면에 없었다.
+     */
+    let wrong = 0
+    for (const r of runs) {
+      for (const f of r.frames) {
+        if (f.simNums.join(',') !== f.vmNums.join(',')) wrong += 1
+      }
+    }
+    expect(wrong, `명단이 어긋난 프레임 ${wrong}`).toBe(0)
+  })
+
+  it('교체돼도 남은 선수는 자기 자리를 지킨다', () => {
+    /**
+     * 자리를 배열 순서로 나눠주면 한 명이 바뀔 때 뒤쪽 전원이 한 칸씩
+     * 밀린다. 한 명 교체했는데 열 명이 순간이동하면 그게 더 나쁘다.
+     */
+    for (const r of runs) {
+      for (let i = 1; i < r.frames.length; i++) {
+        const a = r.frames[i - 1]
+        const b = r.frames[i]
+        if (a.vmNums.join(',') === b.vmNums.join(',')) continue
+        /**
+         * 일대일 교체만 본다.
+         *
+         * 부상·퇴장으로 인원이 줄면 열 명용 배치로 통째로 바뀌므로 전원의
+         * 자리가 움직이는 것이 정상이다. 여기서 재려는 것은 "한 명 바꿨는데
+         * 열 명이 순간이동하는가"다.
+         */
+        if (a.vmNums.length !== b.vmNums.length) continue
+        const stayed = b.home.filter((p) => a.home.some((q) => q.num === p.num))
+        for (const p of stayed) {
+          const before = a.home.find((q) => q.num === p.num)!
+          expect(
+            Math.hypot(p.homeX - before.homeX, p.homeY - before.homeY),
+            `${p.num}번의 자리가 교체 때문에 움직였다`,
+          ).toBeLessThan(0.01)
+        }
+      }
+    }
+  })
+
+  it('교체되는 순간 플레이가 잠깐 멈춘다', () => {
+    // 순간 치환이면 무슨 일이 일어났는지 알 수 없다
+    for (const r of runs) {
+      const paused = r.frames.filter((f) => f.paused).length
+      expect(paused, '멈춘 프레임').toBeGreaterThan(PLAN.length * 8)
+      /**
+       * 그렇다고 오래 멈추면 안 된다.
+       *
+       * 이 화면은 게임 내 15분을 75초로 압축한다. 공이 발에 있는 시간이
+       * 이 화면의 생명이라, 교체 세 장으로 경기의 7%를 넘게 죽이면
+       * 관전이 밋밋해진다. 실측 4.6%.
+       */
+      expect(paused / r.frames.length, '교체로 멈춘 비율').toBeLessThan(0.07)
+    }
+  })
+
+  it('나가는 선수가 터치라인 쪽으로 걸어 나간다', () => {
+    // 그 자리에서 증발하면 교체로 안 보인다
+    let sawWalk = 0
+    for (const r of runs) {
+      const track = new Map<number, number[]>()
+      for (const f of r.frames) {
+        for (const l of f.leaving) {
+          if (!track.has(l.num)) track.set(l.num, [])
+          track.get(l.num)!.push(l.y)
+        }
+      }
+      for (const [, ys] of track) {
+        if (ys.length < 5) continue
+        const first = ys[0]
+        const last = ys[ys.length - 1]
+        // 가까운 쪽 터치라인(0 또는 68)으로 다가갔는가
+        const line = first < PITCH_H / 2 ? 0 : PITCH_H
+        expect(Math.abs(last - line)).toBeLessThan(Math.abs(first - line))
+        sawWalk += 1
+      }
+    }
+    expect(sawWalk, '걸어 나간 선수').toBeGreaterThan(0)
+  })
+
+  it('들어온 선수가 경기장 안으로 들어온다', () => {
+    // 터치라인 밖에 서 있기만 하면 한 명 적게 뛰는 것과 같다.
+    // 인원은 시뮬이 정한다 — 부상·퇴장이 나면 열한 명이 아닐 수 있다
+    for (const r of runs) {
+      const last = r.frames[r.frames.length - 1]
+      expect(last.home.length).toBe(last.simNums.length)
+      for (const p of last.home) {
+        expect(p.homeY).toBeGreaterThan(0)
+        expect(p.homeY).toBeLessThan(PITCH_H)
+      }
     }
   })
 })
