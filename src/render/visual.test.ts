@@ -1680,6 +1680,63 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
     }
   })
 
+  it('아웃 재개 중에는 예약된 골이 갑자기 실행되지 않는다', () => {
+    /**
+     * 이 시드는 시뮬이 실점을 예약한 뒤 화면의 공이 먼저 골라인 밖으로
+     * 나가 골킥을 준비한다. 예전에는 예약 시간이 데드볼 중에도 줄어,
+     * 골킥을 기다리는 공이 골망으로 순간이동하며 점수판이 올랐다.
+     */
+    const fs = watch({
+      ...P,
+      seed: 40739,
+      initialTactics: { line: 0, press: 0, width: 0 },
+    }).frames
+    const waiting = fs.filter(
+      (f) =>
+        f.restart &&
+        (f.state.score[0] !== f.shown[0] || f.state.score[1] !== f.shown[1]),
+    )
+    expect(waiting.length, '예약된 골을 보존한 데드볼 표본').toBeGreaterThan(0)
+    for (const f of waiting) {
+      expect(f.celebrating, `${f.restart?.kind} 중 세리머니가 시작됐다`).toBe(false)
+    }
+
+    for (let i = 1; i < fs.length; i++) {
+      const scoreChanged = fs[i].shown[0] !== fs[i - 1].shown[0] ||
+        fs[i].shown[1] !== fs[i - 1].shown[1]
+      if (!scoreChanged) continue
+      expect(fs[i].restart, '아웃 재개 중 점수판이 바뀌었다').toBeNull()
+    }
+  })
+
+  it('라인 밖으로 향하는 느린 공을 예약 골로 바꾸지 않는다', () => {
+    const s = createState(P)
+    const vm = new VisualMatch(s, P.seed)
+    vm.ball.mode = 'PASS'
+    vm.ball.holder = null
+    vm.ball.x = PITCH_W / 2
+    vm.ball.y = PITCH_H - 0.2
+    vm.ball.vx = 0
+    vm.ball.vy = 0.5
+    vm.ball.vz = 0
+    vm.ball.lastTouch = 'HOME'
+
+    // 종료 직전 골 신호는 기다릴 시간이 0초다. 전에는 첫 프레임에서
+    // 터치라인 근처의 공을 지우고 반대편 골망으로 옮겼다.
+    const scored: MatchState = {
+      ...s,
+      tick: TOTAL_TICKS - 1,
+      score: [s.score[0] + 1, s.score[1]],
+    }
+    vm.sync(scored)
+    vm.advance(scored, 1 / 60)
+
+    expect(vm.celebration).toBeNull()
+    expect(vm.displayScore).toEqual(P.score)
+    expect(vm.ball.y).toBeGreaterThan(PITCH_H - 0.2)
+    expect(vm.ball.y).toBeLessThan(PITCH_H)
+  })
+
   it('재개를 기다리는 동안 공이 그 자리에 멈춰 있다', () => {
     for (const fs of MULTI) {
       for (let i = 1; i < fs.length; i++) {

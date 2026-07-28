@@ -126,6 +126,14 @@ const BUILDUP = 3
  * 헐고 공을 순간이동시키는 것과 같다. `BUILDUP` 을 채울 만큼만 준다
  */
 const GOAL_EXTRA = 4
+/**
+ * 라인 밖으로 향하는 공을 먼저 처리할 시간(초).
+ *
+ * 공이 이 시간 안에 라인을 넘을 궤적이면 예약 골이 만료돼도 기다린다.
+ * 아웃 판정과 재개가 먼저 끝나야 공이 라인 근처에서 골망으로 순간이동하지
+ * 않는다.
+ */
+const OUTBOUND_GUARD = 0.5
 
 /**
  * 태클이 성립하는 거리.
@@ -1134,9 +1142,23 @@ export class VisualMatch {
     return willScore ? LONG_SHOT_MAX : SHOOT_RANGE
   }
 
+  /** 지금 날아가거나 굴러가는 공이 곧 경기장을 벗어나는가 */
+  private ballIsLeavingField() {
+    const b = this.ball
+    if (b.mode === 'HELD') return false
+    const x = b.x + b.vx * OUTBOUND_GUARD
+    const y = b.y + b.vy * OUTBOUND_GUARD
+    return x < 0 || x > PITCH_W || y < 0 || y > PITCH_H
+  }
+
   private tryPendingShot(dt: number) {
+    // 스로인·골킥·코너·프리킥을 준비하는 동안에는 골을 실행할 수 없다.
+    // 호출부가 둘이라 한쪽만 막으면 공이 라인을 넘은 그 프레임의 마지막
+    // 호출에서 다시 실행되므로, 예약 처리의 입구에서 함께 막는다.
+    if (this.restart) return
     const q = this.pending[0]
     if (!q) return
+    if (q.willScore && this.ballIsLeavingField()) return
     q.life -= dt
     /**
      * 골 예약이 걸린 팀이 공을 안 가지고 있으면 곧바로 넘겨준다.
@@ -2361,14 +2383,13 @@ export class VisualMatch {
 
     // 공이 밖으로 나갔다. 규칙대로 다시 넣을 때까지 경기는 멈춰 있다.
     //
-    // 다만 **골 예약의 시계는 데드볼 중에도 간다.** 여기서 멈추면 점수판이
-    // 오른 뒤 골 장면까지 몇 초가 더 걸려 무슨 일이 일어난 건지 알 수 없다
+    // 골 예약의 시계도 함께 멈춘다. 점수판은 실제 골 장면이 나올 때까지
+    // 기다리므로 데드볼 중에 예약 시간이 끝날 이유가 없다. 여기서 시간을
+    // 줄이면 스로인·골킥을 준비하는 도중 공이 골망으로 순간이동해
+    // "아웃되려던 공이 갑자기 실점"으로 보인다.
     if (this.restart) {
-      this.tryPendingShot(step)
-      if (this.restart) {
-        this.updateRestart(state, step)
-        return
-      }
+      this.updateRestart(state, step)
+      return
     }
 
     this.setTargets(state)
