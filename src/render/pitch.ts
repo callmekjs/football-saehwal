@@ -61,6 +61,20 @@ const badgeSize = (r: number) => Math.max(7.2, r * 0.75)
  */
 const badgeOffset = (r: number, s: number) => r + s * 0.72
 
+/**
+ * 지친 얼굴이 뜨는 체력.
+ *
+ * 이 표시의 쓸모는 "지금 저 선수를 빼라"를 제때 알려주는 데 있다. 늦게
+ * 뜨면 아무것도 아니다. 세 국면을 끝까지 돌려 재보니 35 기준으로는
+ * 국면 1·2에서 **74초에 처음 떴다.** 경기는 75초에 끝나고 교체 반영에만
+ * 6초가 걸리므로, 신호를 보고 나서는 손쓸 방법이 없었다.
+ *
+ * 45 로 올리면 각각 37초·17초·0초에 뜨고, 동시에 뜨는 선수는 최대
+ * 2~4명이라 화면이 어지럽지도 않다. 이 숫자는 확률이 아니라 표시
+ * 기준이므로 경기 결과에 영향이 없다.
+ */
+const TIRED_AT = 45
+
 /** 카드(경고·퇴장). 네모가 곧 뜻이다 */
 function drawCard(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, red: boolean) {
   const w = s * 1.3
@@ -119,14 +133,18 @@ function drawTired(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: num
   ctx.strokeStyle = '#3a2c05'
   ctx.lineWidth = Math.max(1.6, s * 0.22)
   ctx.lineCap = 'round'
-  // 처진 눈
+  // 처진 눈 — 안쪽 끝이 **위**, 바깥쪽 끝이 아래다.
+  //
+  // 반대로 그리면 안쪽이 내려와 가운데가 V자가 되는데, 그건 지친 얼굴이
+  // 아니라 찡그린 얼굴이다. 실제로 반대로 그렸다가 "저 화난 모습은
+  // 뭐냐"는 말을 들었다. 눈썹의 방향 하나가 뜻을 통째로 뒤집는다.
   const ex = s * 0.44
   const ey = -s * 0.16
   ctx.beginPath()
-  ctx.moveTo(cx - ex - s * 0.2, ey + cy - s * 0.16)
-  ctx.lineTo(cx - ex + s * 0.22, ey + cy + s * 0.12)
-  ctx.moveTo(cx + ex + s * 0.2, ey + cy - s * 0.16)
-  ctx.lineTo(cx + ex - s * 0.22, ey + cy + s * 0.12)
+  ctx.moveTo(cx - ex - s * 0.2, ey + cy + s * 0.12)
+  ctx.lineTo(cx - ex + s * 0.22, ey + cy - s * 0.16)
+  ctx.moveTo(cx + ex + s * 0.2, ey + cy + s * 0.12)
+  ctx.lineTo(cx + ex - s * 0.22, ey + cy - s * 0.16)
   ctx.stroke()
   // 아래로 굽은 입
   ctx.beginPath()
@@ -282,7 +300,7 @@ function drawPlayer(
   const s = badgeSize(r)
   const o = badgeOffset(r, s) * 0.78
   if (p.booked) drawCard(ctx, cx + o, cy - o, s, false)
-  if (p.stamina < 35) drawTired(ctx, cx - o, cy - o, s)
+  if (p.stamina < TIRED_AT) drawTired(ctx, cx - o, cy - o, s)
 }
 
 /**
