@@ -193,6 +193,31 @@ export interface Flash {
   life: number
 }
 
+/**
+ * 쓰러져 있는 선수.
+ *
+ * 시뮬은 부상이나 퇴장이 나는 **그 틱에 즉시** 선수를 피치에서 빼버린다.
+ * 화면에서는 선수가 소리 없이 사라지고, 관전자는 열한 명이 열 명이 된
+ * 것조차 모른다. 그렇다고 시뮬을 늦출 수는 없다 — 교체 카드 강제 소모와
+ * 커버 공백 계수가 그 시점에 물려 있고, 밸런스가 걸려 있다.
+ *
+ * 그래서 **화면에만 잔상을 남긴다.** 시뮬에서는 이미 빠진 선수를 몇 초
+ * 동안 쓰러진 채로 그려주고 배지를 띄운 뒤 사라지게 한다. 시뮬 결과에서
+ * 파생되기만 하므로 한 방향 규칙에 어긋나지 않는다.
+ */
+export interface Downed {
+  id: string
+  num: number
+  side: 'HOME' | 'AWAY'
+  x: number
+  y: number
+  kind: 'INJURY' | 'SEND_OFF'
+  /** 남은 시간(초) */
+  life: number
+  /** 처음 받은 시간. 사라질 때 서서히 흐려지게 하는 데 쓴다 */
+  span: number
+}
+
 /** 골이 들어간 직후의 연출 상태. 이게 없으면 골이 사건으로 안 보인다 */
 export interface Celebration {
   side: 'HOME' | 'AWAY'
@@ -252,6 +277,8 @@ export class VisualMatch {
   celebration: Celebration | null = null
   /** 공이 밖으로 나가 재개를 기다리는 중 */
   restart: Restart | null = null
+  /** 부상·퇴장으로 빠졌지만 아직 화면에 쓰러져 있는 선수 */
+  downed: Downed[] = []
   private rng: Rng
   private decideIn = 0
   private lastStats = { homeShot: 0, awayShot: 0 }
@@ -259,8 +286,16 @@ export class VisualMatch {
   private lastOwner: 'HOME' | 'AWAY' = 'HOME'
   private lastFormation = ''
   private lastHomeCount = 11
-  /** 시뮬 사건 기록을 어디까지 읽었는지 */
+  /** 시뮬 사건 기록을 어디까지 읽었는지 (반칙 → 프리킥) */
   private lastLogLen = 0
+  /**
+   * 이탈 기록을 어디까지 읽었는지.
+   *
+   * 반칙과 커서를 따로 쓴다. 이탈은 **대형을 다시 짜기 전에** 읽어야
+   * 쓰러진 자리를 알 수 있고, 반칙은 세리머니 중에는 흘려보내야 한다.
+   * 하나로 합치면 둘 중 하나가 반드시 틀린 자리에서 읽힌다.
+   */
+  private downLogLen = 0
   /** 관전 시계 (초). 추격조 유지 시간 계산에 쓴다 */
   private clock = 0
   /** 압박 게이지. 상대가 발밑에 붙어 있던 시간이 쌓인다 */
@@ -313,18 +348,24 @@ export class VisualMatch {
   /** 포메이션·인원이 바뀌면 자리를 다시 만든다 */
   private rebuild(state: MatchState) {
     const tenMen = state.homeCount < 11
-    const slots = tenMen
-      ? slotsForTenMen(state.formation)
-      : getFormation(state.formation).slots
     const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+    /**
+     * 자리 수는 실제 인원을 넘지 않는다.
+     *
+     * 열 명용 배치는 자리가 열 개다. 부상이나 추가 퇴장으로 아홉 명이
+     * 되면 남는 자리에 **등번호 0번인 유령이 그려졌다.** 화면에서 실제로
+     * 봤다 — 우리 팀이 열 명이라고 적혀 있는데 피치에는 0번이 뛰고 있었다.
+     */
+    const slots = (tenMen ? slotsForTenMen(state.formation) : getFormation(state.formation).slots)
+      .slice(0, onPitch.length)
 
     const keep = new Map(this.players.map((p) => [p.id, p]))
     const next: VPlayer[] = []
 
     slots.forEach((slot, i) => {
       const s = onPitch[i]
-      const info = s ? getPlayer(s.id) : null
-      const num = info?.num ?? 0
+      if (!s) return
+      const num = getPlayer(s.id).num
       const id = `H${num}`
       const prev = keep.get(id)
       next.push({
@@ -491,6 +532,10 @@ export class VisualMatch {
    * 들어갔는지. 그것을 실제 장면으로 옮기는 것이 여기 할 일이다.
    */
   sync(state: MatchState) {
+    // 대형을 다시 짜기 전에 읽어야 한다. 다시 짜고 나면 빠진 선수가
+    // 목록에서 사라져 어디에 쓰러졌는지 알 방법이 없다
+    this.captureDowned(state)
+
     if (state.formation !== this.lastFormation || state.homeCount !== this.lastHomeCount) {
       this.rebuild(state)
     }
@@ -582,6 +627,40 @@ export class VisualMatch {
         }
       }
     }
+  }
+
+  /**
+   * 부상·퇴장으로 빠진 선수를 화면에 잠시 남긴다.
+   *
+   * 시뮬은 그 틱에 즉시 선수를 지운다. 그대로 두면 화면에서 사람이 소리
+   * 없이 없어지고, 관전자는 우리가 열 명이 된 것도 모른 채 경기를 본다.
+   * 실제 중계는 그 반대다 — 쓰러진 선수가 화면의 중심이 된다.
+   */
+  private captureDowned(state: MatchState) {
+    for (let i = this.downLogLen; i < state.log.length; i++) {
+      const e = state.log[i]
+      if ((e.kind !== 'INJURY' && e.kind !== 'SEND_OFF') || !e.target) continue
+      let v: VPlayer | undefined
+      try {
+        v = this.byId(`H${getPlayer(e.target).num}`)
+      } catch {
+        v = undefined
+      }
+      if (!v) continue
+      // 부상은 들것이 들어온다. 퇴장은 걸어 나간다 — 조금 짧다
+      const span = e.kind === 'INJURY' ? 3.4 : 2.6
+      this.downed.push({
+        id: v.id,
+        num: v.num,
+        side: v.side,
+        x: v.x,
+        y: v.y,
+        kind: e.kind,
+        life: span,
+        span,
+      })
+    }
+    this.downLogLen = state.log.length
   }
 
   /**
@@ -1662,6 +1741,11 @@ export class VisualMatch {
 
     for (const f of this.flashes) f.life -= step
     this.flashes = this.flashes.filter((f) => f.life > 0)
+
+    // 쓰러진 선수는 세리머니·데드볼 중에도 시간이 간다. 여기서 멈추면
+    // 골 뒤에 쓰러진 선수가 몇 초 더 누워 있다
+    for (const d of this.downed) d.life -= step
+    this.downed = this.downed.filter((d) => d.life > 0)
 
     // 세리머니 중에는 공이 골망에 있고 선수들은 제자리로 돌아간다
     if (this.celebration) {

@@ -1030,6 +1030,86 @@ describe('골키퍼 — 공이 가까우면 골문으로 물러난다', () => {
   })
 })
 
+describe('부상·퇴장 — 사람이 소리 없이 사라지지 않는다', () => {
+  /**
+   * 부상은 희소한 사건이다.
+   *
+   * 체력 25 미만인 선수가 있을 때만, 그것도 틱당 0.0004 확률로 난다.
+   * 한 판 봐서는 안 나오므로 체력이 가장 낮은 국면에 강 압박을 걸고
+   * 여러 시드를 합친다. 강 압박은 경고 보유 선수의 퇴장 위험도 켠다.
+   */
+  const EXHAUSTED: Problem = {
+    ...P,
+    staminaOverrides: { DF04: 30, DF05: 34, MF06: 28, MF08: 31, FW09: 29 },
+    booked: ['MF06'],
+    initialTactics: { line: 1, press: 2, width: 1 },
+  }
+
+  const runs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => {
+    const seed = EXHAUSTED.seed + i * 17
+    const rng = createRng(seed)
+    let s = createState({ ...EXHAUSTED, seed })
+    const vm = new VisualMatch(s, seed)
+    const events: Array<{ tick: number; kind: string }> = []
+    const ghosts: Array<{ tick: number; kind: string; x: number; y: number }> = []
+    let logLen = 0
+    for (let i2 = 0; i2 < TOTAL_TICKS; i2++) {
+      s = tick(s, rng)
+      vm.sync(s)
+      for (let f = 0; f < 6; f++) vm.advance(s, 1 / 60)
+      for (let k = logLen; k < s.log.length; k++) {
+        const e = s.log[k]
+        if (e.kind === 'INJURY' || e.kind === 'SEND_OFF') events.push({ tick: i2, kind: e.kind })
+      }
+      logLen = s.log.length
+      for (const d of vm.downed) ghosts.push({ tick: i2, kind: d.kind, x: d.x, y: d.y })
+    }
+    return { events, ghosts, players: vm.players }
+  })
+
+  const events = runs.flatMap((r) => r.events)
+  const ghosts = runs.flatMap((r) => r.ghosts)
+
+  it('부상과 퇴장이 실제로 일어난다', () => {
+    // 안 나오는 것을 "고쳤다"고 할 수 없다
+    expect(events.filter((e) => e.kind === 'INJURY').length, '부상').toBeGreaterThan(0)
+    expect(events.filter((e) => e.kind === 'SEND_OFF').length, '퇴장').toBeGreaterThan(0)
+  })
+
+  it('빠진 선수가 화면에 잠시 쓰러져 있다', () => {
+    // 시뮬은 그 틱에 즉시 선수를 지운다. 그대로 두면 사람이 소리 없이
+    // 사라져 우리가 열 명이 된 것조차 화면에 안 나온다
+    expect(ghosts.length, '쓰러진 선수가 그려진 프레임').toBeGreaterThan(events.length * 15)
+    // 부상 3.4초 · 퇴장 2.6초. 한 사건이 5초를 넘게 누워 있으면 안 된다
+    for (const r of runs) {
+      const per = new Map<string, number>()
+      for (const g of r.ghosts) {
+        const key = `${g.kind}:${g.x.toFixed(1)}:${g.y.toFixed(1)}`
+        per.set(key, (per.get(key) ?? 0) + 1)
+      }
+      for (const [, n] of per) expect(n).toBeLessThan(50)
+    }
+  })
+
+  it('쓰러진 자리는 경기장 안이다', () => {
+    // 위치를 못 잡으면 (0,0) 구석에 눕는다
+    for (const g of ghosts) {
+      expect(g.x).toBeGreaterThan(0)
+      expect(g.x).toBeLessThan(PITCH_W)
+      expect(g.y).toBeGreaterThan(0)
+      expect(g.y).toBeLessThan(PITCH_H)
+    }
+  })
+
+  it('등번호 0번인 유령이 뛰지 않는다', () => {
+    // 열 명용 배치는 자리가 열 개다. 아홉 명이 되면 남는 자리에 번호가
+    // 없는 선수가 그려졌다 — 화면에서 실제로 0번이 뛰고 있었다
+    for (const r of runs) {
+      for (const p of r.players) expect(p.num, `${p.id} 의 등번호`).toBeGreaterThan(0)
+    }
+  })
+})
+
 describe('시뮬레이션과의 일치', () => {
   it('연출은 경기 결과를 바꾸지 않는다', () => {
     // 관전 계층은 한 방향으로만 흐른다. 시뮬을 건드리면 밸런스가 무너진다

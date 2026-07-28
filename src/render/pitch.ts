@@ -3,11 +3,24 @@ import {
   GOAL_MID,
   PITCH_H,
   PITCH_W,
+  type Downed,
   type VisualMatch,
   type VPlayer,
 } from './visual'
 import type { MatchState } from '../sim/types'
 
+/**
+ * 색은 한 가지 뜻만 가진다.
+ *
+ * 전에는 빨강이 "상대 팀"과 "체력 고갈" 두 뜻이었고 노랑이 "경고"와
+ * "수비라인" 두 뜻이었다. 상대 팀 원이 빨간데 그 위에 빨간 호를 그리면
+ * 원리적으로 안 보이고, 노란 링과 노란 점선은 서로 무관한 것을 같은 색으로
+ * 말한다. 실제로 만든 사람이 자기 화면의 표시를 못 읽었다.
+ *
+ * 지금은 **뜻을 모양이 지고 색은 거들기만 한다.** 카드는 네모, 부상은
+ * 흰 바탕에 빨간 십자, 지친 선수는 얼굴이다. 수비라인은 어느 팀 색도
+ * 아닌 하늘색으로 옮겼다.
+ */
 export const COLORS = {
   grassA: '#2f7d4f',
   grassB: '#2a7248',
@@ -17,10 +30,117 @@ export const COLORS = {
   away: '#e0564b',
   awayText: '#3a0f0b',
   ball: '#ffffff',
-  booked: '#e8c33c',
-  spent: '#e0564b',
-  lineMarker: '#e8c33c',
+  /** 경고 카드 */
+  cardYellow: '#f5c518',
+  /** 지친 얼굴. 카드 노랑과 헷갈리지 않게 훨씬 옅다 */
+  tiredFace: '#ffe9bd',
+  /** 퇴장 카드 */
+  cardRed: '#d92d20',
+  /** 부상 십자 */
+  medical: '#d92d20',
+  /** 수비라인 안내선. 팀 색과 겹치지 않는 하늘색 */
+  lineMarker: '#7cd4ec',
   holder: '#ffffff',
+}
+
+/**
+ * 상태 배지의 크기.
+ *
+ * 선수 반지름에 그냥 비례시키면 안 된다. 폰 화면(폭 390px)에서 선수
+ * 반지름이 7픽셀이라, 비례로만 잡으면 배지가 5픽셀이 되어 아무 뜻도
+ * 전달하지 못한다. **최소 픽셀 크기를 보장한다.**
+ */
+const badgeSize = (r: number) => Math.max(7.2, r * 0.75)
+
+/**
+ * 배지를 선수 원 **바깥**에 놓는 거리.
+ *
+ * 원 위에 얹으면 등번호를 가린다. 등번호는 누구를 교체할지 정하는 유일한
+ * 단서라 가리면 안 된다. 실제로 얹어봤더니 지친 얼굴이 번호를 통째로
+ * 덮었다.
+ */
+const badgeOffset = (r: number, s: number) => r + s * 0.72
+
+/** 카드(경고·퇴장). 네모가 곧 뜻이다 */
+function drawCard(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, red: boolean) {
+  const w = s * 1.3
+  const h = s * 1.85
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(-0.18)
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  ctx.fillRect(-w / 2 - 1.2, -h / 2 - 1.2, w + 2.4, h + 2.4)
+  ctx.fillStyle = red ? COLORS.cardRed : COLORS.cardYellow
+  ctx.fillRect(-w / 2, -h / 2, w, h)
+  ctx.restore()
+}
+
+/** 부상. 흰 바탕에 빨간 십자 — 작은 크기에서도 선명하다 */
+function drawMedical(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) {
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, s, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  const arm = s * 0.62
+  ctx.strokeStyle = COLORS.medical
+  ctx.lineWidth = Math.max(2.4, s * 0.42)
+  ctx.lineCap = 'butt'
+  ctx.beginPath()
+  ctx.moveTo(cx - arm, cy)
+  ctx.lineTo(cx + arm, cy)
+  ctx.moveTo(cx, cy - arm)
+  ctx.lineTo(cx, cy + arm)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * 체력이 바닥난 선수.
+ *
+ * 지친 얼굴을 직접 그린다. 이모티콘은 13픽셀 밑으로 내려가면 뭉개져
+ * 아무 뜻도 전달하지 못하고, 폰 기종마다 그림이 다르다. 눈은 아래로
+ * 처진 획, 입은 아래로 굽은 호, 옆에 땀 한 방울이다.
+ */
+function drawTired(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) {
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, s, 0, Math.PI * 2)
+  ctx.fillStyle = COLORS.tiredFace
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.strokeStyle = '#3a2c05'
+  ctx.lineWidth = Math.max(1.6, s * 0.22)
+  ctx.lineCap = 'round'
+  // 처진 눈
+  const ex = s * 0.44
+  const ey = -s * 0.16
+  ctx.beginPath()
+  ctx.moveTo(cx - ex - s * 0.2, ey + cy - s * 0.16)
+  ctx.lineTo(cx - ex + s * 0.22, ey + cy + s * 0.12)
+  ctx.moveTo(cx + ex + s * 0.2, ey + cy - s * 0.16)
+  ctx.lineTo(cx + ex - s * 0.22, ey + cy + s * 0.12)
+  ctx.stroke()
+  // 아래로 굽은 입
+  ctx.beginPath()
+  ctx.arc(cx, cy + s * 0.72, s * 0.46, Math.PI * 1.15, Math.PI * 1.85)
+  ctx.stroke()
+  ctx.restore()
+
+  // 땀 한 방울
+  ctx.save()
+  ctx.fillStyle = '#7cd4ec'
+  ctx.beginPath()
+  ctx.ellipse(cx + s * 0.92, cy - s * 0.55, s * 0.26, s * 0.36, 0.4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 
 function drawField(
@@ -136,13 +256,6 @@ function drawPlayer(
     ctx.restore()
   }
 
-  if (p.booked) {
-    ctx.beginPath()
-    ctx.arc(cx, cy, r + 3, 0, Math.PI * 2)
-    ctx.fillStyle = COLORS.booked
-    ctx.fill()
-  }
-
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
   ctx.fillStyle = home ? COLORS.home : COLORS.away
@@ -158,19 +271,56 @@ function drawPlayer(
     ctx.stroke()
   }
 
-  if (p.stamina < 35) {
-    ctx.beginPath()
-    ctx.arc(cx, cy, r + 1.5, Math.PI * 0.15, Math.PI * 0.85)
-    ctx.strokeStyle = COLORS.spent
-    ctx.lineWidth = 2.5
-    ctx.stroke()
-  }
-
   ctx.fillStyle = home ? COLORS.homeText : COLORS.awayText
   ctx.font = `500 ${Math.round(r * 1.05)}px system-ui, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(String(p.num), cx, cy + 0.5)
+
+  // 상태 배지는 등번호를 가리지 않게 원 바깥에 붙인다.
+  // 경고는 오른쪽 위(카드), 체력 고갈은 왼쪽 위(지친 얼굴)
+  const s = badgeSize(r)
+  const o = badgeOffset(r, s) * 0.78
+  if (p.booked) drawCard(ctx, cx + o, cy - o, s, false)
+  if (p.stamina < 35) drawTired(ctx, cx - o, cy - o, s)
+}
+
+/**
+ * 쓰러진 선수.
+ *
+ * 시뮬에서는 이미 빠졌지만 몇 초 동안 화면에 남는다. 이게 없으면 부상도
+ * 퇴장도 사람이 소리 없이 사라지는 것으로만 보인다.
+ */
+function drawDowned(
+  ctx: CanvasRenderingContext2D,
+  d: Downed,
+  r: number,
+  X: (v: number) => number,
+  Y: (v: number) => number,
+) {
+  const cx = X(d.x)
+  const cy = Y(d.y)
+  // 마지막 0.8초에 서서히 사라진다
+  const fade = Math.min(1, d.life / 0.8)
+
+  ctx.save()
+  ctx.globalAlpha = 0.75 * fade
+  // 누워 있는 몸
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, r * 1.25, r * 0.62, 0.5, 0, Math.PI * 2)
+  ctx.fillStyle = d.side === 'HOME' ? COLORS.home : COLORS.away
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.restore()
+
+  ctx.save()
+  ctx.globalAlpha = fade
+  const s = badgeSize(r) * 1.15
+  if (d.kind === 'INJURY') drawMedical(ctx, cx, cy - r * 1.35, s)
+  else drawCard(ctx, cx, cy - r * 1.35, s, true)
+  ctx.restore()
 }
 
 export function drawPitch(
@@ -202,6 +352,11 @@ export function drawPitch(
     ctx.lineTo(X(b.x), Y(b.y))
     ctx.stroke()
     ctx.restore()
+  }
+
+  // 쓰러진 선수를 먼저 그린다. 뛰는 선수가 그 위를 지나간다
+  for (const d of vm.downed) {
+    drawDowned(ctx, d, r, X, Y)
   }
 
   for (const p of vm.players) {
