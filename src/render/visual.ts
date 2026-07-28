@@ -31,20 +31,58 @@ export const GOAL_MID = PITCH_H / 2
 const WALK = 1.4
 const ACCEL = 8.5
 const ARRIVE = 1.1
+
 /**
- * 패스와 슛 속도 (초당 미터).
+ * 공의 물리.
  *
- * 느리게 잡으면 공이 경기 시간의 절반 이상을 공중에서 보낸다. 그러면
- * 공이 사람 발에 있는 시간이 20%도 안 되고, 압박도 패스 연결도 화면에
- * 나타나지 않는다. 실제 축구의 짧은 패스는 초속 20미터 안팎이다.
+ * 전에는 공이 목표 지점까지 등속으로 가서 **도착하는 순간 단번에 섰다.**
+ * 차인 공이 그렇게 서는 것은 축구가 아니다. 이제 공은 속도를 가지고,
+ * 잔디에 마찰로 감속하고, 뜬 공은 떨어져 튄다. 받는 선수가 늦으면 공은
+ * 그 선수를 지나쳐 계속 흐른다.
+ *
+ * **구름 감속** — 축구공의 구름 저항 계수는 짧게 깎은 천연 잔디에서
+ * 대략 0.055다. a = μ·g = 0.055 × 9.81 ≈ 0.54 m/s². 이 값이면 초속
+ * 20미터로 찬 땅볼 패스는 20미터를 가도 19.4m/s 로 거의 안 죽는다 —
+ * 실제 축구의 강한 땅볼 패스가 그렇다.
+ *
+ * 다만 구름 저항만으로는 세게 찬 공이 300미터를 굴러야 선다. 실제 잔디는
+ * 속도에 비례하는 저항(잔디 잎에 스치는 손실)이 함께 걸린다. 두 성분을
+ * 더하면 초속 20미터에서 2.5 m/s², 걸음 속도에서 0.6 m/s² 가 되어
+ * "빠른 공은 잘 안 죽고 느린 공은 금방 선다"가 나온다.
  */
-const PASS_SPEED = 26
-const SHOT_SPEED = 34
-/** 아무리 멀어도 이 시간 안에 도착한다 */
-const PASS_MAX_T = 0.7
-const SHOT_MAX_T = 0.8
+const GRAVITY = 9.81
+const ROLL_DECEL = 0.54
+const ROLL_DRAG = 0.1
+/**
+ * 튕김.
+ *
+ * 규정 공기압(0.6~1.1 bar)의 공을 잔디에 떨어뜨리면 딱딱한 바닥(반발계수
+ * 0.83)보다 훨씬 덜 튄다. 잔디 위에서는 대략 0.6이다.
+ */
+const BOUNCE = 0.6
+/** 공중 저항 */
+const AIR_DRAG = 0.05
+/** 이 높이 아래면 발이 닿는다. 크로스바가 2.44m 다 */
+const REACH_HEIGHT = 1.9
+/** 슛 속도. 프로 선수의 슛은 초속 25~35미터다 */
+const SHOT_SPEED = 30
 /** 공을 발밑에 두는 거리 */
 const CONTROL_DIST = 1.3
+/**
+ * 슛을 고려하는 거리.
+ *
+ * 이보다 멀면 시뮬이 "슛"이라고 알려도 그 자리에서 쏘지 않고 기다린다.
+ * 전에는 그런 검사가 없어서 슛 거리 중앙값이 47미터였다 — 자기 진영에서
+ * 상대 골대를 향해 때리는 장면이 절반이었다는 뜻이다.
+ */
+const SHOOT_RANGE = 32
+/**
+ * 시뮬이 골이라고 알렸는데 사정거리에 아무도 없을 때 허용하는 최대 슛 거리.
+ *
+ * 38미터짜리 골은 드물지만 있다. 그 너머는 축구가 아니라 걷어내기가
+ * 골이 된 것이다.
+ */
+const LONG_SHOT_MAX = 38
 
 /**
  * 태클이 성립하는 거리.
@@ -93,20 +131,27 @@ export type BallMode = 'HELD' | 'PASS' | 'SHOT' | 'LOOSE'
 export interface VBall {
   x: number
   y: number
+  /** 지면에서의 높이(미터). 뜬 공은 떨어져 튄다 */
+  z: number
+  /** 공의 속도(초당 미터). 이게 있어야 공이 굴러가고 서서히 선다 */
+  vx: number
+  vy: number
+  vz: number
   mode: BallMode
   /** HELD 일 때 공을 가진 선수 */
   holder: string | null
-  /** 날아가는 중일 때 */
+  /** 마지막 킥의 출발점. 화면에 궤적을 그리는 데 쓴다 */
   fromX: number
   fromY: number
+  /** 노린 지점. **공이 여기서 멈추는 것은 아니다** */
   toX: number
   toY: number
-  t: number
-  dur: number
-  /** 도착하면 이 선수가 받는다 */
+  /** 이 선수에게 보낸 공이다. 받으러 달려가고, 잡을 때 조금 유리하다 */
   targetId: string | null
-  /** 날아가는 높이. 그림자와 크기에 쓰인다 */
-  lift: number
+  /** 방금 찬 선수. 자기가 찬 공을 곧바로 다시 잡는 것을 막는다 */
+  kickerId: string | null
+  /** 찬 뒤 이 시간 동안은 찬 선수가 다시 못 잡는다(초) */
+  selfLock: number
   /** 이 슛은 골로 끝난다. 시뮬이 이미 득점으로 판정한 슛이다 */
   willScore: boolean
   /** 마지막으로 공을 찬 팀. 공이 밖으로 나갔을 때 누가 재개하는지를 정한다 */
@@ -162,6 +207,25 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y)
 
+/**
+ * 패스 세기 (초당 미터).
+ *
+ * 선수는 늘 같은 세기로 차지 않는다. 실제 축구의 짧은 땅볼 패스는 초속
+ * 12~16미터, 긴 전환 패스는 22~28미터다. 거리에 맞춰 세기를 정한다.
+ */
+const passSpeed = (d: number) => clamp(11 + d * 0.5, 13, 26)
+
+/**
+ * 튕기는 순간 잔디에 걸려 앞으로 가는 속도도 함께 죽는 비율.
+ *
+ * 얼마나 죽는지는 **얼마나 세게 떨어졌느냐**에 달려 있다. 하늘에서
+ * 떨어진 롱볼은 잔디를 깊게 물어 크게 죽고, 살짝 뜬 공이 스치듯 닿는
+ * 것은 거의 안 죽는다. 고정값으로 두면 살짝 뜬 슛이 세 번 튀는 동안
+ * 22%씩 잃어 초속 30미터가 8미터가 된다 — 실측으로 그렇게 나왔고,
+ * 골이 화면에 뜨는 데 4.7초가 걸렸다.
+ */
+const bounceGrip = (impact: number) => clamp(1 - impact * 0.035, 0.72, 1)
+
 /** 상대 기본 배치. 성향에 따라 통째로 앞뒤로 옮겨간다 */
 const AWAY_SHAPE: Array<[Position, number, number]> = [
   ['GK', 103, 34],
@@ -201,8 +265,14 @@ export class VisualMatch {
   private clock = 0
   /** 압박 게이지. 상대가 발밑에 붙어 있던 시간이 쌓인다 */
   private pressure = 0
-  /** 시뮬이 알린 슛인데 공이 아직 그 팀에게 없어 기다리는 중 */
-  private pendingShot: { side: 'HOME' | 'AWAY'; willScore: boolean; life: number } | null = null
+  /**
+   * 시뮬이 알린 슛인데 공이 아직 그 팀에게 없어 기다리는 중.
+   *
+   * **줄이지 하나가 아니다.** 실측으로 0.7초 간격으로 두 골이 들어간 판이
+   * 있었는데, 자리가 하나뿐이라 뒤엣것이 앞엣것을 덮어써서 골 하나가
+   * 화면에서 통째로 사라졌다.
+   */
+  private pending: Array<{ side: 'HOME' | 'AWAY'; willScore: boolean; life: number }> = []
   private chaseIds: Record<'HOME' | 'AWAY', string[]> = { HOME: [], AWAY: [] }
   private chaseAt: Record<'HOME' | 'AWAY', number> = { HOME: -9, AWAY: -9 }
 
@@ -211,16 +281,19 @@ export class VisualMatch {
     this.ball = {
       x: PITCH_W / 2,
       y: PITCH_H / 2,
+      z: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
       mode: 'HELD',
       holder: null,
       fromX: 0,
       fromY: 0,
       toX: 0,
       toY: 0,
-      t: 0,
-      dur: 0,
       targetId: null,
-      lift: 0,
+      kickerId: null,
+      selfLock: 0,
       willScore: false,
       lastTouch: 'HOME',
       kick: 'PASS',
@@ -313,19 +386,34 @@ export class VisualMatch {
   }
 
   private giveTo(p: VPlayer) {
-    this.ball.mode = 'HELD'
-    this.ball.holder = p.id
-    this.ball.targetId = null
-    this.ball.lift = 0
+    const b = this.ball
+    b.mode = 'HELD'
+    b.holder = p.id
+    b.targetId = null
+    b.kickerId = null
+    b.selfLock = 0
+    b.lastTouch = p.side
+    this.stopBall()
     // 주인이 바뀌었으니 압박은 처음부터 다시 쌓이고, 추격조도 새로 짠다
     this.pressure = 0
     this.chaseAt.HOME = -9
     this.chaseAt.AWAY = -9
     // 공을 잡는 순간 발밑으로 붙인다. 서서히 다가가게 두면 몇 프레임 동안
-    // 공이 주인과 떨어져 있어 "누가 가진 건지" 알 수 없다
-    const dir = p.side === 'HOME' ? 1 : -1
-    this.ball.x = p.x + dir * CONTROL_DIST
-    this.ball.y = p.y
+    // 공이 주인과 떨어져 있어 "누가 가진 건지" 알 수 없다.
+    //
+    // 붙이는 방향은 **공이 있던 쪽**이다. 진행 방향으로 붙이면 발 앞에서
+    // 잡은 공이 몸 뒤로 순간이동한다
+    const dx = b.x - p.x
+    const dy = b.y - p.y
+    const d = Math.hypot(dx, dy)
+    if (d > 0.25) {
+      b.x = p.x + (dx / d) * CONTROL_DIST
+      b.y = p.y + (dy / d) * CONTROL_DIST
+    } else {
+      const dir = p.side === 'HOME' ? 1 : -1
+      b.x = p.x + dir * CONTROL_DIST
+      b.y = p.y
+    }
     // 잡자마자 곧바로 내주지 않는다. 받아서 살피고 한두 번 터치한 뒤 준다.
     // 이 시간이 짧으면 공이 경기 내내 공중에 떠 있고, 수비수가 붙을
     // 틈도 없어 압박이 화면에 나타나지 않는다
@@ -334,6 +422,66 @@ export class VisualMatch {
 
   private flash(kind: Flash['kind'], x: number, y: number) {
     this.flashes.push({ kind, x, y, life: kind === 'GOAL' ? 1.4 : 0.55 })
+  }
+
+  /** 공을 세운다. 데드볼과 세리머니에서만 쓴다 — 살아 있는 공은 스스로 죽는다 */
+  private stopBall() {
+    const b = this.ball
+    b.z = 0
+    b.vx = 0
+    b.vy = 0
+    b.vz = 0
+  }
+
+  /**
+   * 공을 찬다.
+   *
+   * 목표 지점을 향해 **속도를 준다.** 공은 그 지점에서 멈추는 것이 아니라
+   * 그쪽으로 굴러가고, 아무도 받지 않으면 지나쳐 계속 흐른다. 이것이
+   * 등속 이동과의 결정적 차이다.
+   */
+  private kickBall(
+    from: VPlayer,
+    tx: number,
+    ty: number,
+    speed: number,
+    vz: number,
+    mode: 'PASS' | 'SHOT',
+    targetId: string | null,
+    kind: VBall['kick'],
+  ) {
+    const b = this.ball
+    const dx = tx - b.x
+    const dy = ty - b.y
+    const d = Math.hypot(dx, dy) || 1
+    b.mode = mode
+    b.holder = null
+    b.fromX = b.x
+    b.fromY = b.y
+    b.toX = tx
+    b.toY = ty
+    b.vx = (dx / d) * speed
+    b.vy = (dy / d) * speed
+    b.vz = vz
+    // 발등에 맞는 높이에서 출발한다
+    b.z = 0.12
+    b.targetId = targetId
+    b.kickerId = from.id
+    b.selfLock = 0.5
+    b.lastTouch = from.side
+    b.kick = kind
+    if (mode !== 'SHOT') b.willScore = false
+  }
+
+  /**
+   * 롱볼의 수직 속도.
+   *
+   * 40미터를 초속 24미터로 보내면 1.7초가 걸린다. 그동안 공이 떠 있으려면
+   * 수직 초속이 g·t/2 = 8m/s 여야 한다. 짧은 패스는 땅볼로 간다.
+   */
+  private loftFor(d: number, speed: number) {
+    if (d < 24) return 0
+    return clamp((GRAVITY * (d / speed)) / 2, 0, 9)
   }
 
   /**
@@ -409,8 +557,9 @@ export class VisualMatch {
     // 여기서 바로 킥오프로 넘기면 골이 사건으로 보이지 않는다
     if (scored > 0 || conceded > 0) {
       this.queueShot(scored > 0 ? 'HOME' : 'AWAY', true)
-      this.lastOwner = state.ball.owner
-      return
+      // 여기서 돌아가지 않는다. 시뮬이 골이라고 했다는 것은 시뮬에서 그
+      // 팀이 공을 가졌다는 뜻이다. 화면의 공이 아직 반대편에 있으면 아래
+      // 점유 전환으로 넘겨줘야 그 팀이 골대로 밀고 갈 수 있다
     }
 
     // 슛 — 시뮬이 슈팅 상황을 셌으면 골대로 차되 막히거나 빗나간다
@@ -449,6 +598,10 @@ export class VisualMatch {
       // 이미 공이 죽어 있으면 반칙이 날 수 없다. 여기서 또 걸면 재개를
       // 기다리던 공이 반칙 지점으로 순간이동한다
       if (this.restart) continue
+      // 슛이 날아가는 중이면 휘슬을 불지 않는다. 어드밴티지다.
+      // 실측으로 골대로 향하던 득점 슛이 반칙 휘슬에 가로채여 통째로
+      // 사라졌다 — 점수판만 오르고 화면에는 아무 일도 없었다
+      if (this.ball.mode === 'SHOT' || this.pending.some((q) => q.willScore)) continue
       // 페널티로 이어진 반칙은 득점 쪽으로 처리된다. 여기서 또 멈추면
       // 골 장면과 프리킥이 겹친다
       if (state.log.some((x) => x.tick === e.tick && x.kind === 'PENALTY')) continue
@@ -474,19 +627,8 @@ export class VisualMatch {
   private spill(holder: VPlayer, to: VPlayer) {
     const tx = clamp(to.x + to.vx * 0.3, 2, PITCH_W - 2)
     const ty = clamp(to.y + to.vy * 0.3, 2, PITCH_H - 2)
-    const d = Math.hypot(tx - this.ball.x, ty - this.ball.y)
-    this.ball.mode = 'PASS'
-    this.ball.holder = null
-    this.ball.fromX = this.ball.x
-    this.ball.fromY = this.ball.y
-    this.ball.toX = tx
-    this.ball.toY = ty
-    this.ball.t = 0
-    this.ball.dur = clamp(d / PASS_SPEED, 0.14, PASS_MAX_T)
-    this.ball.targetId = to.id
-    this.ball.willScore = false
-    this.ball.lastTouch = holder.side
-    this.ball.kick = 'SPILL'
+    // 흘린 공은 세게 차인 것이 아니다. 느리게 굴러가 상대가 달려와 줍는다
+    this.kickBall(holder, tx, ty, 7 + this.rng.next() * 4, 0, 'PASS', to.id, 'SPILL')
     holder.recover = 0.35
     this.flash('TACKLE', this.ball.x, this.ball.y)
   }
@@ -500,68 +642,148 @@ export class VisualMatch {
    * 기다렸다 쏜다.
    */
   private queueShot(side: 'HOME' | 'AWAY', willScore: boolean) {
-    // 골 예약이 기다리는 중이면 빗나갈 슛으로 덮어쓰지 않는다. 점수판은
-    // 이미 올라갔으므로 골 장면은 반드시 나와야 한다. 실측으로 골 하나가
-    // 뒤이어 들어온 평범한 슛에 밀려 통째로 사라졌다
-    if (this.pendingShot?.willScore && !willScore) return
-    // 골이 났으면 밖으로 나간 공을 다시 넣을 이유가 없다. 어차피 다음은
-    // 킥오프다. 재개를 붙들고 있으면 골 장면이 그만큼 밀린다
-    if (willScore) this.restart = null
+    if (willScore) {
+      // 빗나갈 슛을 골보다 먼저 처리할 이유가 없다. 점수판은 이미 올라갔다
+      this.pending = this.pending.filter((q) => q.willScore)
+    } else if (this.pending.length) {
+      return
+    }
+    /**
+     * 공이 사정거리에 들어올 때까지 기다린다.
+     *
+     * 기다리는 시간이 길수록 자연스러운 슛이 나올 확률은 오르지만, 골은
+     * 점수판이 이미 올라간 사건이라 장면이 늦으면 관전자가 무슨 일이
+     * 일어난 건지 알 수 없다. 실측으로 2.4초는 골 넷 중 셋이 슛 없이
+     * 처리됐고, 3.4초는 장면 하나가 아예 늦어 사라졌다. 3.0초에서
+     * 골 장면이 득점 뒤 평균 3초에 뜨고 슛으로 들어가는 비율이 가장 높다.
+     */
+    this.pending.push({ side, willScore, life: willScore ? 3.0 : 1.8 })
     const holder = this.byId(this.ball.holder)
-    if (this.ball.mode === 'HELD' && holder?.side === side && holder.pos !== 'GK') {
+    if (
+      this.ball.mode === 'HELD' &&
+      holder &&
+      this.canShoot(holder, side, this.pendingRange(willScore))
+    ) {
+      this.pending.pop()
       this.shoot(holder, willScore)
-      return
-    }
-    // 골은 점수판이 이미 올라갔으므로 장면이 반드시 나와야 한다. 더 기다린다
-    this.pendingShot = { side, willScore, life: willScore ? 2.5 : 1.0 }
-  }
-
-  private tryPendingShot(dt: number) {
-    const q = this.pendingShot
-    if (!q) return
-    q.life -= dt
-    const holder = this.byId(this.ball.holder)
-    if (this.ball.mode === 'HELD' && holder?.side === q.side && holder.pos !== 'GK') {
-      this.pendingShot = null
-      this.shoot(holder, q.willScore)
-      return
-    }
-    if (q.life > 0) return
-    this.pendingShot = null
-    // 기다려도 공이 오지 않는다. 빗나갈 슛이었다면 그냥 흘려보낸다 —
-    // 안 보이는 슛 하나보다 공이 순간이동하는 장면이 훨씬 나쁘다
-    if (!q.willScore) return
-    // 공을 옮길 수밖에 없다면 옮기는 거리라도 짧아야 한다.
-    // 공에서 가장 가까운 그 팀 선수가 잡아서 쏜다
-    const shooter = this.nearestOf(q.side, this.ball) ?? this.pickShooter(q.side)
-    if (shooter) {
-      this.giveTo(shooter)
-      this.shoot(shooter, true)
     }
   }
 
   /**
-   * 슛을 쏠 선수를 고른다.
+   * 지금 이 선수가 슛을 쏠 수 있는가.
    *
-   * 공을 가지고 있으면 그 선수가 쏜다. 아니면 상대 골대에 가장 가까운
-   * 공격 자원이 쏜다 — 자기 진영 수비수가 슛을 쏘면 축구로 안 보인다.
+   * 골키퍼는 안 쏘고, 사정거리 밖에서도 안 쏜다. 자기 진영에서 상대
+   * 골대를 향해 때리는 것은 축구가 아니라 걷어내기다.
    */
-  private pickShooter(side: 'HOME' | 'AWAY'): VPlayer | undefined {
-    const holder = this.byId(this.ball.holder)
-    if (holder?.side === side && holder.pos !== 'GK') return holder
+  private canShoot(p: VPlayer, side?: 'HOME' | 'AWAY', range = SHOOT_RANGE) {
+    if (side && p.side !== side) return false
+    if (p.pos === 'GK') return false
+    const gx = this.goalX(p.side)
+    return Math.hypot(gx - p.x, GOAL_MID - p.y) <= range
+  }
 
-    const gx = this.goalX(side)
-    let best: VPlayer | undefined
+  /**
+   * 시뮬이 예약한 슛을 쏠 수 있는 거리.
+   *
+   * 골은 조금 더 멀리서도 허용한다. 여기서 못 쏘면 슛 없이 골망 장면으로
+   * 넘어가야 하는데, 38미터짜리 골은 드물어도 실재하는 반면 "슛이 없는 골"은
+   * 관전자가 무슨 일이 일어났는지 모르는 장면이다.
+   */
+  private pendingRange(willScore: boolean) {
+    return willScore ? LONG_SHOT_MAX : SHOOT_RANGE
+  }
+
+  private tryPendingShot(dt: number) {
+    const q = this.pending[0]
+    if (!q) return
+    q.life -= dt
+    const holder = this.byId(this.ball.holder)
+    if (
+      this.ball.mode === 'HELD' &&
+      holder &&
+      this.canShoot(holder, q.side, this.pendingRange(q.willScore))
+    ) {
+      this.pending.shift()
+      this.shoot(holder, q.willScore)
+      return
+    }
+    if (q.life > 0) return
+    this.pending.shift()
+    // 기다려도 공이 오지 않는다. 빗나갈 슛이었다면 그냥 흘려보낸다 —
+    // 안 보이는 슛 하나보다 공이 순간이동하는 장면이 훨씬 나쁘다
+    if (!q.willScore) return
+
+    /**
+     * 골은 점수판이 이미 올라갔으므로 장면이 반드시 나와야 한다.
+     *
+     * 사정거리 안에 있는 선수를 먼저 찾는다. 그중에서도 공에 가까운
+     * 선수여야 공이 적게 움직인다. 전에는 이 검사가 없어서 자기 진영에서
+     * 60미터짜리 골이 나왔다
+     */
+    let shooter: VPlayer | undefined
     let bd = Infinity
     for (const p of this.players) {
-      if (p.side !== side || p.pos === 'GK' || p.pos === 'DF') continue
-      const d = Math.abs(p.x - gx)
+      if (!this.canShoot(p, q.side, LONG_SHOT_MAX)) continue
+      const d = dist(p, this.ball)
       if (d < bd) {
         bd = d
-        best = p
+        shooter = p
       }
     }
-    return best ?? this.nearestOf(side, { x: gx, y: GOAL_MID })
+    if (!shooter) {
+      // 사정거리 안에 아무도 없다. 상대 골대에 가장 가까운 공격 자원이 쏜다.
+      //
+      // 여기서 "지금 공을 가진 선수"를 쓰면 안 된다. 그 선수가 자기 진영
+      // 수비수일 수 있고, 실측으로 81미터짜리 골이 나왔다 — 공이 골대까지
+      // 3.5초를 날아가 골 장면이 득점보다 6초 늦었다
+      let bg = Infinity
+      const gx = this.goalX(q.side)
+      for (const p of this.players) {
+        if (p.side !== q.side || p.pos === 'GK' || p.pos === 'DF') continue
+        const d = Math.hypot(gx - p.x, GOAL_MID - p.y)
+        if (d < bg) {
+          bg = d
+          shooter = p
+        }
+      }
+    }
+    // 골이 났으면 밖으로 나간 공을 다시 넣을 이유가 없다. 다음은 킥오프다
+    this.restart = null
+    const far = shooter
+      ? Math.hypot(this.goalX(q.side) - shooter.x, GOAL_MID - shooter.y)
+      : Infinity
+    if (shooter && far <= LONG_SHOT_MAX) {
+      this.giveTo(shooter)
+      this.shoot(shooter, true)
+      return
+    }
+    /**
+     * 그 팀 선수가 아무도 골대 근처에 없다.
+     *
+     * 시뮬은 확률로 득점을 정하고, 그 순간 화면의 공은 반대편에 있을 수
+     * 있다. 이때 억지로 슛을 만들면 80미터짜리 골이 나온다 — 실측으로
+     * 공이 골대까지 3.5초를 굴러갔고 골 장면이 득점보다 6초 늦었다.
+     *
+     * 그럴 바에는 중계처럼 **골망이 흔들리는 장면으로 바로 넘어간다.**
+     * 안 나오는 골보다 낫고, 있을 수 없는 슛보다도 낫다.
+     */
+    this.netGoal(q.side)
+  }
+
+  /** 슛 없이 골망 장면으로 넘어간다 */
+  private netGoal(side: 'HOME' | 'AWAY') {
+    const b = this.ball
+    const gx = this.goalX(side)
+    b.mode = 'LOOSE'
+    b.holder = null
+    b.targetId = null
+    b.willScore = false
+    this.stopBall()
+    b.x = gx === GOAL_LINE_HOME ? PITCH_W + 0.8 : -0.8
+    b.y = GOAL_MID + (this.rng.next() - 0.5) * 4
+    b.lastTouch = side
+    this.flash('GOAL', b.x, b.y)
+    this.celebration = { side, life: 1.5, x: b.x, y: b.y }
   }
 
   private nearestOf(side: 'HOME' | 'AWAY', to: { x: number; y: number }): VPlayer | undefined {
@@ -603,11 +825,11 @@ export class VisualMatch {
     this.ball.x = PITCH_W / 2
     this.ball.y = PITCH_H / 2
     this.ball.mode = 'HELD'
-    this.ball.lift = 0
+    this.stopBall()
     // 재개 시점에 밀려 있던 빗나갈 슛은 버린다. 골 예약은 점수판이 이미
     // 올라간 것이므로 살려두되 기다리는 시간을 다시 준다
-    if (this.pendingShot?.willScore) this.pendingShot.life = 2.5
-    else this.pendingShot = null
+    this.pending = this.pending.filter((q) => q.willScore)
+    for (const q of this.pending) q.life = 3.0
     // 킥오프가 아웃 재개보다 우선한다
     this.restart = null
 
@@ -657,6 +879,9 @@ export class VisualMatch {
    * 실제 스로인이 걸리는 10초는 여기서 1초가 안 된다.
    */
   private beginRestart(kind: Restart['kind'], side: 'HOME' | 'AWAY', x: number, y: number) {
+    // 골로 판정된 슛이 날아가는 중이면 아무것도 이 공을 가로채지 못한다.
+    // 점수판은 이미 올라갔고, 이 공은 골망에 들어가야만 한다
+    if (this.ball.mode === 'SHOT' && this.ball.willScore) return
     let px = x
     let py = y
     if (kind === 'GOAL_KICK') {
@@ -672,7 +897,9 @@ export class VisualMatch {
     this.ball.mode = 'LOOSE'
     this.ball.holder = null
     this.ball.targetId = null
-    this.ball.lift = 0
+    this.ball.kickerId = null
+    this.ball.selfLock = 0
+    this.stopBall()
     this.ball.x = px
     this.ball.y = py
     this.restart = { kind, side, x: px, y: py, wait: 0.35, takerId: taker?.id ?? null, age: 0 }
@@ -704,7 +931,7 @@ export class VisualMatch {
 
     this.ball.x = r.x
     this.ball.y = r.y
-    this.ball.lift = 0
+    this.stopBall()
 
     if (r.wait > 0) return
     // 차는 선수가 공에 닿아야 재개된다. 아무도 못 가면(퇴장 등) 오래
@@ -752,20 +979,32 @@ export class VisualMatch {
         : GOAL_MID + sign * this.rng.next() * 2
     }
 
-    const d = Math.hypot(gx - shooter.x, gy - shooter.y)
-    this.ball.mode = 'SHOT'
-    this.ball.holder = null
+    // 슛은 살짝 뜬다. 크로스바(2.44m) 밑으로 지나가야 하므로 높이 못 준다
+    const lift = willScore ? 1.0 + this.rng.next() * 1.8 : 1.0 + this.rng.next() * 3.4
+    this.ball.willScore = willScore
+    this.kickBall(shooter, gx, clamp(gy, 2, PITCH_H - 2), SHOT_SPEED, lift, 'SHOT', null, 'SHOT')
     this.ball.fromX = shooter.x
     this.ball.fromY = shooter.y
-    this.ball.toX = gx
-    this.ball.toY = clamp(gy, 2, PITCH_H - 2)
-    this.ball.t = 0
-    this.ball.dur = clamp(d / SHOT_SPEED, 0.25, SHOT_MAX_T)
-    this.ball.targetId = null
-    this.ball.willScore = willScore
-    this.ball.lastTouch = shooter.side
-    this.ball.kick = 'SHOT'
     this.flash('SHOT', shooter.x, shooter.y)
+  }
+
+  /** 상대 골대에 가장 가까운 동료. 길게 보낼 때 쓴다 */
+  private forwardOutlet(holder: VPlayer): VPlayer | null {
+    const gx = this.goalX(holder.side)
+    let best: VPlayer | null = null
+    let bd = Infinity
+    for (const p of this.players) {
+      if (p.side !== holder.side || p.id === holder.id || p.pos === 'GK') continue
+      const d = dist(p, holder)
+      // 발로 닿는 거리여야 한다. 이보다 멀면 패스가 아니라 걷어내기다
+      if (d < 6 || d > 48) continue
+      const toGoal = Math.hypot(gx - p.x, GOAL_MID - p.y)
+      if (toGoal < bd) {
+        bd = toGoal
+        best = p
+      }
+    }
+    return best
   }
 
   /** 패스 받을 사람을 고른다. 앞쪽이고 마크가 헐거운 동료 */
@@ -844,17 +1083,29 @@ export class VisualMatch {
       targetId = null
     }
 
-    this.ball.mode = 'PASS'
-    this.ball.holder = null
-    this.ball.fromX = this.ball.x
-    this.ball.fromY = this.ball.y
-    this.ball.toX = tx
-    this.ball.toY = ty
-    this.ball.t = 0
-    this.ball.dur = clamp(d / PASS_SPEED, 0.14, PASS_MAX_T)
-    this.ball.targetId = targetId
-    this.ball.lastTouch = holder.side
-    this.ball.kick = 'PASS'
+    const speed = passSpeed(d)
+    this.kickBall(holder, tx, ty, speed, this.loftFor(d, speed), 'PASS', targetId, 'PASS')
+  }
+
+  /**
+   * 슛을 택할 확률.
+   *
+   * 실제 축구의 판단이다. 박스 안(골라인에서 16.5m)에서 각이 열려 있으면
+   * 대부분 슛이고, 25미터 밖에서는 대부분 패스다. 그 사이가 고민 구간이다.
+   * **우리 팀이든 상대든 같은 기준을 쓴다** — 공을 가진 쪽이 팀과 무관하게
+   * 이 함수를 거치므로 갈릴 여지가 없다.
+   *
+   * 8m 92% · 12m 82% · 16.5m 57% · 20m 38% · 25m 10% · 27m 이상 0%
+   */
+  private shotWant(p: VPlayer, nearest: number): number {
+    const gx = this.goalX(p.side)
+    const gd = Math.hypot(gx - p.x, GOAL_MID - p.y)
+    // 각이 닫혀 있으면 못 쏜다. 골라인 옆 코너에서 때리는 것은 축구가 아니다
+    if (Math.abs(p.y - GOAL_MID) > 7 + gd * 0.7) return 0
+    let want = clamp(1.15 - (gd - 6) * 0.055, 0, 0.92)
+    // 코앞에 몸을 던지면 쏠 각이 없다. 이때는 내주는 것이 정답이다
+    if (nearest < 1.7) want *= 0.45
+    return want
   }
 
   /** 공을 가진 선수가 무엇을 할지 정한다 */
@@ -872,6 +1123,53 @@ export class VisualMatch {
     if (this.decideIn > 0) return
 
     const target = this.choosePass(holder)
+
+    // 골키퍼는 공을 몰고 나가지 않는다. 잡으면 앞으로 차낸다.
+    // 아무도 못 찾으면 가장 가까운 동료에게라도 준다 — 여기서 계속
+    // 들고 있으면 경기가 골문 앞에서 멈춘다
+    if (holder.pos === 'GK') {
+      const out =
+        target ??
+        this.players.reduce<VPlayer | null>((m, p) => {
+          if (p.side !== holder.side || p.pos === 'GK') return m
+          return !m || dist(p, holder) < dist(m, holder) ? p : m
+        }, null)
+      if (out) this.pass(holder, out)
+      else this.decideIn = 0.4
+      return
+    }
+
+    // 시뮬이 예약해둔 슛이 이 팀 것이면 그것부터 처리한다
+    const q = this.pending[0]
+    if (q && q.side === holder.side) {
+      if (this.canShoot(holder, undefined, this.pendingRange(q.willScore))) {
+        this.pending.shift()
+        this.shoot(holder, q.willScore)
+        return
+      }
+      /**
+       * 사정거리 밖이다. 그렇다고 여기서 평범하게 옆으로 돌리면 예약이
+       * 만료되어 공이 골대 앞으로 순간이동한다. **앞으로 길게 보낸다.**
+       *
+       * 실측으로 이 장치가 없을 때 슛 거리 최대가 67미터였다 — 자기
+       * 진영에서 때린 골이라는 뜻이다.
+       */
+      const outlet = this.forwardOutlet(holder)
+      if (outlet) {
+        this.pass(holder, outlet)
+        return
+      }
+    }
+
+    // 골대에 가까우면 슛이 먼저다.
+    //
+    // 이 슛은 **시뮬 결과를 건드리지 않는다.** willScore 가 false 이므로
+    // 골키퍼에게 막히거나 골대를 벗어난다. 점수판을 올리는 것은 시뮬이
+    // 골이라고 알려줄 때뿐이다
+    if (this.rng.next() < this.shotWant(holder, nearest)) {
+      this.shoot(holder, false)
+      return
+    }
 
     // 쫓기면 빨리 내주고, 여유가 있으면 조금 몰고 간다.
     // 15분에 여든 번쯤 오가야 축구로 보인다 — 내주는 쪽이 기본이다
@@ -892,6 +1190,9 @@ export class VisualMatch {
    * 안 뺏기는, 축구에서 있을 수 없는 그림이 나온다.
    */
   private updatePressure(holder: VPlayer, dt: number) {
+    // 골키퍼가 공을 잡고 있으면 아무도 못 뺏는다. 규칙(경기 규칙 12조)이
+    // 골키퍼가 공을 놓는 것을 방해하지 못하게 한다
+    if (holder.pos === 'GK') return
     let nearest = Infinity
     let crowd = 0
     let taker: VPlayer | undefined
@@ -927,29 +1228,59 @@ export class VisualMatch {
   /** 각 선수가 지금 가려는 곳을 정한다 */
   private setTargets(state: MatchState) {
     const holder = this.byId(this.ball.holder)
+    // 우리가 찬 공이 날아가는 동안에도 우리는 공격 중이다. 공중에 뜬 순간
+    // 전원이 수비 대형으로 내려가면 대형이 매 패스마다 앞뒤로 출렁인다
+    const inFlight = this.ball.mode === 'PASS' || this.ball.mode === 'SHOT'
     const ballSide: 'HOME' | 'AWAY' | null =
-      holder?.side ?? (this.ball.mode === 'PASS' ? this.byId(this.ball.targetId)?.side ?? null : null)
+      holder?.side ?? (inFlight ? this.byId(this.ball.targetId)?.side ?? this.ball.lastTouch : null)
+    // 굴러가는 공은 지금 자리가 아니라 갈 자리로 쫓아가야 잡는다
+    const lead = {
+      x: clamp(this.ball.x + this.ball.vx * 0.4, 0, PITCH_W),
+      y: clamp(this.ball.y + this.ball.vy * 0.4, 0, PITCH_H),
+    }
 
     for (const p of this.players) {
       if (p.pos === 'GK') {
-        // 골키퍼는 골대와 공을 잇는 선 위에 선다
-        const gx = this.goalX(p.side === 'HOME' ? 'AWAY' : 'HOME')
-        const toBall = Math.hypot(this.ball.x - gx, this.ball.y - 34)
-        const out = clamp(14 - toBall * 0.25, 1.5, 9)
+        // 골키퍼가 공을 잡았으면 그 자리에서 찬다. 여기서 골라인으로
+        // 되돌리면 공을 든 채 뒷걸음질치는 그림이 된다
+        if (holder?.id === p.id) {
+          p.tx = p.x
+          p.ty = p.y
+          continue
+        }
+        /**
+         * 골키퍼는 골문 중앙과 공을 잇는 선 위에 선다.
+         *
+         * 공이 멀면 페널티 지역 앞까지 나와 있고(스위퍼 키퍼), 가까워지면
+         * 골문으로 물러나 골대를 덮는다.
+         *
+         * **전에는 이 관계가 뒤집혀 있었다.** 공이 가까울수록 앞으로 나오게
+         * 돼 있어서, 상대가 우리 박스까지 밀고 들어온 순간 골키퍼가 골라인
+         * 11미터 앞에 나가 있었다(실측 중앙값). 골문이 통째로 비어 있었다는
+         * 뜻이다. 실제 골키퍼의 위치는 공이 하프라인이면 10m, 25m면 5m,
+         * 박스 앞이면 3m, 박스 안이면 1.5~2m다.
+         */
+        const own = this.goalX(p.side === 'HOME' ? 'AWAY' : 'HOME')
+        const toBall = Math.hypot(this.ball.x - own, this.ball.y - GOAL_MID)
+        const out = clamp(toBall * 0.2, 1.3, 10)
         const k = p.side === 'HOME' ? 1 : -1
-        p.tx = p.homeX + out * k
-        // 골키퍼는 골문 앞을 벗어나지 않는다.
-        //
-        // 공 y 를 그냥 따라가게 두면 공이 사이드로 갈 때 골키퍼가 골대
-        // 밖으로 걸어 나가 골문을 통째로 비운다. 앞으로 나올수록 각을
-        // 줄이려 옆으로 더 움직일 수 있지만, 골라인 앞에서는 골대 폭이다
-        const span = GOAL_HALF + out * 0.7
-        p.ty = clamp(GOAL_MID + (this.ball.y - GOAL_MID) * 0.45, GOAL_MID - span, GOAL_MID + span)
+        p.tx = own + out * k
+        // 골문 중앙-공 연결선 위의 점. 앞으로 나온 만큼만 옆으로 간다
+        const off = ((this.ball.y - GOAL_MID) * out) / Math.max(out, toBall)
+        p.ty = clamp(GOAL_MID + off, GOAL_MID - (GOAL_HALF + 2.5), GOAL_MID + (GOAL_HALF + 2.5))
         continue
       }
 
       const dir = p.side === 'HOME' ? 1 : -1
       const attacking = ballSide === p.side
+
+      // 나에게 오는 패스는 내가 받으러 간다. 공은 도착 지점에서 서지
+      // 않으므로 제때 가 있지 않으면 그대로 지나쳐 흐른다
+      if (this.ball.mode === 'PASS' && this.ball.targetId === p.id) {
+        p.tx = clamp(this.ball.toX, 3, PITCH_W - 3)
+        p.ty = clamp(this.ball.toY, 3, PITCH_H - 3)
+        continue
+      }
 
       if (holder && holder.id === p.id) {
         // 공을 몰 때는 앞이 기본이되, 막힌 쪽을 피해 빈 길로 꺾는다.
@@ -1001,7 +1332,18 @@ export class VisualMatch {
             // 가까우면 받을 각을 만든다 — 겹치지 않게 벌려 선다
             const away = p.y > holder.y ? 1 : -1
             ty = clamp(holder.y + away * (8 + (p.pos === 'FW' ? 4 : 0)), 4, PITCH_H - 4)
-            tx = clamp(holder.x + (p.pos === 'FW' ? 14 : 8) * dir, 4, PITCH_W - 4)
+            const short = clamp(holder.x + (p.pos === 'FW' ? 14 : 8) * dir, 4, PITCH_W - 4)
+            /**
+             * 받으러 내려오되 제 자리를 버리지는 않는다.
+             *
+             * 이 제한이 없으면 골키퍼가 공을 잡는 순간 공격수가 공 근처로
+             * 내려온다. 실측으로 우리 골키퍼가 x=5 에서 공을 들고 있을 때
+             * 최전방이 x=25 였다 — 열한 명이 자기 진영 25미터 안에 다
+             * 몰려 있었다는 뜻이다. 실제 축구는 골키퍼가 공을 잡으면
+             * 공격수가 하프라인 근처에 서서 길게 오기를 기다린다.
+             */
+            const floor = p.homeX - (p.pos === 'FW' ? 8 : 20) * dir
+            tx = dir > 0 ? Math.max(short, floor) : Math.min(short, floor)
           }
           // 수비라인은 공보다 너무 뒤처지지 않는다. 압축된 블록을 유지한다
           if (p.pos === 'DF') {
@@ -1016,9 +1358,10 @@ export class VisualMatch {
         // 수비 — 추격조 세 명은 공에 달려들고 나머지는 자리를 지킨다.
         // 공을 가진 선수가 몰고 가므로 지금 자리가 아니라 갈 자리를 노린다
         const rank = this.chasersOf(p.side).indexOf(p.id)
-        const lead = 0.45
-        const px = holder ? holder.x + holder.vx * lead : this.ball.x
-        const py = holder ? holder.y + holder.vy * lead : this.ball.y
+        // 주인 없이 굴러가는 공은 지금 자리로 가면 이미 지나가 있다
+        const ahead = 0.45
+        const px = holder ? holder.x + holder.vx * ahead : lead.x
+        const py = holder ? holder.y + holder.vy * ahead : lead.y
 
         if (rank === 0) {
           p.tx = px
@@ -1118,6 +1461,145 @@ export class VisualMatch {
     p.y = clamp(p.y + p.vy * dt, 1, PITCH_H - 1)
   }
 
+  /**
+   * 공에 물리를 적용한다.
+   *
+   * 뜬 공은 중력으로 떨어져 튀고, 땅에 있는 공은 잔디 마찰로 감속한다.
+   * 이것이 없으면 공이 목표 지점에 닿는 순간 단번에 선다.
+   */
+  private stepBall(dt: number) {
+    const b = this.ball
+
+    if (b.z > 0 || b.vz > 0) {
+      b.vz -= GRAVITY * dt
+      b.z += b.vz * dt
+      const drag = Math.max(0, 1 - AIR_DRAG * dt)
+      b.vx *= drag
+      b.vy *= drag
+      if (b.z <= 0) {
+        b.z = 0
+        // 잔디에 떨어지며 튄다. 튈 때마다 수직 속도가 줄어 결국 구른다
+        const grip = bounceGrip(Math.abs(b.vz))
+        b.vz = -b.vz * BOUNCE
+        if (b.vz < 0.7) b.vz = 0
+        b.vx *= grip
+        b.vy *= grip
+      }
+    }
+
+    if (b.z <= 0.001) {
+      const sp = Math.hypot(b.vx, b.vy)
+      if (sp > 0) {
+        const next = Math.max(0, sp - (ROLL_DECEL + ROLL_DRAG * sp) * dt)
+        b.vx = (b.vx / sp) * next
+        b.vy = (b.vy / sp) * next
+      }
+    }
+
+    b.x += b.vx * dt
+    b.y += b.vy * dt
+  }
+
+  /**
+   * 지나가는 공을 잡는다.
+   *
+   * 공이 도착 지점에 서기를 기다리는 것이 아니다. 발이 닿는 사람이
+   * 가져가고, 아무도 못 닿으면 공은 그대로 지나쳐 흐른다. 인터셉트도
+   * 여기서 저절로 나온다 — 패스 길목에 서 있으면 잡힌다.
+   */
+  private tryCollect() {
+    const b = this.ball
+    if (b.z > REACH_HEIGHT) return
+    // 시뮬이 골로 판정한 슛은 아무도 못 막는다. 점수판이 이미 올라갔다
+    if (b.mode === 'SHOT' && b.willScore) return
+
+    const sp = Math.hypot(b.vx, b.vy)
+    // 빠른 공은 잡기 어렵고, 굴러 죽어가는 공은 걸어가서 줍는다
+    const base = 1.05 + 1.25 * clamp(1 - sp / 24, 0, 1)
+
+    let best: VPlayer | undefined
+    let bd = Infinity
+    for (const p of this.players) {
+      if (p.recover > 0) continue
+      if (b.selfLock > 0 && p.id === b.kickerId) continue
+      let reach = base
+      // 골키퍼는 손을 쓴다
+      if (p.pos === 'GK') reach += 1.1
+      // 받으려던 동료는 어디로 올지 알고 있다
+      if (p.id === b.targetId) reach += 0.8
+      const d = dist(p, b)
+      if (d <= reach && d < bd) {
+        bd = d
+        best = p
+      }
+    }
+    if (!best) return
+
+    // 골키퍼가 슛을 막았다
+    if (b.mode === 'SHOT' && best.pos === 'GK') {
+      this.flash('SAVE', b.x, b.y)
+      if (this.rng.next() < 0.55) {
+        this.giveTo(best)
+      } else {
+        // 쳐냈다. 공이 옆으로 튀어나가 다시 주인 없는 공이 된다
+        const ang = (this.rng.next() - 0.5) * 1.6
+        const away = best.side === 'HOME' ? 1 : -1
+        const v = 7 + this.rng.next() * 5
+        b.mode = 'LOOSE'
+        b.holder = null
+        b.targetId = null
+        b.kickerId = null
+        b.selfLock = 0
+        b.willScore = false
+        b.vx = Math.cos(ang) * v * away
+        b.vy = Math.sin(ang) * v
+        b.vz = 2
+      }
+      return
+    }
+
+    // 상대 팀이 날아가는 공을 채갔으면 인터셉트다
+    if (b.mode === 'PASS' && best.side !== b.lastTouch) {
+      this.flash('TACKLE', b.x, b.y)
+    }
+    this.giveTo(best)
+  }
+
+  /**
+   * 슛이 골라인을 넘었는지 본다.
+   *
+   * 골대 안이면 골이고, 골대 밖이면 checkOut 이 골킥으로 처리한다.
+   */
+  private resolveShot(): boolean {
+    const b = this.ball
+    const gx = this.goalX(b.lastTouch)
+    const crossed = gx === GOAL_LINE_HOME ? b.x >= GOAL_LINE_HOME : b.x <= GOAL_LINE_AWAY
+    if (!crossed) return false
+    // 크로스바는 2.44미터다
+    const inPosts = Math.abs(b.y - GOAL_MID) < GOAL_HALF && b.z < 2.44
+    if (!inPosts) return false
+
+    if (b.willScore) {
+      // 골망에 꽂힌다. 공은 골 안에 그대로 두고 잠시 멈춘다
+      b.mode = 'LOOSE'
+      b.holder = null
+      b.targetId = null
+      this.stopBall()
+      b.x = gx === GOAL_LINE_HOME ? PITCH_W + 0.8 : -0.8
+      this.flash('GOAL', b.x, b.y)
+      // 75초짜리 경기다. 세리머니가 길면 플레이 시간을 잡아먹는다
+      this.celebration = { side: b.lastTouch, life: 1.5, x: b.x, y: b.y }
+      return true
+    }
+
+    // 시뮬은 골이 아니라고 했는데 공이 골문 안으로 들어오고 있다.
+    // 골키퍼가 자리를 비운 드문 경우다 — 골라인에서 걷어내 코너로 만든다.
+    // 여기서 그냥 통과시키면 점수판이 안 오르는 유령 골이 나온다
+    this.flash('SAVE', b.x, b.y)
+    this.beginRestart('CORNER', b.lastTouch, gx, b.y < PITCH_H / 2 ? 0 : PITCH_H)
+    return true
+  }
+
   private moveBall(dt: number) {
     const b = this.ball
 
@@ -1133,92 +1615,18 @@ export class VisualMatch {
       const uy = sp > 0.4 ? h.vy / sp : 0
       b.x += (h.x + ux * CONTROL_DIST - b.x) * Math.min(1, dt * 18)
       b.y += (h.y + uy * CONTROL_DIST - b.y) * Math.min(1, dt * 18)
-      b.lift = 0
+      this.stopBall()
       return
     }
 
-    if (b.mode === 'PASS' || b.mode === 'SHOT') {
-      b.t += dt
-      const k = clamp(b.t / b.dur, 0, 1)
-      b.x = b.fromX + (b.toX - b.fromX) * k
-      b.y = b.fromY + (b.toY - b.fromY) * k
-      b.lift = Math.sin(k * Math.PI) * (b.mode === 'SHOT' ? 1 : 0.45)
+    b.selfLock -= dt
+    this.stepBall(dt)
 
-      // 라인을 넘는 순간 아웃이다. 도착할 때까지 기다리면 공이 관중석
-      // 깊숙이 들어갔다가 되돌아 나온다
-      if (b.mode === 'PASS' && this.checkOut()) return
-
-      if (k >= 1) {
-        if (b.mode === 'SHOT') {
-          const conceding = b.toX > 52 ? 'AWAY' : 'HOME'
-          if (b.willScore) {
-            // 골망에 꽂힌다. 공은 골 안에 그대로 두고 잠시 멈춘다
-            b.mode = 'LOOSE'
-            b.holder = null
-            b.lift = 0
-            this.flash('GOAL', b.x, b.y)
-            // 75초짜리 경기다. 세리머니가 길면 플레이 시간을 잡아먹는다
-            this.celebration = {
-              side: conceding === 'AWAY' ? 'HOME' : 'AWAY',
-              life: 1.5,
-              x: b.x,
-              y: b.y,
-            }
-          } else {
-            const gk = this.players.find((p) => p.side === conceding && p.pos === 'GK')
-            const missedWide = Math.abs(b.toY - GOAL_MID) > GOAL_HALF
-            if (missedWide) {
-              // 골대 밖으로 빗나갔다. 공은 골라인을 넘어갔고 골킥이다.
-              // 여기서 골키퍼 발밑으로 공을 옮겨버리면 공이 십수 미터를
-              // 순간이동하고, 골킥이라는 장면 자체가 사라진다
-              this.beginRestart('GOAL_KICK', conceding, 0, 0)
-            } else {
-              // 골키퍼가 막았다. 쳐낸 공을 직접 줍게 둔다 — 여기서 바로
-              // 발밑에 붙이면 막는 동작 없이 공만 순간이동한다
-              this.flash('SAVE', b.x, b.y)
-              b.mode = 'LOOSE'
-              b.holder = null
-              b.targetId = null
-              b.lift = 0
-              if (gk) {
-                gk.tx = b.x
-                gk.ty = b.y
-                gk.stx = b.x
-                gk.sty = b.y
-              }
-            }
-          }
-        } else if (!b.targetId) {
-          // 빗나간 패스 — 주인 없는 공. 제일 먼저 닿는 쪽이 줍는다
-          b.mode = 'LOOSE'
-        } else {
-          // 패스 도착. 더 가까운 상대가 있으면 가로챈다
-          const receiver = this.byId(b.targetId)
-          const thief = this.nearestOf(receiver?.side === 'HOME' ? 'AWAY' : 'HOME', b)
-          if (receiver && (!thief || dist(thief, b) > dist(receiver, b) - 0.5)) {
-            this.giveTo(receiver)
-          } else if (thief) {
-            this.flash('TACKLE', b.x, b.y)
-            this.giveTo(thief)
-          } else {
-            b.mode = 'LOOSE'
-          }
-        }
-      }
-      return
-    }
-
-    // 흘러나온 공 — 제일 가까운 사람이 몸을 던져 줍는다
-    let best: VPlayer | undefined
-    let bd = Infinity
-    for (const p of this.players) {
-      const d = dist(p, b)
-      if (d < bd) {
-        bd = d
-        best = p
-      }
-    }
-    if (best && bd < 2.6) this.giveTo(best)
+    // 골이 먼저다. 라인을 넘는 순간 판정하지 않으면 공이 관중석까지
+    // 들어갔다 되돌아 나온다
+    if (b.mode === 'SHOT' && this.resolveShot()) return
+    if (this.checkOut()) return
+    this.tryCollect()
   }
 
   /**
@@ -1275,10 +1683,16 @@ export class VisualMatch {
       return
     }
 
-    // 공이 밖으로 나갔다. 규칙대로 다시 넣을 때까지 경기는 멈춰 있다
+    // 공이 밖으로 나갔다. 규칙대로 다시 넣을 때까지 경기는 멈춰 있다.
+    //
+    // 다만 **골 예약의 시계는 데드볼 중에도 간다.** 여기서 멈추면 점수판이
+    // 오른 뒤 골 장면까지 몇 초가 더 걸려 무슨 일이 일어난 건지 알 수 없다
     if (this.restart) {
-      this.updateRestart(state, step)
-      return
+      this.tryPendingShot(step)
+      if (this.restart) {
+        this.updateRestart(state, step)
+        return
+      }
     }
 
     this.setTargets(state)

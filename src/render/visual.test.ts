@@ -31,7 +31,18 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
     state: MatchState
     holder: string | null
     mode: string
-    ball: { x: number; y: number; willScore: boolean; toX: number; toY: number; kick: string }
+    ball: {
+      x: number
+      y: number
+      /** 지면에서의 높이(미터) */
+      z: number
+      /** 속력(초당 미터) */
+      v: number
+      willScore: boolean
+      toX: number
+      toY: number
+      kick: string
+    }
     celebrating: boolean
     restart: { kind: string; side: string; x: number; y: number } | null
     scoredBy: 'HOME' | 'AWAY' | null
@@ -53,6 +64,8 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
       ball: {
         x: vm.ball.x,
         y: vm.ball.y,
+        z: vm.ball.z,
+        v: Math.hypot(vm.ball.vx, vm.ball.vy),
         willScore: vm.ball.willScore,
         toX: vm.ball.toX,
         toY: vm.ball.toY,
@@ -370,9 +383,19 @@ describe('선수 움직임 — 출시 기준', () => {
 describe('골 — 반드시 골대 안으로 들어간다', () => {
   const { frames } = watch()
 
-  /** 시뮬이 득점으로 판정한 슛만 모은다 */
-  const scoringShots = frames.filter(
-    (f, i) => f.mode === 'SHOT' && f.ball.willScore && (i === 0 || frames[i - 1].mode !== 'SHOT'),
+  /**
+   * 시뮬이 득점으로 판정한 슛만 모은다.
+   *
+   * 여섯 판을 합친다. 한 판에 골은 한두 번뿐이고, 그중 일부는 슛 없이
+   * 골망 장면으로 바로 넘어간다 — 시뮬이 골이라고 알린 순간 그 팀 선수가
+   * 아무도 골대 근처에 없으면 억지 슛(실측 최대 81m)을 만드는 대신
+   * 중계처럼 골망으로 컷하기 때문이다. 한 판만 보면 그 판이 통째로
+   * 표본에서 빠져 "득점이 없다"가 된다.
+   */
+  const scoringShots = MULTI.flatMap((fs) =>
+    fs.filter(
+      (f, i) => f.mode === 'SHOT' && f.ball.willScore && (i === 0 || fs[i - 1].mode !== 'SHOT'),
+    ),
   )
 
   it('경기 중 득점이 나온다', () => {
@@ -393,8 +416,10 @@ describe('골 — 반드시 골대 안으로 들어간다', () => {
   })
 
   it('막히는 슛은 골대 안으로 안 들어간다', () => {
-    const saved = frames.filter(
-      (f, i) => f.mode === 'SHOT' && !f.ball.willScore && (i === 0 || frames[i - 1].mode !== 'SHOT'),
+    const saved = MULTI.flatMap((fs) =>
+      fs.filter(
+        (f, i) => f.mode === 'SHOT' && !f.ball.willScore && (i === 0 || fs[i - 1].mode !== 'SHOT'),
+      ),
     )
     expect(saved.length).toBeGreaterThan(0)
     // 골키퍼 정면이거나 골대 옆으로 빗나간다
@@ -406,12 +431,14 @@ describe('골 — 반드시 골대 안으로 들어간다', () => {
   it('공이 실제로 골망에 도달한다', () => {
     // 슛이 중간에 사라지지 않고 골라인까지 날아가는지
     let reached = false
-    for (let i = 1; i < frames.length; i++) {
-      if (frames[i - 1].mode === 'SHOT' && frames[i - 1].ball.willScore && frames[i].celebrating) {
-        const bx = frames[i].ball.x
-        expect(bx <= 1.5 || bx >= PITCH_W - 1.5, `공이 x=${bx.toFixed(1)} 에 멈췄다`).toBe(true)
-        expect(Math.abs(frames[i].ball.y - GOAL_MID)).toBeLessThan(GOAL_HALF + 0.5)
-        reached = true
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        if (fs[i - 1].mode === 'SHOT' && fs[i - 1].ball.willScore && fs[i].celebrating) {
+          const bx = fs[i].ball.x
+          expect(bx <= 1.5 || bx >= PITCH_W - 1.5, `공이 x=${bx.toFixed(1)} 에 멈췄다`).toBe(true)
+          expect(Math.abs(fs[i].ball.y - GOAL_MID)).toBeLessThan(GOAL_HALF + 0.5)
+          reached = true
+        }
       }
     }
     expect(reached, '골망에 도달한 슛이 없다').toBe(true)
@@ -593,8 +620,19 @@ describe('공격할 때는 팀 전체가 올라간다', () => {
    * 흔들려, 경계에서 판정이 뒤집힌다.
    */
   const flat = MULTI.flat()
-  const ours = flat.filter((f) => f.mode === 'HELD' && f.holder?.startsWith('H') && !f.celebrating)
-  const theirs = flat.filter((f) => f.mode === 'HELD' && f.holder?.startsWith('A') && !f.celebrating)
+  /**
+   * 골키퍼가 공을 잡고 있는 순간은 뺀다.
+   *
+   * 여기서 재려는 것은 "소유가 바뀌면 경기가 앞뒤로 움직이는가"다.
+   * 골키퍼가 공을 든 순간은 그 팀 소유 중 가장 깊은 자리이고, 상대
+   * 골키퍼가 들면 반대로 가장 높은 자리다. 두 상황이 양쪽 평균을 서로
+   * 반대 방향으로 끌어당겨 실제 차이를 지운다 — 실측으로 골키퍼 소유가
+   * 전체의 10%였고, 그것만 빼면 공 위치 차이가 1.5m 에서 11.4m 로 커졌다.
+   */
+  const open = (f: (typeof flat)[number]) =>
+    f.mode === 'HELD' && !!f.holder && !f.celebrating && f.holder !== 'H1' && f.holder !== 'A1'
+  const ours = flat.filter((f) => open(f) && f.holder!.startsWith('H'))
+  const theirs = flat.filter((f) => open(f) && f.holder!.startsWith('A'))
 
   /**
    * 공을 기준으로 한 선수의 앞뒤 위치.
@@ -768,13 +806,227 @@ describe('킥오프 — 축구 규칙대로', () => {
   })
 
   it('재개 뒤 경기가 이어진다', () => {
-    // 재개하고 멈춰 있으면 안 된다
+    // 재개하고 멈춰 있으면 안 된다.
+    //
+    // 앞뒤(x)로만 재면 안 된다. 킥오프는 뒤로 빼거나 옆으로 여는 것이
+    // 정석이라 공이 3초 동안 x 는 그대로인 채 좌우로만 오갈 수 있다.
+    // 실제로 재려는 것은 "공이 굴러다니고 있는가"이므로 이동 거리를 잰다
     for (const { i } of restarts) {
-      const after = frames.slice(i + 1, i + 30)
-      if (after.length < 10) continue
-      const moved = after.some((f) => Math.abs(f.ball.x - PITCH_W / 2) > 4)
-      expect(moved, '재개 후 공이 움직이지 않는다').toBe(true)
+      const after = frames.slice(i, i + 30)
+      if (after.length < 11) continue
+      let path = 0
+      for (let k = 1; k < after.length; k++) {
+        path += Math.hypot(after[k].ball.x - after[k - 1].ball.x, after[k].ball.y - after[k - 1].ball.y)
+      }
+      // 3초. 걸음 속도(초속 1.4m)로만 굴러도 4미터는 넘는다
+      expect(path, `재개 후 3초 동안 공이 ${path.toFixed(1)}m 밖에 안 움직였다`).toBeGreaterThan(10)
     }
+  })
+})
+
+describe('공의 물리 — 차인 공은 단번에 서지 않는다', () => {
+  it('살아 있는 공은 한순간에 서지 않는다', () => {
+    // 이 게임의 공은 목표 지점까지 등속으로 가다 **도착하는 순간 속도가
+    // 0이 됐다.** 차인 공이 허공에서 서는 것은 축구가 아니다. 이제 공이
+    // 서는 것은 누가 잡았을 때(HELD)와 규칙상 죽었을 때(재개)뿐이다.
+    //
+    // 잔디 마찰로 줄어드는 속도는 0.1초에 초속 20미터 기준 0.25m/s,
+    // 한 번 튀어도 30%를 넘지 않는다. 절반 아래로 떨어지면 물리가 아니다
+    let checked = 0
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        const a = fs[i - 1]
+        const b = fs[i]
+        if (a.mode === 'HELD' || b.mode === 'HELD') continue
+        if (a.restart || b.restart || a.celebrating || b.celebrating) continue
+        // 아무도 안 건드린 구간만 본다. 골키퍼가 쳐내면 공이 크게 느려지는
+        // 것이 당연하고, 그것은 물리가 아니라 사람이 한 일이다
+        if (a.mode !== b.mode) continue
+        if (a.ball.toX !== b.ball.toX || a.ball.toY !== b.ball.toY) continue
+        if (a.ball.v < 5) continue
+        checked += 1
+        expect(
+          b.ball.v,
+          `초속 ${a.ball.v.toFixed(1)}m 로 가던 공이 0.1초 만에 ${b.ball.v.toFixed(1)}m 가 됐다`,
+        ).toBeGreaterThan(a.ball.v * 0.5)
+      }
+    }
+    expect(checked, '표본이 없다').toBeGreaterThan(100)
+  })
+
+  it('굴러가는 공은 마찰로 느려진다', () => {
+    // 마찰이 없으면 한 번 찬 공이 영원히 굴러간다.
+    // 같은 킥(목표 지점이 같은) 안에서 땅에 붙어 굴러가는 구간만 본다
+    let slowing = 0
+    let speeding = 0
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        const a = fs[i - 1]
+        const b = fs[i]
+        if (a.mode !== 'PASS' || b.mode !== 'PASS') continue
+        if (a.ball.toX !== b.ball.toX || a.ball.toY !== b.ball.toY) continue
+        if (a.ball.z > 0.02 || b.ball.z > 0.02 || a.ball.v < 1) continue
+        if (b.ball.v < a.ball.v) slowing += 1
+        else speeding += 1
+      }
+    }
+    expect(slowing, '굴러가는 공 표본').toBeGreaterThan(50)
+    expect(speeding, '저절로 빨라진 공').toBe(0)
+  })
+
+  it('뜬 공이 있고, 떨어져서 튄다', () => {
+    // 롱패스와 슛은 공중을 지난다. 전부 땅볼이면 축구로 안 보인다
+    let maxZ = 0
+    let bounces = 0
+    for (const fs of MULTI) {
+      let landed = false
+      for (let i = 1; i < fs.length; i++) {
+        maxZ = Math.max(maxZ, fs[i].ball.z)
+        // 땅에 닿았다가 다시 뜨면 튄 것이다
+        if (fs[i - 1].ball.z > 0.05 && fs[i].ball.z <= 0.05) landed = true
+        else if (landed && fs[i].ball.z > 0.05 && fs[i].mode !== 'HELD') {
+          bounces += 1
+          landed = false
+        }
+        if (fs[i].mode === 'HELD') landed = false
+      }
+    }
+    expect(maxZ, `가장 높이 뜬 높이 ${maxZ.toFixed(1)}m`).toBeGreaterThan(1)
+    // 크로스바가 2.44m 다. 관중석으로 날아가면 안 된다
+    expect(maxZ).toBeLessThan(12)
+    expect(bounces, `여섯 판 동안 공이 튄 횟수 ${bounces}`).toBeGreaterThan(0)
+  })
+})
+
+describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
+  const GOAL_OF = (id: string) => (id.startsWith('H') ? PITCH_W : 0)
+
+  /** 킥이 시작된 순간의 (찬 선수, 골대까지 거리, 종류) */
+  const kicks: Array<{ side: string; goalDist: number; kind: 'PASS' | 'SHOT' }> = []
+  for (const fs of MULTI) {
+    for (let i = 1; i < fs.length; i++) {
+      const prev = fs[i - 1]
+      const now = fs[i]
+      if (prev.mode !== 'HELD' || !prev.holder) continue
+      const isShot = now.mode === 'SHOT'
+      const isPass = now.mode === 'PASS' && now.ball.kick === 'PASS'
+      if (!isShot && !isPass) continue
+      const p = prev.players.find((x) => x.id === prev.holder)!
+      // 골키퍼의 골킥·펀트는 공격 판단이 아니다
+      if (prev.holder === 'H1' || prev.holder === 'A1') continue
+      const gx = GOAL_OF(prev.holder)
+      kicks.push({
+        side: prev.holder[0],
+        goalDist: Math.hypot(gx - p.x, PITCH_H / 2 - p.y),
+        kind: isShot ? 'SHOT' : 'PASS',
+      })
+    }
+  }
+
+  it('표본이 충분하다', () => {
+    expect(kicks.length).toBeGreaterThan(150)
+  })
+
+  it('박스 안에서는 슛이 패스보다 많다', () => {
+    // 실제 축구다. 골라인 16.5미터 안에서 각이 열려 있으면 대부분 슛이다.
+    // 고치기 전에는 박스 안에서 패스 26회 대 슛 7회였다
+    const box = kicks.filter((k) => k.goalDist <= 16.5)
+    expect(box.length, '박스 안 표본').toBeGreaterThan(5)
+    const shots = box.filter((k) => k.kind === 'SHOT').length
+    expect(shots, `박스 안 슛 ${shots} vs 패스 ${box.length - shots}`).toBeGreaterThan(
+      box.length - shots,
+    )
+  })
+
+  it('먼 데서는 패스가 슛보다 많다', () => {
+    // 25미터 밖에서 매번 때리면 그것도 축구가 아니다
+    const far = kicks.filter((k) => k.goalDist > 25)
+    expect(far.length).toBeGreaterThan(20)
+    const shots = far.filter((k) => k.kind === 'SHOT').length
+    expect(shots).toBeLessThan(far.length - shots)
+  })
+
+  it('가까울수록 슛 비율이 높다', () => {
+    const rate = (lo: number, hi: number) => {
+      const g = kicks.filter((k) => k.goalDist > lo && k.goalDist <= hi)
+      return g.length ? g.filter((k) => k.kind === 'SHOT').length / g.length : 0
+    }
+    expect(rate(0, 16.5)).toBeGreaterThan(rate(16.5, 25))
+    expect(rate(16.5, 25)).toBeGreaterThan(rate(25, 40))
+  })
+
+  it('우리 팀과 상대가 같은 기준으로 쏜다', () => {
+    // 사용자 요구다 — "컴퓨터든 우리팀이든". 한쪽만 슛을 쏘면 안 된다
+    for (const side of ['H', 'A']) {
+      const box = kicks.filter((k) => k.side === side && k.goalDist <= 20)
+      const shots = box.filter((k) => k.kind === 'SHOT').length
+      expect(shots, `${side} 팀의 골대 20m 안 슛 ${shots}회`).toBeGreaterThan(0)
+    }
+  })
+
+  it('자기 진영에서 상대 골대로 때리지 않는다', () => {
+    // 고치기 전에는 슛 거리 중앙값이 47미터, 최대가 89미터였다.
+    // 그건 슛이 아니라 걷어내기다
+    const shots = kicks.filter((k) => k.kind === 'SHOT').map((k) => k.goalDist)
+    shots.sort((a, b) => a - b)
+    expect(shots.length).toBeGreaterThan(8)
+    const median = shots[Math.floor(shots.length / 2)]
+    expect(median, `슛 거리 중앙값 ${median.toFixed(1)}m`).toBeLessThan(25)
+    expect(shots[shots.length - 1], `가장 먼 슛 ${shots[shots.length - 1].toFixed(1)}m`)
+      .toBeLessThan(40)
+  })
+})
+
+describe('골키퍼 — 공이 가까우면 골문으로 물러난다', () => {
+  /** 각 프레임에서 두 골키퍼의 (골라인까지 거리, 공까지 거리) */
+  const gk: Array<{ out: number; ballDist: number }> = []
+  for (const fs of MULTI) {
+    for (const f of fs) {
+      if (f.celebrating) continue
+      for (const id of ['H1', 'A1']) {
+        const p = f.players.find((x) => x.id === id)!
+        const own = id === 'H1' ? 0 : PITCH_W
+        gk.push({
+          out: Math.abs(p.x - own),
+          ballDist: Math.hypot(f.ball.x - own, f.ball.y - PITCH_H / 2),
+        })
+      }
+    }
+  }
+
+  it('공이 가까울수록 골라인에 붙는다', () => {
+    /**
+     * 실제 골키퍼는 공이 멀면 페널티 지역 앞까지 나와 있고(스위퍼 키퍼),
+     * 가까워지면 물러나 골문을 덮는다.
+     *
+     * 고치기 전에는 이 관계가 **뒤집혀 있었다.** 공이 가까울수록 앞으로
+     * 나오게 돼 있어서 상대가 박스 안까지 들어온 순간 골키퍼가 골라인
+     * 11미터 앞에 나가 골문을 비웠다
+     */
+    const near = gk.filter((g) => g.ballDist < 20)
+    const far = gk.filter((g) => g.ballDist > 60)
+    expect(near.length).toBeGreaterThan(50)
+    expect(far.length).toBeGreaterThan(50)
+    const mean = (a: typeof gk) => a.reduce((s, g) => s + g.out, 0) / a.length
+    expect(
+      mean(near),
+      `공이 20m 안일 때 ${mean(near).toFixed(1)}m vs 60m 밖일 때 ${mean(far).toFixed(1)}m`,
+    ).toBeLessThan(mean(far))
+  })
+
+  it('상대가 박스로 들어오면 골문 앞을 지킨다', () => {
+    // 공이 페널티 지역(16.5m) 안에 있는데 골키퍼가 그보다 앞에 나가
+    // 있으면 골문이 비어 있다는 뜻이다
+    const inBox = gk.filter((g) => g.ballDist <= 16.5)
+    expect(inBox.length).toBeGreaterThan(20)
+    const worst = Math.max(...inBox.map((g) => g.out))
+    expect(worst, `상대가 박스에 있을 때 골키퍼가 최대 ${worst.toFixed(1)}m 나갔다`)
+      .toBeLessThan(8)
+  })
+
+  it('페널티 지역을 넘어 나가지 않는다', () => {
+    const worst = Math.max(...gk.map((g) => g.out))
+    expect(worst, `골라인에서 최대 ${worst.toFixed(1)}m`).toBeLessThan(16.5)
   })
 })
 

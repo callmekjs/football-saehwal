@@ -208,19 +208,20 @@ export function drawPitch(
     drawPlayer(ctx, p, b.holder === p.id, r, X, Y)
   }
 
-  // 공. 날아가는 동안은 그림자를 남기고 조금 커진다
-  const br = Math.max(3, r * 0.42) * (1 + b.lift * 0.35)
-  if (b.lift > 0.05) {
+  // 공. 떠 있는 동안은 땅에 그림자를 남기고 조금 커진다.
+  // b.z 는 실제 높이(미터)다 — 뜬 공은 떨어져 튄다
+  const br = Math.max(3, r * 0.42) * (1 + Math.min(b.z, 6) * 0.09)
+  if (b.z > 0.1) {
     ctx.save()
     ctx.globalAlpha = 0.25
     ctx.fillStyle = '#000'
     ctx.beginPath()
-    ctx.ellipse(X(b.x), Y(b.y) + br * 1.4, br * 0.9, br * 0.5, 0, 0, Math.PI * 2)
+    ctx.ellipse(X(b.x), Y(b.y), br * 0.9, br * 0.5, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
   }
   ctx.beginPath()
-  ctx.arc(X(b.x), Y(b.y) - b.lift * r * 0.8, br, 0, Math.PI * 2)
+  ctx.arc(X(b.x), Y(b.y) - Y(Math.min(b.z, 8)) * 0.75, br, 0, Math.PI * 2)
   ctx.fillStyle = COLORS.ball
   ctx.fill()
   ctx.strokeStyle = 'rgba(0,0,0,0.35)'
