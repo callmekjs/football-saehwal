@@ -41,6 +41,21 @@ export interface Player {
 }
 
 /** 경기 중 변하는 선수 상태 */
+/**
+ * 선수 한 명에게 내리는 개별 지시.
+ *
+ * 레버는 팀 전체에 걸리는 전역 설정이라 "지금 저 선수 하나에게 무엇을
+ * 시킨다"가 성립하지 않았다. 감독이 판 위의 특정한 한 점을 고르는 조작이
+ * 없으면 조작 개수를 아무리 늘려도 같은 불만이 남는다.
+ *
+ * 셋은 **서로 다른 종류의 통로**를 쓴다. 같은 종류를 다섯 개 만드는 것보다
+ * 다른 종류를 세 개 만드는 것이 실제로 판을 넓힌다.
+ * - `HOLD` 는 계수 (세트피스 실점에 곱해진다)
+ * - `BACK_OFF` 는 이산 집합 (반칙·퇴장 후보에서 빠진다)
+ * - `CONSERVE` 는 적분 (체력이 덜 닳아 부상 임계를 피한다)
+ */
+export type PlayerOrder = 'NONE' | 'HOLD' | 'BACK_OFF' | 'CONSERVE'
+
 export interface PlayerState {
   id: string
   onPitch: boolean
@@ -49,6 +64,14 @@ export interface PlayerState {
   booked: boolean
   /** 퇴장이나 부상으로 이탈 */
   out: boolean
+  /**
+   * 감독이 이 선수에게 내린 개별 지시.
+   *
+   * `NONE` 일 때 모든 계수가 정확히 1.0이어야 한다. 지시가 하나도 없는
+   * 경기는 이 칸이 생기기 전과 **비트 단위로 같은 결과**를 내야 하고,
+   * 그래야 저장된 시드와 밸런스 기준선이 살아남는다.
+   */
+  order: PlayerOrder
 }
 
 export interface Objective {
@@ -148,3 +171,4 @@ export type Decision =
   | { tick: number; type: 'LINE' | 'PRESS' | 'WIDTH'; value: Level }
   | { tick: number; type: 'SUB'; out: string; in: string }
   | { tick: number; type: 'FORMATION'; value: FormationId }
+  | { tick: number; type: 'ORDER'; target: string; order: PlayerOrder }

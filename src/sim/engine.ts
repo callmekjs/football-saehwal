@@ -13,7 +13,14 @@ import {
   onPitchCount,
 } from './squad'
 import { EVENTS, TOTAL_TICKS } from './constants'
-import type { Decision, MatchState, Mentality, PlayerState, Problem } from './types'
+import type {
+  Decision,
+  MatchState,
+  Mentality,
+  PlayerOrder,
+  PlayerState,
+  Problem,
+} from './types'
 
 /**
  * 상대 성향을 스코어에서 도출한다.
@@ -69,10 +76,49 @@ export function checkSub(state: MatchState, out: string, inId: string): string |
 
 function applySub(players: PlayerState[], out: string, inId: string): PlayerState[] {
   return players.map((s) => {
-    if (s.id === out) return { ...s, onPitch: false }
-    if (s.id === inId) return { ...s, onPitch: true }
+    // 나간 선수의 지시는 함께 걷힌다. 들어온 선수는 지시 없이 시작한다 —
+    // 안 그러면 벤치에 앉아 있던 선수에게 유령 지시가 붙어 들어온다
+    if (s.id === out) return { ...s, onPitch: false, order: 'NONE' as const }
+    if (s.id === inId) return { ...s, onPitch: true, order: 'NONE' as const }
     return s
   })
+}
+
+/**
+ * 개별 지시를 건다.
+ *
+ * 지시는 동시에 세 명까지다. 상한이 없으면 지시는 그냥 곱셈이고 곱셈에는
+ * 순서가 없다 — 킥오프에 전부 걸어놓고 끝이라 조작이 아니라 세팅이 된다.
+ * 상한이 걸리는 순간 새 지시는 반드시 기존 지시 하나를 푸는 **교환**이 되고,
+ * 교환에는 순서가 실재한다.
+ */
+export const MAX_ORDERS = 3
+
+/** `HOLD` 는 골문 앞에 남는 지시라 수비 자원만 받는다. 그리고 두 명까지다 */
+export const MAX_HOLD = 2
+
+export function checkOrder(
+  state: MatchState,
+  target: string,
+  order: PlayerOrder,
+): string | null {
+  const p = state.players.find((s) => s.id === target)
+  if (!p) return `${target} 은 명단에 없다`
+  if (!p.onPitch || p.out) return '피치 위 선수가 아니다'
+  if (p.order === order) return null
+  if (order === 'NONE') return null
+
+  const active = state.players.filter((s) => s.onPitch && !s.out && s.order !== 'NONE')
+  if (p.order === 'NONE' && active.length >= MAX_ORDERS) {
+    return `지시는 ${MAX_ORDERS}명까지다. 하나를 풀어라`
+  }
+  if (order === 'HOLD') {
+    const pos = getPlayer(target).pos
+    if (pos !== 'DF' && pos !== 'MF') return '골문 앞은 수비수와 미드필더만'
+    const holding = active.filter((s) => s.order === 'HOLD' && s.id !== target)
+    if (holding.length >= MAX_HOLD) return `골문 앞은 ${MAX_HOLD}명까지다`
+  }
+  return null
 }
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
@@ -257,7 +303,17 @@ export function simulate(
           }
         }
       } else if (d.type === 'FORMATION') state = { ...state, formation: d.value }
-      else if (d.type === 'LINE') state.tactics.line = d.value
+      else if (d.type === 'ORDER') {
+        // 재현에서도 상한을 지킨다. 통과한 지시만 걸려야 화면과 결과가 같아진다
+        if (!checkOrder(state, d.target, d.order)) {
+          state = {
+            ...state,
+            players: state.players.map((s) =>
+              s.id === d.target ? { ...s, order: d.order } : s,
+            ),
+          }
+        }
+      } else if (d.type === 'LINE') state.tactics.line = d.value
       else if (d.type === 'PRESS') state.tactics.press = d.value
       else state.tactics.width = d.value
     }

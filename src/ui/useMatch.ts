@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRng, type Rng } from '../sim/rng'
-import { createState, tick, checkSub } from '../sim/engine'
+import { createState, tick, checkSub, checkOrder } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
-import type { Decision, Level, MatchState, Problem } from '../sim/types'
+import type { Decision, Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const TICK_MS = 100
 
@@ -135,6 +135,32 @@ export function useMatch(problem: Problem) {
     [record],
   )
 
+  /**
+   * 선수 한 명에게 지시를 건다.
+   *
+   * 교체와 달리 **즉시** 반영된다. 교체는 선수가 실제로 걸어 나가고 들어와야
+   * 하지만 지시는 벤치에서 소리치는 것이다. 6초를 기다릴 이유가 없고,
+   * 75초짜리 경기에서 그 지연은 지시를 쓸모없게 만든다.
+   */
+  const setOrder = useCallback(
+    (target: string, order: PlayerOrder): string | null => {
+      const cur = stateRef.current
+      const reason = checkOrder(cur, target, order)
+      if (reason) return reason
+      const before = cur.players.find((s) => s.id === target)
+      if (before?.order === order) return null
+      record({ type: 'ORDER', target, order } as Omit<Decision, 'tick'>)
+      const next: MatchState = {
+        ...cur,
+        players: cur.players.map((s) => (s.id === target ? { ...s, order } : s)),
+      }
+      stateRef.current = next
+      setState(next)
+      return null
+    },
+    [record],
+  )
+
   return {
     state,
     phase,
@@ -143,6 +169,7 @@ export function useMatch(problem: Problem) {
     setLever,
     setFormation,
     substitute,
+    setOrder,
     decisions: decisionsRef,
   }
 }

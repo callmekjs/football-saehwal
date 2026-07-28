@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Pitch } from './Pitch'
 import { FORMATION_IDS, getFormation, shapeOf, type FormationId } from '../sim/formations'
 import { BENCH, getPlayer } from '../sim/squad'
-import { judge } from '../sim/engine'
+import { judge, MAX_ORDERS } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import { useMatch } from './useMatch'
-import type { Level, MatchState, Problem } from '../sim/types'
+import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
   LINE: ['낮음', '보통', '높음'],
@@ -202,6 +202,151 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
   )
 }
 
+const ORDER_LABELS: Record<Exclude<PlayerOrder, 'NONE'>, { name: string; hint: string }> = {
+  HOLD: { name: '골문 앞', hint: '공이 반대편에 있어도 골문 앞에 남는다' },
+  BACK_OFF: { name: '물러서라', hint: '달려들지 않고 자리를 지킨다. 경고·퇴장을 피한다' },
+  CONSERVE: { name: '아껴 뛰어라', hint: '전력으로 안 뛴다. 체력이 덜 닳는다' },
+}
+
+/** 지시가 걸린 선수 칩에 붙는 짧은 꼬리표 */
+const ORDER_TAG: Record<Exclude<PlayerOrder, 'NONE'>, string> = {
+  HOLD: '골문',
+  BACK_OFF: '물러',
+  CONSERVE: '아껴',
+}
+
+/**
+ * 손볼 이유가 있는 선수를 칩에서 알려준다.
+ *
+ * 실시간 화면에서 진짜 병목은 조작 비용이 아니라 **판을 읽는 비용**이다.
+ * 75초 동안 열한 명의 체력과 경고를 눈으로 훑을 시간이 없다. 급소를 칩이
+ * 스스로 말하면 읽는 비용이 0이 되고, 그래도 실행은 여전히 두 번 탭이라
+ * 손가락을 내리는 사이 뜻이 바뀌는 오조작이 원리적으로 불가능하다.
+ */
+function alertOf(s: MatchState['players'][number], press: Level): string | null {
+  if (s.stamina < 25) return '부상 위험'
+  if (s.booked && press === 2) return '퇴장 위험'
+  if (s.stamina < 35) return '지쳤다'
+  if (s.booked) return '경고'
+  return null
+}
+
+/**
+ * 선수 지시 — 이 시뮬레이션에서 유일하게 **판 위의 한 점**을 고르는 조작.
+ *
+ * 레버와 포메이션은 팀 전체에 걸린다. 그것만으로는 "지금 저 선수 하나에게
+ * 무엇을 시킨다"가 75초 동안 한 번도 성립하지 않는다.
+ *
+ * 문법은 하나다 — **선수 칩 1탭 → 행동 칩 1탭.** 같은 자리에서 칩만 바뀌므로
+ * 손가락이 60px 움직이고, 조작하는 2초 동안 경기장이 통째로 시야에 남는다.
+ * 모달이나 하단 시트를 쓰면 지시하느라 경기를 못 보는데, 실시간 화면에서
+ * 그건 조작이 아니라 방해다.
+ *
+ * 경기장 위를 탭하게 하지 않는다. 폰에서 선수 원의 반지름은 7픽셀이라
+ * 손가락 표적이 되지 못한다.
+ */
+function Orders({
+  state,
+  onOrder,
+}: {
+  state: MatchState
+  onOrder: (target: string, order: PlayerOrder) => string | null
+}) {
+  const [picked, setPicked] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!note) return
+    const t = setTimeout(() => setNote(null), 2200)
+    return () => clearTimeout(t)
+  }, [note])
+
+  // 지시 모드에 갇힌 채 경기를 놓치는 실패를 막는다. 3초 무입력이면 되돌아간다
+  useEffect(() => {
+    if (!picked) return
+    const t = setTimeout(() => setPicked(null), 3000)
+    return () => clearTimeout(t)
+  }, [picked])
+
+  const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+  const active = onPitch.filter((s) => s.order !== 'NONE')
+  const cur = picked ? onPitch.find((s) => s.id === picked) : null
+
+  return (
+    <section className="panel">
+      <h2>
+        선수 지시 {active.length}/{MAX_ORDERS}
+        {cur ? (
+          <span style={{ color: 'var(--accent)' }}> — {getPlayer(cur.id).num}번에게 무엇을</span>
+        ) : (
+          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 선수부터 고르세요</span>
+        )}
+      </h2>
+
+      <div style={{ padding: 10, display: 'grid', gap: 8 }}>
+        {cur ? (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {(Object.keys(ORDER_LABELS) as Array<Exclude<PlayerOrder, 'NONE'>>).map((o) => (
+              <button
+                key={o}
+                className="chip"
+                aria-pressed={cur.order === o}
+                title={ORDER_LABELS[o].hint}
+                onClick={() => {
+                  const err = onOrder(cur.id, cur.order === o ? 'NONE' : o)
+                  setNote(
+                    err ??
+                      (cur.order === o
+                        ? `${getPlayer(cur.id).num}번 지시 해제`
+                        : `${getPlayer(cur.id).num}번 — ${ORDER_LABELS[o].name}`),
+                  )
+                  setPicked(null)
+                }}
+                style={{ flex: '1 1 96px', textAlign: 'center', display: 'grid', gap: 1 }}
+              >
+                <span style={{ fontSize: 14 }}>{ORDER_LABELS[o].name}</span>
+                <span style={{ fontSize: 10, color: 'var(--dim)' }}>
+                  {cur.order === o ? '누르면 해제' : ''}
+                </span>
+              </button>
+            ))}
+            <button
+              className="chip"
+              onClick={() => setPicked(null)}
+              style={{ minWidth: 54, textAlign: 'center' }}
+            >
+              취소
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {onPitch.map((s) => {
+              const p = getPlayer(s.id)
+              const alert = alertOf(s, state.tactics.press)
+              return (
+                <button
+                  key={s.id}
+                  className="chip"
+                  aria-pressed={s.order !== 'NONE'}
+                  onClick={() => setPicked(s.id)}
+                  style={{ minWidth: 54, textAlign: 'center', display: 'grid', gap: 1 }}
+                >
+                  <span style={{ fontSize: 15 }}>{p.num}</span>
+                  <span style={{ fontSize: 10, color: alert ? 'var(--warn)' : undefined }}>
+                    {s.order !== 'NONE' ? ORDER_TAG[s.order] : (alert ?? p.pos)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {note && <span style={{ fontSize: 12, color: 'var(--warn)' }}>{note}</span>}
+      </div>
+    </section>
+  )
+}
+
 function Bench({
   state,
   onSub,
@@ -304,7 +449,8 @@ function Bench({
 }
 
 export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: number }) {
-  const { state, phase, start, reset, setLever, setFormation, substitute } = useMatch(problem)
+  const { state, phase, start, reset, setLever, setFormation, substitute, setOrder } =
+    useMatch(problem)
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
@@ -379,6 +525,12 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
               킥오프
             </button>
           )}
+          {/*
+            지시가 교체보다 위다. 지시는 즉시 걸리고 되돌릴 수 있어 한 판에
+            여러 번 쓰지만, 교체는 세 장뿐이고 회수되지 않아 드물게 쓴다.
+            자주 쓰는 것이 손가락에 가까워야 한다.
+          */}
+          {phase === 'RUNNING' && <Orders state={state} onOrder={setOrder} />}
           {phase === 'RUNNING' && <Bench state={state} onSub={substitute} />}
           {phase === 'DONE' && (
             <section className="panel">

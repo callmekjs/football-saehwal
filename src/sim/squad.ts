@@ -85,6 +85,7 @@ export function initialPlayers(problem: Problem): PlayerState[] {
     stamina: problem.staminaOverrides[p.id] ?? p.stamina0,
     booked: problem.booked.includes(p.id),
     out: problem.unavailable.includes(p.id),
+    order: 'NONE',
   }))
 }
 
