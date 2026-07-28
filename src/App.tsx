@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import raw from './data/problems.json' with { type: 'json' }
 import { Backdrop } from './ui/Backdrop'
-import { MatchScreen } from './ui/MatchScreen'
+import { MatchScreen, addedTimeOf } from './ui/MatchScreen'
 import type { FormationId } from './sim/formations'
 import type { Level, Objective, Problem } from './sim/types'
 
@@ -12,7 +12,25 @@ interface Entry {
   summary: string
 }
 
-const KICKOFF: Record<string, number> = { p01: 70, p02: 70, p04: 80 }
+/**
+ * 국면이 시작하는 후반 분.
+ *
+ * 축구 후반은 90분에 끝나지 않는다. 90분을 채우고 주심이 정한 추가시간을
+ * 더 뛰고 끝난다. 전에는 70분에 시작해 85분에 끝났는데, 85분은 축구에서
+ * 아무 의미가 없는 시각이라 "왜 여기서 끝나지?"가 된다.
+ *
+ * 이 화면은 15분 구간을 다루므로, 끝나는 시각이 90분 + 추가시간(1~5분)이
+ * 되도록 시작 분을 잡는다. 국면마다 추가시간이 다르다 — 추가시간은
+ * 주심이 그 경기의 지연을 보고 정하는 것이지 고정값이 아니다.
+ *
+ * 시작 분은 **화면 표시에만 쓰인다.** 경기 길이는 750틱으로 고정이고
+ * 이 숫자를 바꿔도 확률과 밸런스는 움직이지 않는다.
+ */
+const KICKOFF: Record<string, number> = {
+  p01: 78, // → 93:00 = 90 + 3
+  p02: 77, // → 92:00 = 90 + 2
+  p04: 80, // → 95:00 = 90 + 5
+}
 
 const SUMMARY: Record<string, string> = {
   p01: '0-1로 지고 있다. 상대는 골문 앞에 사람을 모았다',
@@ -61,7 +79,9 @@ function FixtureCard({
     <button className="fixture" onClick={onPick}>
       <span className="fx-band">
         <b>제{n}국면</b>
-        <span>후반 {kickoff}분</span>
+        <span>
+          후반 {kickoff}분 · 추가시간 {addedTimeOf(kickoff)}분
+        </span>
       </span>
       <span className="fx-main">
         <span className="fx-score">

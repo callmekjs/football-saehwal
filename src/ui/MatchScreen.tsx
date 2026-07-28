@@ -13,13 +13,27 @@ const LEVER_LABELS = {
   WIDTH: ['좁게', '보통', '넓게'],
 } as const
 
-/** 게임 내 시계. 국면 시작 분에서 15분이 흐른다 */
+/** 경기 내 시계. 국면 시작 분에서 15분이 흐른다 */
 function clockOf(tick: number, kickoff: number): string {
   const minutes = kickoff + (tick / TOTAL_TICKS) * 15
   const m = Math.floor(minutes)
-  const s = Math.floor((minutes - m) * 60)
-  return `${m}:${String(s).padStart(2, '0')}`
+  const s = String(Math.floor((minutes - m) * 60)).padStart(2, '0')
+  return `${m}:${s}`
 }
+
+/**
+ * 90분을 넘겼는가.
+ *
+ * 후반은 90분에 끝나지 않는다. 90분을 채우고 주심이 정한 추가시간을 더
+ * 뛴다. 중계 화면은 이때 시계를 그대로 흘려보내면서 `+3` 을 따로 띄운다 —
+ * 시계만 보면 "왜 아직 안 끝나지?"가 되고, 시계를 90:00에 세우면 남은
+ * 시간을 읽을 수 없다. 둘을 나란히 두는 것이 실제 중계의 방식이다.
+ */
+const inAddedTime = (tick: number, kickoff: number) =>
+  kickoff + (tick / TOTAL_TICKS) * 15 >= 90
+
+/** 이 국면의 추가시간(분). 90분을 넘겨 끝나는 만큼이다 */
+export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
 
 function FormationPanel({
   current,
@@ -311,6 +325,21 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
         <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--muted)', fontSize: 13 }}>
           {clockOf(state.tick, kickoff)}
         </span>
+        {inAddedTime(state.tick, kickoff) && (
+          <span
+            title={`추가시간 ${addedTimeOf(kickoff)}분`}
+            style={{
+              fontVariantNumeric: 'tabular-nums',
+              fontSize: 12,
+              padding: '2px 7px',
+              borderRadius: 5,
+              background: 'var(--warn)',
+              color: '#1a1206',
+            }}
+          >
+            +{addedTimeOf(kickoff)}
+          </span>
+        )}
         <span style={{ fontSize: 13 }}>우리 팀</span>
         <strong style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
           {state.score[0]} – {state.score[1]}
@@ -389,7 +418,7 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
               <strong style={{ fontSize: 15 }}>{problem.title}</strong>
               <span style={{ fontSize: 13, color: 'var(--accent)' }}>{objective}</span>
               <span style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.6 }}>
-                후반 {kickoff}분 · 남은 15분
+                후반 {kickoff}분 · 90분까지 {90 - kickoff}분 + 추가시간 {addedTimeOf(kickoff)}분
                 <br />
                 앞 감독이 걸어둔 지시를 물려받았습니다.
               </span>
