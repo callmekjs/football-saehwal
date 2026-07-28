@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Pitch } from './Pitch'
 import { FORMATION_IDS, getFormation, shapeOf, type FormationId } from '../sim/formations'
 import { BENCH, getPlayer } from '../sim/squad'
+import { judge } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import { useMatch } from './useMatch'
 import type { Level, MatchState, Problem } from '../sim/types'
@@ -209,8 +210,33 @@ function Bench({
     <section className="panel">
       <h2>
         벤치 · 교체 {state.subsLeft}장 남음
-        {picked && <span style={{ color: 'var(--accent)' }}> — 나갈 선수를 고르세요</span>}
+        {picked ? (
+          <span style={{ color: 'var(--accent)' }}> — 나갈 선수를 고르세요</span>
+        ) : (
+          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 넣을 선수부터</span>
+        )}
       </h2>
+
+      {/* 교체는 6초 뒤에 반영된다. 그 사이 아무 표시가 없으면 안 눌린 줄 안다 */}
+      {state.pendingSubs.length > 0 && (
+        <div
+          style={{
+            padding: '6px 10px',
+            display: 'grid',
+            gap: 2,
+            background: 'var(--panel-2)',
+            fontSize: 12,
+            color: 'var(--warn)',
+          }}
+        >
+          {state.pendingSubs.map((p) => (
+            <span key={p.in}>
+              {getPlayer(p.out).num}번 → {getPlayer(p.in).num}번 · 준비 중{' '}
+              {Math.max(0, Math.ceil((p.atTick - state.tick) / 10))}초
+            </span>
+          ))}
+        </div>
+      )}
       <div style={{ padding: 10, display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {BENCH.map((b) => {
@@ -305,8 +331,54 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
 
         <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
           <div className="panel" style={{ padding: 8 }}>
-            <Pitch state={state} seed={problem.seed} />
+            <Pitch state={state} seed={problem.seed} live={phase === 'RUNNING'} />
           </div>
+
+          {/*
+            조작은 경기장 바로 밑에 둔다. 폰에서 이 화면은 1712px인데 한 번에
+            보이는 건 812px뿐이라, 아래에 두면 75초짜리 경기 도중에 스크롤을
+            내려야 킥오프도 교체도 할 수 있다. 실시간 경기에서 그건 조작이
+            없는 것과 같다.
+          */}
+          {phase === 'READY' && (
+            <button
+              className="chip"
+              aria-pressed
+              onClick={start}
+              style={{ textAlign: 'center', fontSize: 16, minHeight: 52 }}
+            >
+              킥오프
+            </button>
+          )}
+          {phase === 'RUNNING' && <Bench state={state} onSub={substitute} />}
+          {phase === 'DONE' && (
+            <section className="panel">
+              <div style={{ padding: 12, display: 'grid', gap: 8, justifyItems: 'center' }}>
+                <strong
+                  style={{
+                    fontSize: 19,
+                    color: judge(state, problem.objective) ? 'var(--accent)' : 'var(--away)',
+                  }}
+                >
+                  {problem.objective.type === 'SURVIVE'
+                    ? judge(state, problem.objective)
+                      ? '지켜냈다'
+                      : '무너졌다'
+                    : judge(state, problem.objective)
+                      ? '따라잡았다'
+                      : '실패했다'}
+                </strong>
+                <button
+                  className="chip"
+                  onClick={reset}
+                  style={{ textAlign: 'center', minWidth: 140 }}
+                >
+                  다시 풀기
+                </button>
+              </div>
+            </section>
+          )}
+
           <StatBars state={state} />
         </div>
 
@@ -321,45 +393,11 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
                 <br />
                 앞 감독이 걸어둔 지시를 물려받았습니다.
               </span>
-              {phase === 'READY' && (
-                <button
-                  className="chip"
-                  aria-pressed
-                  onClick={start}
-                  style={{ marginTop: 4, textAlign: 'center', fontSize: 15 }}
-                >
-                  킥오프
-                </button>
-              )}
-              {phase === 'DONE' && (
-                <>
-                  <strong
-                    style={{
-                      marginTop: 4,
-                      fontSize: 17,
-                      color: state.score[0] > state.score[1] ? 'var(--accent)' : 'var(--away)',
-                    }}
-                  >
-                    {problem.objective.type === 'SURVIVE'
-                      ? state.score[0] > state.score[1]
-                        ? '지켜냈다'
-                        : '무너졌다'
-                      : state.score[0] >= state.score[1]
-                        ? '따라잡았다'
-                        : '실패했다'}
-                  </strong>
-                  <button className="chip" onClick={reset} style={{ textAlign: 'center' }}>
-                    다시 풀기
-                  </button>
-                </>
-              )}
             </div>
           </section>
           <Log state={state} kickoff={kickoff} />
         </div>
       </div>
-
-      <Bench state={state} onSub={substitute} />
     </div>
   )
 }

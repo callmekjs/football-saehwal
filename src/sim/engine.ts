@@ -58,6 +58,12 @@ export function checkSub(state: MatchState, out: string, inId: string): string |
   if (!o.onPitch || o.out) return `${out} 은 이미 피치 밖이다`
   if (i.onPitch || i.out) return `${inId} 은 투입할 수 없다`
   if (state.pendingSubs.some((p) => p.out === out || p.in === inId)) return '이미 대기 중이다'
+  // 골키퍼를 필드 플레이어로 바꾸면 골문이 빈다. 벤치에 백업 골키퍼가
+  // 없으므로 되돌릴 방법도 없다. 규칙상 존재할 수 없는 수를 화면이
+  // 허용하면 그건 선택지가 아니라 함정이다.
+  if (getPlayer(out).pos === 'GK' && getPlayer(inId).pos !== 'GK') {
+    return '골키퍼는 골키퍼로만 교체할 수 있다'
+  }
   return null
 }
 
@@ -213,8 +219,11 @@ export function tick(state: MatchState, rng: Rng): MatchState {
  * 국면이 퍼즐로 성립하지 않는다.
  *
  * EQUALIZE 는 쫓아가는 상황이므로 무승부부터 통과다.
+ *
+ * 화면도 이 함수를 쓴다. 승패 판정을 화면에 따로 적어두면 언젠가
+ * 한쪽만 고쳐져, 통과라고 표시된 판이 검증에서는 실패로 세어진다.
  */
-function judge(state: MatchState, objective: Problem['objective']): boolean {
+export function judge(state: MatchState, objective: Problem['objective']): boolean {
   const [home, away] = state.score
   return objective.type === 'SURVIVE' ? home > away : home >= away
 }
