@@ -46,31 +46,34 @@ function FormationPanel({
   tenMen: boolean
 }) {
   const shape = shapeOf(current)
+  const selected = getFormation(current)
   return (
     <section className="panel">
       <h2>우리 포메이션 {tenMen && <span style={{ color: 'var(--away)' }}>· 10명</span>}</h2>
-      <div style={{ padding: 10, display: 'grid', gap: 6 }}>
-        {FORMATION_IDS.map((id) => {
-          const f = getFormation(id)
-          const on = id === current
-          return (
-            <button
-              key={id}
-              className="chip"
-              aria-pressed={on}
-              onClick={() => onChange(id)}
-              style={{ textAlign: 'left', display: 'grid', gap: 2 }}
-            >
-              <span style={{ fontSize: 15, fontWeight: 500 }}>{f.label}</span>
-              <span style={{ fontSize: 11, opacity: 0.8 }}>{f.hint}</span>
-            </button>
-          )
-        })}
-        <p style={{ margin: '4px 2px 0', fontSize: 11, color: 'var(--dim)', lineHeight: 1.5 }}>
-          수비 {shape.DF} · 중원 {shape.MF} · 공격 {shape.FW}
-          <br />
-          바꾸면 즉시 반영됩니다.
-        </p>
+      <div className="formation-panel-body">
+        <div className="formation-grid">
+          {FORMATION_IDS.map((id) => {
+            const f = getFormation(id)
+            return (
+              <button
+                key={id}
+                className="chip formation-choice"
+                aria-pressed={id === current}
+                title={f.hint}
+                onClick={() => onChange(id)}
+              >
+                {f.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="formation-summary">
+          <strong>{selected.label}</strong>
+          <span>{selected.hint}</span>
+          <small>
+            수비 {shape.DF} · 중원 {shape.MF} · 공격 {shape.FW} · 즉시 반영
+          </small>
+        </div>
       </div>
     </section>
   )
@@ -124,49 +127,45 @@ function Levers({
           <span style={{ color: 'var(--dim)', fontWeight: 400 }}> · 직접 맞춤</span>
         )}
       </h2>
-      <div style={{ padding: '10px 10px 0', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+      <div className="tactics-presets">
         {PRESETS.map((p) => (
           <button
             key={p.name}
-            className="chip"
+            className="chip tactic-preset"
             aria-pressed={matched?.name === p.name}
-            title={p.hint}
             onClick={() => {
               onSet('LINE', p.v[0])
               onSet('PRESS', p.v[1])
               onSet('WIDTH', p.v[2])
             }}
-            style={{ flex: '1 1 92px', textAlign: 'center', display: 'grid', gap: 1 }}
           >
-            <span style={{ fontSize: 13 }}>{p.name}</span>
+            <strong>{p.name}</strong>
+            <small>{p.hint}</small>
           </button>
         ))}
       </div>
-      {matched && (
-        <p style={{ margin: 0, padding: '6px 12px 0', fontSize: 11, color: 'var(--dim)' }}>
-          {matched.hint}
-        </p>
-      )}
-      <div style={{ padding: 10, display: 'grid', gap: 10 }}>
-        {rows.map(([key, label, value]) => (
-          <div key={key} style={{ display: 'grid', gap: 5 }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{label}</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 5 }}>
-              {LEVER_LABELS[key].map((text, i) => (
-                <button
-                  key={text}
-                  className="chip"
-                  aria-pressed={value === i}
-                  onClick={() => onSet(key, i as Level)}
-                  style={{ textAlign: 'center', padding: '8px 4px' }}
-                >
-                  {text}
-                </button>
-              ))}
+      <details className="advanced-tactics">
+        <summary>라인 · 압박 · 폭 세부 조정</summary>
+        <div className="lever-list">
+          {rows.map(([key, label, value]) => (
+            <div key={key} className="lever-row">
+              <span>{label}</span>
+              <div className="lever-options">
+                {LEVER_LABELS[key].map((text, i) => (
+                  <button
+                    key={text}
+                    className="chip"
+                    aria-pressed={value === i}
+                    onClick={() => onSet(key, i as Level)}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </details>
     </section>
   )
 }
@@ -508,9 +507,52 @@ function Bench({
   )
 }
 
-export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: number }) {
+type ControlTab = 'TACTICS' | 'FORMATION' | 'PLAYERS' | 'INFO'
+
+const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
+  { id: 'TACTICS', label: '전술' },
+  { id: 'FORMATION', label: '포메이션' },
+  { id: 'PLAYERS', label: '선수' },
+  { id: 'INFO', label: '기록' },
+]
+
+function SituationPanel({
+  problem,
+  kickoff,
+  objective,
+}: {
+  problem: Problem
+  kickoff: number
+  objective: string
+}) {
+  return (
+    <section className="panel situation-panel">
+      <h2>상황 설명</h2>
+      <div>
+        <strong>{problem.title}</strong>
+        <span>{objective}</span>
+        <small>
+          후반 {kickoff}분 시작 · 추가시간 {addedTimeOf(kickoff)}분
+          <br />
+          앞 감독이 걸어둔 지시를 물려받았습니다.
+        </small>
+      </div>
+    </section>
+  )
+}
+
+export function MatchScreen({
+  problem,
+  kickoff,
+  onExit,
+}: {
+  problem: Problem
+  kickoff: number
+  onExit: () => void
+}) {
   const { state, phase, start, reset, setLever, setFormation, substitute, setOrder, decisions } =
     useMatch(problem)
+  const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
@@ -520,66 +562,66 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
    * 시뮬은 확률로 득점을 정하는데, 그 순간의 경기 상황이 골을 그릴 수
    * 있는 상황이 아닌 경우가 절반이 넘는다. 그래서 연출은 골을 예약해두고
    * 공격 장면을 만든 다음 보여주고, 점수판은 그 장면에 맞춰 오른다.
-   * 숫자가 먼저 오르면 "공은 하프라인도 못 넘었는데 골"이 된다.
    *
    * **승패 판정은 이 값을 쓰지 않는다.** 아래 `judge(state, ...)` 는
-   * 시뮬의 점수를 그대로 읽고, 이 숫자는 종료 휘슬에서 시뮬과 같아진다.
+   * 시뮬의 점수를 그대로 읽는다.
    */
   const [shown, setShown] = useState<[number, number]>(problem.score)
   useEffect(() => setShown(problem.score), [problem])
+  useEffect(() => {
+    if (phase === 'DONE') setActiveTab('INFO')
+  }, [phase])
+
+  const passed = judge(state, problem.objective)
+  const activePreset = PRESETS.find(
+    (preset) =>
+      preset.v[0] === state.tactics.line &&
+      preset.v[1] === state.tactics.press &&
+      preset.v[2] === state.tactics.width,
+  )
 
   return (
-    <div style={{ maxWidth: 1180, margin: '0 auto', padding: 12, display: 'grid', gap: 12 }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 12,
-          background: 'var(--panel-2)',
-          border: '1px solid var(--border)',
-          borderRadius: 999,
-          padding: '8px 16px',
-        }}
-      >
-        <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--muted)', fontSize: 13 }}>
-          {clockOf(state.tick, kickoff)}
-        </span>
-        {inAddedTime(state.tick, kickoff) && (
-          <span
-            title={`추가시간 ${addedTimeOf(kickoff)}분`}
-            style={{
-              fontVariantNumeric: 'tabular-nums',
-              fontSize: 12,
-              padding: '2px 7px',
-              borderRadius: 5,
-              background: 'var(--warn)',
-              color: '#1a1206',
-            }}
-          >
-            +{addedTimeOf(kickoff)}
-          </span>
-        )}
-        <span style={{ fontSize: 13 }}>우리 팀</span>
-        <strong style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
-          {shown[0]} – {shown[1]}
-        </strong>
-        <span style={{ fontSize: 13 }}>상대</span>
-        <span style={{ fontSize: 12, color: 'var(--dim)' }}>교체 {state.subsLeft}</span>
+    <div className="match-screen">
+      <header className="match-scorebar">
+        <button className="match-back" onClick={onExit} aria-label="국면 선택으로">
+          ←
+        </button>
+        <div className="match-clock">
+          <span>{clockOf(state.tick, kickoff)}</span>
+          {inAddedTime(state.tick, kickoff) && (
+            <b title={`추가시간 ${addedTimeOf(kickoff)}분`}>+{addedTimeOf(kickoff)}</b>
+          )}
+        </div>
+        <div className="match-score">
+          <span>우리</span>
+          <strong>
+            {shown[0]} – {shown[1]}
+          </strong>
+          <span>상대</span>
+        </div>
+        <span className="match-subs">교체 {state.subsLeft}</span>
       </header>
 
-      <div className="layout">
-        <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
-          <FormationPanel
-            current={state.formation}
-            onChange={setFormation}
-            tenMen={state.homeCount < 11}
-          />
-          <Levers tactics={state.tactics} onSet={setLever} />
-        </div>
+      <div className="match-workspace">
+        <main className="match-main">
+          <div className="match-brief">
+            <div>
+              <span>현재 상황</span>
+              <strong>{problem.title}</strong>
+            </div>
+            <div>
+              <span>목표</span>
+              <strong>{objective}</strong>
+            </div>
+            <div>
+              <span>현재 설정</span>
+              <strong>
+                {state.formation} · {activePreset?.name ?? '직접 맞춤'}
+              </strong>
+            </div>
+          </div>
 
-        <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
-          <div className="panel" style={{ padding: 8 }}>
+          <div className="panel pitch-card">
             <Pitch
               state={state}
               seed={problem.seed}
@@ -588,76 +630,89 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
             />
           </div>
 
-          {/*
-            조작은 경기장 바로 밑에 둔다. 폰에서 이 화면은 1712px인데 한 번에
-            보이는 건 812px뿐이라, 아래에 두면 75초짜리 경기 도중에 스크롤을
-            내려야 킥오프도 교체도 할 수 있다. 실시간 경기에서 그건 조작이
-            없는 것과 같다.
-          */}
           {phase === 'READY' && (
             <button
-              className="chip"
-              aria-pressed
-              onClick={start}
-              style={{ textAlign: 'center', fontSize: 16, minHeight: 52 }}
+              className="kickoff-button"
+              onClick={() => {
+                start()
+                setActiveTab('TACTICS')
+              }}
             >
               킥오프
+              <small>시계는 멈추지 않습니다</small>
             </button>
           )}
-          {/*
-            지시가 교체보다 위다. 지시는 즉시 걸리고 되돌릴 수 있어 한 판에
-            여러 번 쓰지만, 교체는 세 장뿐이고 회수되지 않아 드물게 쓴다.
-            자주 쓰는 것이 손가락에 가까워야 한다.
-          */}
-          {phase === 'RUNNING' && <Orders state={state} onOrder={setOrder} />}
-          {phase === 'RUNNING' && <Bench state={state} onSub={substitute} />}
+
           {phase === 'DONE' && (
-            <section className="panel">
-              <div style={{ padding: 12, display: 'grid', gap: 8, justifyItems: 'center' }}>
-                <strong
-                  style={{
-                    fontSize: 19,
-                    color: judge(state, problem.objective) ? 'var(--accent)' : 'var(--away)',
-                  }}
-                >
+            <section className={`match-result ${passed ? 'passed' : 'failed'}`}>
+              <div>
+                <span>경기 종료</span>
+                <strong>
                   {problem.objective.type === 'SURVIVE'
-                    ? judge(state, problem.objective)
+                    ? passed
                       ? '지켜냈다'
                       : '무너졌다'
-                    : judge(state, problem.objective)
+                    : passed
                       ? '따라잡았다'
                       : '실패했다'}
                 </strong>
-                <button
-                  className="chip"
-                  onClick={reset}
-                  style={{ textAlign: 'center', minWidth: 140 }}
-                >
-                  다시 도전
-                </button>
               </div>
+              <button
+                className="chip"
+                onClick={() => {
+                  reset()
+                  setActiveTab('TACTICS')
+                }}
+              >
+                다시 도전
+              </button>
             </section>
           )}
+
           {phase === 'DONE' && <AnalysisPanel problem={problem} decisions={decisions.current} />}
+        </main>
 
-          <StatBars state={state} />
-        </div>
+        <aside className="match-console">
+          <nav className="control-tabs" aria-label="감독 메뉴">
+            {CONTROL_TABS.map((tab) => {
+              const disabled = tab.id === 'PLAYERS' && phase !== 'RUNNING'
+              return (
+                <button
+                  key={tab.id}
+                  aria-pressed={activeTab === tab.id}
+                  disabled={disabled}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </nav>
 
-        <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
-          <section className="panel">
-            <h2>이 국면</h2>
-            <div style={{ padding: 12, display: 'grid', gap: 6 }}>
-              <strong style={{ fontSize: 15 }}>{problem.title}</strong>
-              <span style={{ fontSize: 13, color: 'var(--accent)' }}>{objective}</span>
-              <span style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.6 }}>
-                후반 {kickoff}분 · 90분까지 {90 - kickoff}분 + 추가시간 {addedTimeOf(kickoff)}분
-                <br />
-                앞 감독이 걸어둔 지시를 물려받았습니다.
-              </span>
-            </div>
-          </section>
-          <Log state={state} kickoff={kickoff} />
-        </div>
+          <div className="control-panel">
+            {activeTab === 'TACTICS' && <Levers tactics={state.tactics} onSet={setLever} />}
+            {activeTab === 'FORMATION' && (
+              <FormationPanel
+                current={state.formation}
+                onChange={setFormation}
+                tenMen={state.homeCount < 11}
+              />
+            )}
+            {activeTab === 'PLAYERS' && phase === 'RUNNING' && (
+              <div className="player-controls">
+                <Orders state={state} onOrder={setOrder} />
+                <Bench state={state} onSub={substitute} />
+              </div>
+            )}
+            {activeTab === 'INFO' && (
+              <div className="info-panels">
+                <SituationPanel problem={problem} kickoff={kickoff} objective={objective} />
+                <StatBars state={state} />
+                <Log state={state} kickoff={kickoff} />
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   )

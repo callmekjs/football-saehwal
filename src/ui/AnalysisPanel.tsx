@@ -22,6 +22,11 @@ function verdict(delta: number) {
   return '이번 판단은 방치했을 때와 큰 차이가 없었습니다.'
 }
 
+function pointDelta(delta: number) {
+  const points = delta * 100
+  return `${points > 0 ? '+' : ''}${points.toFixed(1)}%p`
+}
+
 export function AnalysisPanel({
   problem,
   decisions,
@@ -64,7 +69,10 @@ export function AnalysisPanel({
         {error && <span className="analysis-error">{error}</span>}
         {analysis && (
           <>
-            <strong className="analysis-verdict">{verdict(analysis.userDelta)}</strong>
+            <div className="analysis-headline">
+              <strong className="analysis-verdict">{verdict(analysis.userDelta)}</strong>
+              <span>방치 대비 {pointDelta(analysis.userDelta)}</span>
+            </div>
             <span className="analysis-caption">
               한 경기의 운을 빼기 위해 세 전술에 똑같은 150경기를 적용했습니다.
             </span>
@@ -88,13 +96,26 @@ export function AnalysisPanel({
               ))}
             </div>
             <div className="analysis-advice">
-              <strong>
-                추천 · {analysis.recommendation.formation} · 라인{' '}
-                {LEVEL_LABEL.line[analysis.recommendation.tactics.line]} · 압박{' '}
-                {LEVEL_LABEL.press[analysis.recommendation.tactics.press]} · 폭{' '}
-                {LEVEL_LABEL.width[analysis.recommendation.tactics.width]}
-              </strong>
-              <span>{analysis.recommendation.explanation}</span>
+              <strong>다음에는 이렇게 바꿔보세요</strong>
+              <div>
+                <span>
+                  <small>포메이션</small>
+                  {analysis.recommendation.formation}
+                </span>
+                <span>
+                  <small>라인</small>
+                  {LEVEL_LABEL.line[analysis.recommendation.tactics.line]}
+                </span>
+                <span>
+                  <small>압박</small>
+                  {LEVEL_LABEL.press[analysis.recommendation.tactics.press]}
+                </span>
+                <span>
+                  <small>폭</small>
+                  {LEVEL_LABEL.width[analysis.recommendation.tactics.width]}
+                </span>
+              </div>
+              <p>{analysis.recommendation.explanation}</p>
             </div>
           </>
         )}

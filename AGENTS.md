@@ -58,7 +58,7 @@ npx tsx -e "import('./src/sim/engine.ts').then(()=>console.log('OK'))"
 ## 2. 바꾸기 전에 확인해야 하는 것
 
 ```bash
-npm test        # 177개. 전부 통과해야 한다
+npm test        # 197개. 전부 통과해야 한다
 npx tsc --noEmit # 타입 오류 0
 npm run sim     # 세 국면 전부 "합격"
 ```
@@ -129,6 +129,20 @@ expect(low.setPiece).toBeCloseTo(4.2)                    // 나쁘다
 
 정의 파일에는 **축구 룰 체크리스트**와 **이 프로젝트에서 확립된 사실성 기준**(패스 성공률, 압박 게이지, 선수 속도 등)이 들어 있다. 관전 품질을 손볼 때는 그 문서를 기준으로 삼는다.
 
+## 4.6 UX/UI 전문가 에이전트
+
+화면 정보 순서와 모바일 조작은 UX/UI 전문 에이전트가 관리한다.
+Codex에서는 **`uxui_agent`** (`.codex/agents/uxui-agent.toml`), Claude
+Code에서는 **`uxui-agent`** (`.claude/agents/uxui-agent.md`)를 쓴다.
+
+이 에이전트에게 맡기는 일:
+- 첫 화면·국면 선택·경기 화면·결과 화면의 정보 구조
+- 375px 모바일 조작 동선과 44px 손가락 표적
+- 색 대비·여백·반응형 레이아웃·가로 넘침 점검
+- Open Football의 **정보 배치 원칙만** 참고한 독자적인 화면 개선
+
+맡기지 않는 일: `src/sim/` 확률·밸런스, `src/render/` 축구 움직임, 실존 선수 데이터.
+
 ## 5. 지금 상태와 다음 할 일
 
 진행 현황은 **[`docs/progress.md`](docs/progress.md)** 에 있다. 스무 단계 체크리스트와 현재 위치가 맨 위에 있다.
@@ -144,7 +158,7 @@ expect(low.setPiece).toBeCloseTo(4.2)                    // 나쁘다
 
 ```bash
 npm run dev     # 개발 서버
-npm test        # 테스트 177개
+npm test        # 테스트 197개
 npm run sim     # 밸런스 검증 (시드 1200개 x 27조합 x 3국면)
 npm run build   # 프로덕션 빌드 (타입 검사 포함)
 ```

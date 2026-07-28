@@ -138,15 +138,12 @@ export function App() {
 
   if (picked) {
     return (
-      <>
-        <button
-          onClick={() => setPicked(null)}
-          style={{ margin: '10px 0 0 14px', fontSize: 13, color: 'var(--muted)' }}
-        >
-          ← 국면 선택으로
-        </button>
-        <MatchScreen key={picked.problem.id} problem={picked.problem} kickoff={picked.kickoff} />
-      </>
+      <MatchScreen
+        key={picked.problem.id}
+        problem={picked.problem}
+        kickoff={picked.kickoff}
+        onExit={() => setPicked(null)}
+      />
     )
   }
 

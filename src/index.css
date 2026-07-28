@@ -1,15 +1,15 @@
 :root {
-  --bg: #14101f;
-  --panel: #1d1830;
-  --panel-2: #251e3c;
-  --border: #372c58;
-  --text: #e8e4f2;
-  --muted: #9a90b8;
-  --dim: #6d6389;
-  --accent: #3ecf8e;
-  --away: #e0564b;
-  --warn: #e8c33c;
-  --radius: 10px;
+  --bg: #0c121a;
+  --panel: #131d28;
+  --panel-2: #1a2735;
+  --border: #2d3d4f;
+  --text: #f3f6f9;
+  --muted: #b5c0cc;
+  --dim: #8492a2;
+  --accent: #64d49b;
+  --away: #ff6b61;
+  --warn: #f3c95f;
+  --radius: 12px;
   --display: 'Black Han Sans', system-ui, sans-serif;
 
   color-scheme: dark;
@@ -44,14 +44,15 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
 }
 
 .panel > h2 {
   margin: 0;
   padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
   border-bottom: 1px solid var(--border);
   background: var(--panel-2);
 }
@@ -441,24 +442,371 @@ button {
   }
 }
 
-/* ── 경기 화면 ─────────────────────────────────────── */
+@media (max-width: 600px) {
+  .home { padding: 0 12px 34px; }
 
-/* 폰이 기본. 좁은 화면에서는 세로로 쌓는다 */
-.layout {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr;
+  .topbar { padding: 12px 2px; }
+  .topchip { display: none; }
+  .wordmark { font-size: 18px; }
+
+  .hero {
+    min-height: 460px;
+    border-radius: 14px;
+  }
+
+  .hero-inner {
+    width: 100%;
+    max-width: none;
+    padding: 24px;
+    gap: 13px;
+  }
+
+  .live {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.4;
+  }
+
+  .hero-title {
+    font-size: clamp(42px, 15vw, 58px);
+    line-height: 1.02;
+  }
+
+  .hero-sub {
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+
+  .hero-cta {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cta {
+    min-width: 0;
+    padding: 12px 10px;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .board { margin-top: 26px; }
+  .board-head { align-items: flex-start; flex-wrap: wrap; row-gap: 3px; }
+  .board-head span { flex-basis: calc(100% - 28px); margin-left: 20px; }
+  .fixtures { grid-template-columns: 1fr; }
 }
 
-/* 피치를 먼저 보여준다. 조작 패널은 그 아래로 */
-.layout > :nth-child(2) { order: -1; }
+/* ── 경기 화면 ─────────────────────────────────────── */
 
-@media (min-width: 900px) {
-  .layout {
-    grid-template-columns: 250px minmax(0, 1fr) 280px;
-    align-items: start;
+.match-screen {
+  max-width: 1280px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 10px 14px 28px;
+}
+
+.match-scorebar {
+  position: sticky;
+  top: 8px;
+  z-index: 10;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 46px minmax(70px, 0.7fr) minmax(170px, 1fr) minmax(58px, 0.7fr);
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(19, 29, 40, 0.96);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px);
+}
+
+.match-back {
+  width: 44px;
+  min-height: 44px;
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 19px;
+}
+
+.match-clock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-clock b {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--warn);
+  color: #1d1708;
+  font-size: 11px;
+}
+
+.match-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.match-score span { color: var(--muted); font-size: 12px; }
+.match-score strong { font-size: 23px; font-variant-numeric: tabular-nums; }
+.match-subs { justify-self: end; color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.match-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 380px);
+  gap: 14px;
+  margin-top: 14px;
+  align-items: start;
+}
+
+.match-main,
+.match-console,
+.player-controls,
+.info-panels {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.match-brief {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.match-brief > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--panel);
+}
+
+.match-brief span {
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.match-brief strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pitch-card { padding: 8px; }
+
+.kickoff-button {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #08271a;
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 10px 26px rgba(100, 212, 155, 0.22);
+}
+
+.kickoff-button small { font-size: 10px; font-weight: 550; opacity: 0.72; }
+
+.match-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.match-result.failed { border-left-color: var(--away); }
+.match-result > div { display: grid; gap: 2px; }
+.match-result span { color: var(--dim); font-size: 11px; }
+.match-result strong { color: var(--accent); font-size: 20px; }
+.match-result.failed strong { color: var(--away); }
+
+.match-console {
+  position: sticky;
+  top: 76px;
+}
+
+.control-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.control-tabs button {
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.control-tabs button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #08271a;
+}
+
+.control-tabs button:disabled { opacity: 0.35; cursor: not-allowed; }
+.control-panel { min-width: 0; }
+
+.formation-panel-body {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.formation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.formation-choice {
+  min-width: 0;
+  min-height: 46px;
+  padding: 7px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.formation-summary {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.formation-summary strong { color: var(--accent); font-size: 14px; }
+.formation-summary span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.formation-summary small { color: var(--dim); font-size: 10px; }
+
+.tactics-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+}
+
+.tactic-preset {
+  min-width: 0;
+  min-height: 66px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.tactic-preset:last-child { grid-column: 1 / -1; }
+.tactic-preset strong { font-size: 13px; }
+.tactic-preset small { color: var(--dim); font-size: 10px; line-height: 1.35; }
+.tactic-preset[aria-pressed='true'] small { color: #174b36; }
+
+.advanced-tactics {
+  border-top: 1px solid var(--border);
+}
+
+.advanced-tactics summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.lever-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.lever-row { display: grid; gap: 5px; }
+.lever-row > span { color: var(--muted); font-size: 11px; }
+.lever-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.lever-options .chip { min-width: 0; padding: 8px 4px; text-align: center; }
+
+.situation-panel > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.situation-panel strong { font-size: 15px; }
+.situation-panel span { color: var(--accent); font-size: 13px; }
+.situation-panel small { color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+@media (max-width: 799px) {
+  .match-screen { padding: 6px 8px 24px; }
+
+  .match-scorebar {
+    top: 4px;
+    grid-template-columns: 44px 58px minmax(138px, 1fr) 52px;
+    gap: 4px;
+    padding-right: 7px;
   }
-  .layout > :nth-child(2) { order: 0; }
+
+  .match-clock { gap: 3px; font-size: 11px; }
+  .match-clock b { padding: 2px 4px; }
+  .match-score { gap: 6px; }
+  .match-score strong { font-size: 20px; }
+  .match-score span, .match-subs { font-size: 10px; }
+
+  .match-workspace {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .match-main { gap: 9px; }
+  .match-brief > div { padding: 8px; }
+  .match-brief span { font-size: 9px; }
+  .match-brief strong { font-size: 11px; }
+  .pitch-card { padding: 6px; }
+
+  .match-console {
+    position: static;
+    gap: 8px;
+  }
+
+  .control-tabs {
+    position: sticky;
+    top: 64px;
+    z-index: 8;
+  }
+
+  .tactics-presets { grid-template-columns: 1fr 1fr; }
 }
 
 /* 경기 한 번의 운과 감독의 판단을 분리해서 보여준다 */
@@ -478,6 +826,24 @@ button {
 
 .analysis-error { color: var(--away); }
 .analysis-verdict { font-size: 15px; }
+
+.analysis-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analysis-headline > span {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
 .analysis-bars {
   display: grid;
@@ -517,7 +883,7 @@ button {
 
 .analysis-advice {
   display: grid;
-  gap: 4px;
+  gap: 9px;
   padding: 10px;
   border-left: 3px solid var(--accent);
   background: var(--panel-2);
@@ -525,4 +891,36 @@ button {
   line-height: 1.55;
 }
 
-.analysis-advice span { color: var(--muted); }
+.analysis-advice > div {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.analysis-advice > div > span {
+  display: grid;
+  gap: 1px;
+  padding: 7px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analysis-advice small {
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.analysis-advice p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 430px) {
+  .analysis-headline { display: grid; }
+  .analysis-headline > span { justify-self: start; }
+}
