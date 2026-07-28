@@ -44,10 +44,14 @@ const EMPTY: EventOutcome = {
 function pickFouler(players: PlayerState[], draw: number): string | null {
   const candidates = players.filter((s) => {
     if (!s.onPitch || s.out) return false
+    // 물러서라고 한 선수는 몸을 안 던진다. 반칙 후보에서 빠진다
+    if (s.order === 'BACK_OFF') return false
     const pos = getPlayer(s.id).pos
     return pos === 'DF' || pos === 'MF'
   })
   if (candidates.length === 0) return null
+  // ★ 난수는 이미 뽑아둔 `d.foulTarget` 을 그대로 쓴다. 지시가 바꾸는 것은
+  //   이 배열의 **길이**뿐이고 소비 개수와 순서는 언제나 같다
   return candidates[Math.floor(draw * candidates.length)].id
 }
 
@@ -110,7 +114,11 @@ export function resolveEvents(
   // 2. 경고 보유 선수가 강 압박을 버티다 퇴장
   //    압박 축이 실제로 값을 갖는 유일한 통로다
   if (!removed && press === 2) {
-    const atRisk = players.filter((s) => s.onPitch && !s.out && s.booked)
+    // 물러서라고 한 선수는 이 위험에서도 빠진다. 경고를 안고 있는 선수를
+    // 강 압박 속에서 지키는 유일한 방법이라, 이 지시가 값을 갖는 자리다
+    const atRisk = players.filter(
+      (s) => s.onPitch && !s.out && s.booked && s.order !== 'BACK_OFF',
+    )
     if (atRisk.length > 0 && d.sendOff < EVENTS.sendOffHazard * atRisk.length) {
       const victim = atRisk[Math.floor(d.foulTarget * atRisk.length)]
       removed = victim.id

@@ -75,6 +75,28 @@ function FormationPanel({
   )
 }
 
+/**
+ * 이름 붙은 전술 — 레버 세 개를 한 번에 세운다.
+ *
+ * 레버를 따로 만지면 스물일곱 조합이 나오는데, 실측으로 그중 열한에서
+ * 열다섯 개가 1위와 구분되지 않는다. 선택지는 많은데 뜻이 있는 것은 몇
+ * 개뿐이라는 말이다. 게다가 75초짜리 경기에서 세 번 탭할 여유가 없다.
+ *
+ * 실제 축구가 전술을 부르는 방식이 이미 그렇다 — "역습으로 간다"고 하지
+ * "라인 낮음 압박 약 폭 보통으로 간다"고 하지 않는다. 이름이 붙으면
+ * 무엇을 하려는지가 화면에서 읽히고, 한 번의 탭으로 도달한다.
+ *
+ * 레버를 없애지는 않았다. 프리셋으로 뼈대를 세우고 레버로 다듬는 것이
+ * 감독이 실제로 하는 일이다.
+ */
+const PRESETS: Array<{ name: string; hint: string; v: [Level, Level, Level] }> = [
+  { name: '균형', hint: '어느 쪽으로도 치우치지 않는다', v: [1, 1, 1] },
+  { name: '역습', hint: '내려서서 공을 내주고 전환으로 찌른다', v: [0, 0, 1] },
+  { name: '측면 공략', hint: '넓게 벌려 바깥으로 길을 낸다', v: [1, 1, 2] },
+  { name: '전방 압박', hint: '높이 올라가 상대 진영에서 뺏는다', v: [2, 2, 1] },
+  { name: '밀집 수비', hint: '중앙을 촘촘히 닫는다. 대신 바깥이 열린다', v: [1, 2, 0] },
+]
+
 function Levers({
   tactics,
   onSet,
@@ -88,9 +110,42 @@ function Levers({
     ['WIDTH', '수비 폭', tactics.width],
   ] as const
 
+  const current = [tactics.line, tactics.press, tactics.width]
+  const matched = PRESETS.find((p) => p.v.every((x, i) => x === current[i]))
+
   return (
     <section className="panel">
-      <h2>전술 레버</h2>
+      <h2>
+        전술
+        {matched ? (
+          <span style={{ color: 'var(--accent)' }}> · {matched.name}</span>
+        ) : (
+          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> · 직접 맞춤</span>
+        )}
+      </h2>
+      <div style={{ padding: '10px 10px 0', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+        {PRESETS.map((p) => (
+          <button
+            key={p.name}
+            className="chip"
+            aria-pressed={matched?.name === p.name}
+            title={p.hint}
+            onClick={() => {
+              onSet('LINE', p.v[0])
+              onSet('PRESS', p.v[1])
+              onSet('WIDTH', p.v[2])
+            }}
+            style={{ flex: '1 1 92px', textAlign: 'center', display: 'grid', gap: 1 }}
+          >
+            <span style={{ fontSize: 13 }}>{p.name}</span>
+          </button>
+        ))}
+      </div>
+      {matched && (
+        <p style={{ margin: 0, padding: '6px 12px 0', fontSize: 11, color: 'var(--dim)' }}>
+          {matched.hint}
+        </p>
+      )}
       <div style={{ padding: 10, display: 'grid', gap: 10 }}>
         {rows.map(([key, label, value]) => (
           <div key={key} style={{ display: 'grid', gap: 5 }}>

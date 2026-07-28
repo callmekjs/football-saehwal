@@ -4,7 +4,7 @@ import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
 import { getPlayer } from '../sim/squad'
 import { EVENTS, TOTAL_TICKS } from '../sim/constants'
-import type { MatchState, Problem } from '../sim/types'
+import type { MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const P: Problem = {
   id: 'p02',
@@ -1714,5 +1714,87 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
     }
     // 한 프레임이 한 틱(0.1초)이다. 보호 시간 4초를 넘기면 안 된다
     expect(worst, `가장 긴 정지 ${(worst * 0.1).toFixed(1)}초`).toBeLessThan(50)
+  })
+})
+
+describe('개별 지시가 화면에서 보인다', () => {
+  /**
+   * 지시는 확률만 바꿔서는 조작이 되지 않는다.
+   *
+   * 감독이 무언가를 시켰으면 **그 선수가 다르게 움직이는 것이 보여야**
+   * 한다. 화면에서 아무 일도 안 일어나면 감독은 자기가 무엇을 시켰는지
+   * 확인할 방법이 없고, 그러면 지시는 조작이 아니라 설정이 된다.
+   */
+  function watchWithOrders(orders: Array<[string, PlayerOrder]>, ticks = 400) {
+    const seed = P.seed
+    const rng = createRng(seed)
+    let s = createState(P)
+    s = {
+      ...s,
+      players: s.players.map((x) => {
+        const hit = orders.find(([id]) => id === x.id)
+        return hit ? { ...x, order: hit[1] } : x
+      }),
+    }
+    const vm = new VisualMatch(s, seed)
+    const track = new Map<number, Array<{ x: number; v: number }>>()
+    for (let i = 0; i < ticks; i++) {
+      s = tick(s, rng)
+      // 지시는 시뮬 상태에 이미 얹혀 있다. sync 가 화면으로 옮긴다
+      vm.sync(s)
+      for (let f = 0; f < 6; f++) vm.advance(s, 1 / 60)
+      for (const p of vm.players) {
+        if (p.side !== 'HOME') continue
+        const list = track.get(p.num) ?? []
+        list.push({ x: p.x, v: Math.hypot(p.vx, p.vy) })
+        track.set(p.num, list)
+      }
+    }
+    return track
+  }
+
+  const numOf = (id: string) => getPlayer(id).num
+  const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length
+
+  it('골문 앞을 지키라고 하면 우리 골대 앞을 안 떠난다', () => {
+    /**
+     * 우리 골대는 x=0 이다. 지시를 받은 수비수는 팀이 올라가도 남는다.
+     * 공을 직접 몰거나 받으러 갈 때는 나갈 수 있으므로 최댓값이 아니라
+     * **평균 위치**로 본다 — 말뚝이 아니라 자리를 지키는 것이 목표다
+     */
+    const off = watchWithOrders([])
+    const on = watchWithOrders([['DF04', 'HOLD']])
+    const n = numOf('DF04')
+    const before = mean(off.get(n)!.map((f) => f.x))
+    const after = mean(on.get(n)!.map((f) => f.x))
+    expect(after, `평균 위치 ${before.toFixed(1)}m → ${after.toFixed(1)}m`).toBeLessThan(before)
+    // 페널티 지역 언저리에 머문다. 하프라인 근처면 지시가 안 보인다
+    expect(after).toBeLessThan(PITCH_W / 2)
+  })
+
+  it('아껴 뛰라고 하면 그 선수만 느려진다', () => {
+    const off = watchWithOrders([])
+    const on = watchWithOrders([['MF06', 'CONSERVE']])
+    const n = numOf('MF06')
+    const before = Math.max(...off.get(n)!.map((f) => f.v))
+    const after = Math.max(...on.get(n)!.map((f) => f.v))
+    expect(after, `최고 속도 ${before.toFixed(1)} → ${after.toFixed(1)} m/s`).toBeLessThan(before)
+
+    // 다른 선수는 그대로 뛴다. 한 명에게 내린 지시가 팀 전체에 걸리면
+    // 화면에서 누구에게 시켰는지 구분할 수가 없다
+    const other = numOf('FW09')
+    expect(Math.max(...on.get(other)!.map((f) => f.v))).toBeCloseTo(
+      Math.max(...off.get(other)!.map((f) => f.v)),
+      1,
+    )
+  })
+
+  it('물러서라고 하면 뒤에 남는다', () => {
+    const off = watchWithOrders([])
+    const on = watchWithOrders([['MF06', 'BACK_OFF']])
+    const n = numOf('MF06')
+    const before = mean(off.get(n)!.map((f) => f.x))
+    const after = mean(on.get(n)!.map((f) => f.x))
+    expect(after, `평균 위치 ${before.toFixed(1)}m → ${after.toFixed(1)}m`).toBeLessThan(before)
   })
 })

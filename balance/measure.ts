@@ -7,7 +7,8 @@
 import raw from '../src/data/problems.json' with { type: 'json' }
 import { simulate } from '../src/sim/engine'
 import { FORMATION_IDS, type FormationId } from '../src/sim/formations'
-import type { Decision, Level, Objective, Problem } from '../src/sim/types'
+import { getPlayer, initialPlayers } from '../src/sim/squad'
+import type { Decision, Level, Objective, PlayerOrder, Problem } from '../src/sim/types'
 
 /**
  * JSON 을 Problem 으로 좁힌다.
@@ -85,6 +86,52 @@ const set = (line: Level, press: Level, width: Level): Decision[] => [
   { tick: 0, type: 'WIDTH', value: width },
 ]
 
+/**
+ * 개별 지시 조합.
+ *
+ * 지시 축이 게이트에 안 보이면 "효과가 있다"를 감으로 말하게 된다.
+ * 포메이션과 같은 방식으로 **1위 레버 조합 위에서 지시만** 훑는다.
+ * 전량 교차(27 × 지시)를 돌리면 측정이 열 배로 늘어나는데, 지시가 결과를
+ * 움직이는지만 알면 충분하다.
+ *
+ * 대상은 국면마다 다르게 고른다. 상수로 박으면(예: "4번 수비수") 포메이션이
+ * 바뀌거나 그 선수가 없는 국면에서 지시가 조용히 사라진다.
+ */
+function orderPlans(base: Problem): Array<{ label: string; picks: Array<[string, PlayerOrder]> }> {
+  const onPitch = initialPlayers(base).filter((s) => s.onPitch && !s.out)
+  const defs = onPitch.filter((s) => getPlayer(s.id).pos === 'DF').map((s) => s.id)
+  const mids = onPitch.filter((s) => getPlayer(s.id).pos === 'MF').map((s) => s.id)
+  // 물러설 1순위는 경고를 안고 있는 선수다. 두 번째 경고가 곧 퇴장이다
+  const risky = onPitch.find((s) => s.booked)?.id ?? mids[0]
+  /**
+   * 아껴 뛸 1순위는 체력이 가장 낮은 선수다. 부상 임계(25)에 가장 가깝다.
+   *
+   * **물러설 선수와 겹치면 안 된다.** 한 사람에게 두 지시를 걸면 뒤엣것만
+   * 남아 조합 측정이 통째로 사라진다 — 실제로 세 국면 모두 경고 보유자가
+   * 곧 최저 체력자여서, 조합 행이 조용히 비어 있었다
+   */
+  const tired = [...onPitch]
+    .sort((a, b) => a.stamina - b.stamina)
+    .find((s) => s.id !== risky)?.id
+  const hold: Array<[string, PlayerOrder]> = defs.slice(0, 2).map((id) => [id, 'HOLD'])
+
+  const plans: Array<{ label: string; picks: Array<[string, PlayerOrder]> }> = [
+    { label: '지시 없음', picks: [] },
+    { label: '골문앞 1', picks: hold.slice(0, 1) },
+    { label: '골문앞 2', picks: hold },
+  ]
+  if (risky) plans.push({ label: '물러서라', picks: [[risky, 'BACK_OFF']] })
+  if (tired) plans.push({ label: '아껴뛰어라', picks: [[tired, 'CONSERVE']] })
+  if (risky && tired && risky !== tired) {
+    plans.push({ label: '물러서라+아껴뛰어라', picks: [[risky, 'BACK_OFF'], [tired, 'CONSERVE']] })
+    plans.push({
+      label: '골문앞1+물러서라+아껴뛰어라',
+      picks: [...hold.slice(0, 1), [risky, 'BACK_OFF'], [tired, 'CONSERVE']],
+    })
+  }
+  return plans
+}
+
 /** 27조합을 전부 돌려 순위를 낸다. 정답 경로를 손으로 적지 않아도 된다 */
 function sweep(base: Problem) {
   const rows: Array<{ label: string; rate: number }> = []
@@ -108,6 +155,8 @@ console.log(`조합은 라인/압박/폭. 0=낮음·약·좁게, 1=보통·중, 
 let allPassed = true
 const winners: Array<{ title: string; top: string }> = []
 const formationWinners: Array<{ title: string; top: FormationId }> = []
+/** 국면마다 지시가 노이즈 바닥을 넘어 움직인 조합 수 */
+const orderMoved: Array<{ title: string; moved: number }> = []
 
 for (const p of problems) {
   const noop = measure(p, [])
@@ -157,6 +206,35 @@ for (const p of problems) {
   console.log(
     `   포메이션 스프레드 ${((byFormation[0].rate - byFormation[byFormation.length - 1].rate) * 100).toFixed(1)}%p`,
   )
+
+  /**
+   * 개별 지시 — 1위 레버 조합 위에서만 훑는다.
+   *
+   * **노이즈 바닥을 지킨다.** 시드 1200개면 통과율 표준오차가 약 1.4%p라
+   * 두 조건을 비교할 때 판별 가능한 최소 차이가 4%p 안팎이다. 그보다 작은
+   * 효과는 있으나 마나이므로, 그런 지시는 계수를 키우거나 버려야 한다
+   */
+  const lever = set(l, pr, w)
+  const orderRows = orderPlans(p).map((plan) => ({
+    label: plan.label,
+    rate: measure(
+      p,
+      [...lever, ...plan.picks.map(([target, order]) => ({ tick: 0, type: 'ORDER' as const, target, order }))],
+    ).rate,
+  }))
+  const noOrders = orderRows[0].rate
+  const floor = 2 * Math.sqrt(2) * stderr(noOrders)
+  console.log(
+    `   지시(${top.label} 위에서): ${orderRows
+      .slice(1)
+      .map((r) => `${r.label} ${((r.rate - noOrders) * 100 >= 0 ? '+' : '') + ((r.rate - noOrders) * 100).toFixed(1)}%p`)
+      .join('  ')}`,
+  )
+  const moved = orderRows.slice(1).filter((r) => Math.abs(r.rate - noOrders) >= floor)
+  console.log(
+    `   지시 노이즈 바닥 ±${(floor * 100).toFixed(1)}%p — 바닥을 넘은 조합 ${moved.length}/${orderRows.length - 1}`,
+  )
+  orderMoved.push({ title: p.title, moved: moved.length })
   console.log()
   formationWinners.push({ title: p.title, top: byFormation[0].id })
 }
@@ -178,6 +256,14 @@ console.log(
   distinctForm.size === 1
     ? `주의: 전 국면의 최선 포메이션이 ${[...distinctForm][0]} 로 동일하다`
     : `국면별 최선 포메이션: ${formationWinners.map((w) => `${w.title} ${w.top}`).join(' · ')}`,
+)
+
+// 지시가 어느 국면에서도 노이즈 바닥을 못 넘으면 그건 조작이 아니라 장식이다
+const totalMoved = orderMoved.reduce((n, x) => n + x.moved, 0)
+console.log(
+  totalMoved === 0
+    ? '주의: 개별 지시가 어느 국면에서도 노이즈 바닥을 넘지 못했다 — 계수를 키우거나 버린다'
+    : `개별 지시가 바닥을 넘은 조합: ${orderMoved.map((x) => `${x.title} ${x.moved}개`).join(' · ')}`,
 )
 
 if (!allPassed) process.exitCode = 1

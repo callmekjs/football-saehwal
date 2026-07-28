@@ -1,5 +1,5 @@
 import { createRng, type Rng } from './rng'
-import { resolveCoefficients } from './tactics'
+import { applyOrders, drainFactorOf, resolveCoefficients } from './tactics'
 import { drawTick, resolveAttacks, type TickDraws } from './attack'
 import type { Coefficients } from './tactics'
 import { resolveEvents } from './events'
@@ -183,16 +183,26 @@ function nextBall(
 }
 
 export function tick(state: MatchState, rng: Rng): MatchState {
-  const c = resolveCoefficients(
-    state.tactics,
-    state.opponent,
-    state.awayCount < 11,
-    state.homeCount < 11,
-    state.formation,
+  // 레버가 정한 계수 위에 개별 지시를 얹는다.
+  // 지시가 하나도 없으면 `applyOrders` 는 항등이라 계수가 그대로 나간다
+  const c = applyOrders(
+    resolveCoefficients(
+      state.tactics,
+      state.opponent,
+      state.awayCount < 11,
+      state.homeCount < 11,
+      state.formation,
+    ),
+    state.players,
   )
 
+  // 체력 소모는 선수마다 다르다. 아껴 뛰라고 한 선수만 덜 닳는다 —
+  // 얇아 보이지만 부상 임계(체력 25)를 넘기느냐가 여기서 갈리고, 부상은
+  // 교체 카드를 강제로 태운다. 지시가 없으면 배수가 1이라 계수가 그대로다
   let players = state.players.map((s) =>
-    s.onPitch && !s.out ? { ...s, stamina: drainTick(s.stamina, c.drain) } : s,
+    s.onPitch && !s.out
+      ? { ...s, stamina: drainTick(s.stamina, c.drain * drainFactorOf(s.order)) }
+      : s,
   )
   const log = [...state.log]
   let score: [number, number] = [...state.score] as [number, number]

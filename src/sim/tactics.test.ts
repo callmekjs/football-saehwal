@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { resolveCoefficients } from './tactics'
-import type { Level, Tactics } from './types'
+import { applyOrders, drainFactorOf, resolveCoefficients } from './tactics'
+import type { Level, PlayerOrder, PlayerState, Tactics } from './types'
 
 const t = (line: Level, press: Level, width: Level): Tactics => ({ line, press, width })
 
@@ -90,5 +90,68 @@ describe('resolveCoefficients', () => {
     expect(ten.behind).toBeGreaterThan(eleven.behind)
     expect(ten.oppOpen).toBeGreaterThan(eleven.oppOpen)
     expect(ten.setPiece).toBeGreaterThan(eleven.setPiece)
+  })
+})
+
+describe('개별 지시 — applyOrders', () => {
+  const p = (id: string, order: PlayerOrder, onPitch = true): PlayerState => ({
+    id,
+    onPitch,
+    stamina: 70,
+    booked: false,
+    out: false,
+    order,
+  })
+  const base = () => resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
+
+  it('지시가 하나도 없으면 계수가 비트 단위로 그대로다', () => {
+    /**
+     * ★ 이 프로젝트에서 가장 중요한 항등이다.
+     *
+     * 이게 깨지면 저장된 모든 시드의 결과가 달라지고 밸런스 기준선
+     * (무개입 11.0 / 47.0 / 38.2)을 처음부터 다시 재야 한다.
+     * `toBeCloseTo` 가 아니라 **정확히 같은지**를 본다
+     */
+    const c = base()
+    const after = applyOrders(c, [p('DF04', 'NONE'), p('MF06', 'NONE'), p('FW09', 'NONE')])
+    expect(after).toEqual(c)
+  })
+
+  it('피치 밖 선수의 지시는 계수에 닿지 않는다', () => {
+    // 벤치에 앉은 선수가 골문 앞을 지킬 수는 없다
+    const c = base()
+    expect(applyOrders(c, [p('DF04', 'HOLD', false)])).toEqual(c)
+  })
+
+  it('골문 앞은 상대 마무리를 깎고 우리 공격을 줄인다', () => {
+    // 이득과 대가가 함께 걸려야 한다. 대가가 없으면 전 국면에서
+    // 켜두는 것이 정답이 되어 "판마다 다른 판단"이 무너진다
+    const c = base()
+    const one = applyOrders(c, [p('DF04', 'HOLD')])
+    expect(one.oppShotXg).toBeLessThan(c.oppShotXg)
+    expect(one.widthK).toBeLessThan(c.widthK)
+
+    // 두 명이면 더 깎인다 — 한 명일 때와 같으면 두 번째가 장식이다
+    const two = applyOrders(c, [p('DF04', 'HOLD'), p('DF05', 'HOLD')])
+    expect(two.oppShotXg).toBeLessThan(one.oppShotXg)
+  })
+
+  it('아껴 뛰기는 체력을 아끼고 그 자리를 연다', () => {
+    const c = base()
+    const one = applyOrders(c, [p('MF06', 'CONSERVE')])
+    expect(one.oppOpen).toBeGreaterThan(c.oppOpen)
+    expect(drainFactorOf('CONSERVE')).toBeLessThan(drainFactorOf('NONE'))
+    expect(drainFactorOf('NONE')).toBe(1)
+  })
+
+  it('물러서라는 계수를 하나도 안 건드린다', () => {
+    /**
+     * 셋이 **서로 다른 종류의 통로**를 쓴다는 것이 이 설계의 핵심이다.
+     * 물러서라는 숫자가 아니라 **후보 집합**으로 작동한다 —
+     * `events.ts` 의 반칙 후보와 퇴장 위험 집합에서 빠진다.
+     * 여기에 계수가 생기면 셋이 같은 종류가 되어 설계가 무너진다
+     */
+    const c = base()
+    expect(applyOrders(c, [p('MF06', 'BACK_OFF')])).toEqual(c)
   })
 })

@@ -109,19 +109,24 @@ export function resolveAttacks(
     }
   }
 
-  // 상대 오픈플레이
+  // 상대 오픈플레이 — 골문 앞을 지키라는 지시가 마무리를 깎는다.
+  // 상대가 오는 횟수는 그대로고 넣는 확률만 준다
   if (d.awayAttempt < BASE.O0 * c.oppOpen) {
     o.awayAttempt += 1
     if (d.awayEnter < BASE.P_ENTER_OPP) {
       o.awayShot += 1
-      if (d.awayShot < XG.boxCentre) o.awayGoals += 1
+      if (d.awayShot < XG.boxCentre * c.oppShotXg) o.awayGoals += 1
     }
   }
 
-  // 세트피스 — 라인을 내릴수록 늘어난다. 화면에서는 코너 횟수로 읽힌다
+  // 세트피스 — 라인을 내릴수록 늘어난다. 화면에서는 코너 횟수로 읽힌다.
+  //
+  // 골문 앞을 지키라는 지시는 세트피스를 **덜 내주는** 것이 아니라 내준
+  // 세트피스에서 **덜 먹는다**(`c.oppShotXg`). 코너는 그대로 오지만
+  // 골문 앞에 남은 사람이 헤딩을 따낸다. 지시가 없으면 1.0이다
   if (d.setPiece < BASE.S0 * c.setPiece) {
     o.setPiece += 1
-    if (d.setPieceShot < XG.setPiece) o.awayGoals += 1
+    if (d.setPieceShot < XG.setPiece * c.oppShotXg) o.awayGoals += 1
   }
 
   return o

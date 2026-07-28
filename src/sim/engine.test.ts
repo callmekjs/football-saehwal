@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { simulate, createState, tick } from './engine'
+import { simulate, createState, tick, checkOrder } from './engine'
 import { createRng } from './rng'
 import { TOTAL_TICKS } from './constants'
 import { HOME_XI, BENCH } from './squad'
@@ -234,5 +234,115 @@ describe('simulate — 국면 2의 반전', () => {
       { tick: 0, type: 'PRESS', value: 1 },
     ])
     expect(fix - noop).toBeGreaterThan(0.15)
+  })
+})
+
+describe('개별 지시 — 경기 전체', () => {
+
+  const run = (decisions: Decision[], seeds = 300) => {
+    let pass = 0
+    let sendOff = 0
+    let injury = 0
+    let conceded = 0
+    for (let s = 0; s < seeds; s++) {
+      const r = simulate({ ...P, seed: P.seed + s }, decisions)
+      if (r.passed) pass += 1
+      sendOff += r.final.log.filter((e) => e.kind === 'SEND_OFF').length
+      injury += r.final.log.filter((e) => e.kind === 'INJURY').length
+      conceded += r.final.score[1] - P.score[1]
+    }
+    return { pass: pass / seeds, sendOff, injury, conceded: conceded / seeds }
+  }
+
+  /** 지시 축이 값을 갖는 조건 — 강 압박 + 경고 보유 */
+  const pressed: Decision[] = [
+    { tick: 0, type: 'LINE', value: 1 },
+    { tick: 0, type: 'PRESS', value: 2 },
+    { tick: 0, type: 'WIDTH', value: 2 },
+  ]
+
+  it('지시를 하나도 안 걸면 경기 결과가 한 톨도 안 바뀐다', () => {
+    /**
+     * ★ 저장된 시드와 밸런스 기준선이 여기에 달려 있다.
+     *
+     * `order` 칸이 생기기 전과 **완전히 같은 경기**가 나와야 한다.
+     * 통계가 아니라 경기 하나하나를 비교한다
+     */
+    for (let s = 0; s < 40; s++) {
+      const a = simulate({ ...P, seed: P.seed + s }, pressed)
+      const b = simulate(
+        { ...P, seed: P.seed + s },
+        [...pressed, { tick: 0, type: 'ORDER', target: 'MF06', order: 'NONE' }],
+      )
+      expect(b.final.score, `시드 ${P.seed + s}`).toEqual(a.final.score)
+      expect(b.final.log.length).toBe(a.final.log.length)
+    }
+  })
+
+  it('물러서라 — 경고를 안은 선수가 퇴장에서 빠진다', () => {
+    /**
+     * 이 지시의 통로는 계수가 아니라 **후보 집합**이다. 반칙 후보와
+     * 퇴장 위험 집합에서 그 선수가 빠지므로 두 번째 경고도 강 압박
+     * 해저드도 그를 비켜간다. 난수는 이미 뽑아둔 것을 그대로 쓰고
+     * 배열 길이만 바뀐다 — 소비 개수와 순서는 그대로다
+     */
+    const before = run(pressed)
+    const after = run([
+      ...pressed,
+      { tick: 0, type: 'ORDER', target: 'MF06', order: 'BACK_OFF' },
+    ])
+    expect(before.sendOff, '지시 없이 나온 퇴장').toBeGreaterThan(0)
+    expect(after.sendOff, `퇴장 ${before.sendOff} → ${after.sendOff}`).toBeLessThan(
+      before.sendOff * 0.5,
+    )
+  })
+
+  it('아껴 뛰어라 — 그 선수의 체력이 실제로 덜 닳는다', () => {
+    const plain = simulate({ ...P, seed: P.seed }, pressed)
+    const saved = simulate({ ...P, seed: P.seed }, [
+      ...pressed,
+      { tick: 0, type: 'ORDER', target: 'MF06', order: 'CONSERVE' },
+    ])
+    const of = (r: typeof plain) => r.final.players.find((x) => x.id === 'MF06')!.stamina
+    expect(of(saved), `체력 ${of(plain).toFixed(1)} → ${of(saved).toFixed(1)}`).toBeGreaterThan(
+      of(plain),
+    )
+    // 다른 선수는 그대로다. 한 명에게 내린 지시가 팀 전체에 걸리면 안 된다
+    const other = (r: typeof plain) => r.final.players.find((x) => x.id === 'DF04')!.stamina
+    expect(other(saved)).toBeCloseTo(other(plain), 6)
+  })
+
+  it('골문 앞 — 실점이 준다', () => {
+    const before = run(pressed)
+    const after = run([
+      ...pressed,
+      { tick: 0, type: 'ORDER', target: 'DF04', order: 'HOLD' },
+      { tick: 0, type: 'ORDER', target: 'DF05', order: 'HOLD' },
+    ])
+    expect(after.conceded, `실점 ${before.conceded.toFixed(2)} → ${after.conceded.toFixed(2)}`)
+      .toBeLessThan(before.conceded)
+  })
+
+  it('지시는 세 명까지, 골문 앞은 두 명까지다', () => {
+    // 상한이 없으면 지시는 그냥 곱셈이고 곱셈에는 순서가 없다.
+    // 킥오프에 전부 걸어놓고 끝이라 조작이 아니라 세팅이 된다
+    let s = createState(P)
+    expect(checkOrder(s, 'DF04', 'HOLD')).toBeNull()
+    s = { ...s, players: s.players.map((x) => (x.id === 'DF04' ? { ...x, order: 'HOLD' } : x)) }
+    s = { ...s, players: s.players.map((x) => (x.id === 'DF05' ? { ...x, order: 'HOLD' } : x)) }
+    expect(checkOrder(s, 'DF02', 'HOLD')).not.toBeNull()
+    // 공격수는 골문 앞을 지키지 않는다
+    expect(checkOrder(createState(P), 'FW09', 'HOLD')).not.toBeNull()
+  })
+
+  it('교체로 나간 선수의 지시는 함께 걷힌다', () => {
+    // 벤치에 앉은 선수에게 유령 지시가 붙어 있으면, 나중에 다시
+    // 들어올 때 감독이 내리지 않은 지시가 따라 들어온다
+    const r = simulate({ ...P, seed: P.seed }, [
+      { tick: 0, type: 'ORDER', target: 'DF04', order: 'HOLD' },
+      { tick: 10, type: 'SUB', out: 'DF04', in: 'DF15' },
+    ])
+    expect(r.final.players.find((x) => x.id === 'DF04')!.order).toBe('NONE')
+    expect(r.final.players.find((x) => x.id === 'DF15')!.order).toBe('NONE')
   })
 })

@@ -2,7 +2,7 @@ import { createRng, type Rng } from '../sim/rng'
 import { getFormation, slotsForTenMen } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
 import { TOTAL_TICKS } from '../sim/constants'
-import type { MatchState, Position } from '../sim/types'
+import type { MatchState, PlayerOrder, Position } from '../sim/types'
 
 /**
  * 관전용 경기 연출.
@@ -140,6 +140,18 @@ const GOAL_EXTRA = 4
  */
 const TACKLE_REACH = 4.5
 
+/**
+ * "골문 앞을 지켜라" 를 받은 선수가 자기 골대에서 벗어날 수 있는 거리(m).
+ *
+ * 페널티 지역이 골라인에서 16.5미터다. 그 조금 바깥까지 허용해 박스 앞
+ * 세컨드볼까지 닿게 한다. 더 좁히면 골라인에 붙어 서 있는 그림이 되고,
+ * 더 넓히면 다른 수비수와 구분이 안 돼 지시를 내린 표시가 사라진다.
+ */
+const HOLD_RANGE = 22
+
+/** "아껴 뛰어라" 를 받은 선수의 최고 속도 배수. 혼자 걸어서 자리를 잡는다 */
+const CONSERVE_SPEED = 0.9
+
 export interface VPlayer {
   id: string
   num: number
@@ -173,6 +185,14 @@ export interface VPlayer {
   top: number
   stamina: number
   booked: boolean
+  /**
+   * 감독이 이 선수에게 내린 개별 지시.
+   *
+   * 화면에서 **눈에 보여야** 지시가 조작으로 성립한다. 확률만 바뀌고
+   * 그림이 그대로면 감독은 자기가 무엇을 시켰는지 확인할 방법이 없다.
+   * 상대 선수에게는 걸리지 않으므로 언제나 `NONE` 이다.
+   */
+  order: PlayerOrder
   /** 방금 태클을 시도해 몸이 무너진 상태. 잠깐 못 움직인다 */
   recover: number
 }
@@ -559,6 +579,7 @@ export class VisualMatch {
         top: TOP_SPEED[slot.pos],
         stamina: s.stamina,
         booked: s.booked,
+        order: s.order,
         recover: prev?.recover ?? 0,
       })
     })
@@ -587,6 +608,8 @@ export class VisualMatch {
         top: TOP_SPEED[pos],
         stamina: 84,
         booked: false,
+        // 지시는 우리 팀에게만 내린다
+        order: 'NONE',
         recover: prev?.recover ?? 0,
       })
     })
@@ -745,6 +768,7 @@ export class VisualMatch {
       if (!s) continue
       v.stamina = s.stamina
       v.booked = s.booked
+      v.order = s.order
       // 수비라인·폭 설정을 자기 자리에 반영한다.
       // 자리는 배열 순서가 아니라 선수에게 붙어 있는 자리 번호로 찾는다
       const slot = slots[v.slot]
@@ -1952,12 +1976,17 @@ export class VisualMatch {
           // 나머지는 블록을 유지한 채 공 쪽으로 통째로 이동한다.
           // 이게 헐거우면 패스 한 번에 압박이 풀려 아무도 안 붙는 화면이
           // 된다. 실제 수비 블록은 공에서 20미터 안쪽에 모여 있다.
-          const compact = p.pos === 'DF' ? 0.42 : 0.72
+          //
+          // **물러서라고 한 선수는 미드필더여도 수비수처럼 선다.** 공을
+          // 덜 따라가고 자기 골대 쪽에 더 붙는다 — 화면에서 그 한 명만
+          // 뒤에 남아 있는 것이 보인다
+          const back = p.order === 'BACK_OFF'
+          const compact = p.pos === 'DF' || back ? 0.42 : 0.72
           let tx = p.homeX + (this.ball.x - p.homeX) * compact
 
           // 수비할 때는 자기 골대 쪽에 머문다. 상대가 자기 진영에서 공을
           // 돌린다고 우리 수비라인이 하프라인을 넘어가면 축구가 아니다
-          const limit = p.pos === 'DF' ? -9 : 16
+          const limit = p.pos === 'DF' || back ? -9 : 16
           tx =
             dir > 0
               ? Math.min(tx, PITCH_W / 2 + limit)
@@ -1970,6 +1999,23 @@ export class VisualMatch {
           const shift = (this.ball.y - PITCH_H / 2) * 0.6
           p.ty = clamp(PITCH_H / 2 + (p.homeY - PITCH_H / 2) * 0.8 + shift, 3, PITCH_H - 3)
         }
+      }
+
+      /**
+       * 골문 앞을 지켜라 — 자기 골대에서 이 거리 밖으로 못 나간다.
+       *
+       * 공격일 때도 걸린다. **공이 반대편에 있어도 골문 앞에 남아 있는
+       * 것이 보여야** 감독이 자기가 무엇을 시켰는지 확인할 수 있다.
+       * 팀 전체가 올라가는데 한 명만 안 올라가는 그림이 이 지시다.
+       *
+       * 공을 직접 몰거나 받으러 가는 선수는 위에서 `continue` 로 빠져
+       * 여기 오지 않는다 — 수비수가 공을 걷어내러 나가는 것까지 막으면
+       * 그건 축구가 아니라 말뚝이다.
+       */
+      if (p.order === 'HOLD') {
+        const own = this.goalX(p.side === 'HOME' ? 'AWAY' : 'HOME')
+        const far = own === GOAL_LINE_AWAY ? HOLD_RANGE : PITCH_W - HOLD_RANGE
+        p.tx = own === GOAL_LINE_AWAY ? Math.min(p.tx, far) : Math.max(p.tx, far)
       }
     }
     void state
@@ -1985,7 +2031,10 @@ export class VisualMatch {
   private chasersOf(side: 'HOME' | 'AWAY'): string[] {
     if (this.clock - this.chaseAt[side] > 0.7) {
       this.chaseIds[side] = this.players
-        .filter((p) => p.side === side && p.pos !== 'GK')
+        // 골문 앞을 지키라고 했거나 물러서라고 한 선수는 공에 달려들지
+        // 않는다. **이게 지시가 눈에 보이는 자리다** — 열 명이 공으로
+        // 몰려가는데 한 명만 자기 자리를 지키고 서 있다
+        .filter((p) => p.side === side && p.pos !== 'GK' && p.order !== 'HOLD' && p.order !== 'BACK_OFF')
         .sort((a, b) => dist(a, this.ball) - dist(b, this.ball))
         .slice(0, 3)
         .map((p) => p.id)
@@ -2010,8 +2059,11 @@ export class VisualMatch {
     // 공을 몰고 뛰는 선수는 빈 몸으로 뛰는 선수보다 느리다.
     // 이것 때문에 수비수가 따라붙을 수 있고, 압박이 실제로 작동한다
     const carrying = this.ball.mode === 'HELD' && this.ball.holder === p.id
+    // 아껴 뛰라고 한 선수는 전력으로 뛰지 않는다. 세 지시 중 화면에서
+    // 가장 알아보기 쉬운 것 — 열 명이 달려드는데 한 명만 걸어서 자리를 잡는다
+    const pace = p.order === 'CONSERVE' ? CONSERVE_SPEED : 1
     const top =
-      p.top * (0.62 + 0.38 * clamp(p.stamina, 0, 100) / 100) * (carrying ? 0.76 : 1)
+      p.top * (0.62 + 0.38 * clamp(p.stamina, 0, 100) / 100) * (carrying ? 0.76 : 1) * pace
 
     let wx = 0
     let wy = 0
