@@ -158,6 +158,23 @@ Code에서는 **`uxui-agent`** (`.claude/agents/uxui-agent.md`)를 쓴다.
 
 맡기지 않는 일: `src/sim/` 확률·밸런스, `src/render/` 축구 움직임, 실존 선수 데이터.
 
+## 4.7 Coach 경기 분석 에이전트
+
+경기 종료 뒤 득점·실점 원인과 사용자 판단을 설명하는 일은 Coach 에이전트가
+관리한다. Codex에서는 **`coach_agent`** (`.codex/agents/coach-agent.toml`),
+Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴다.
+두 실행 파일은 공통 원본 `docs/agents/coach-agent.md`를 반드시 읽는다.
+
+이 에이전트에게 맡기는 일:
+- 득점·실점 장면의 주원인·보조원인과 확신도
+- 포메이션·전술·교체·개별 지시가 결과에 준 영향
+- 한 경기 결과와 150판 판단 확률을 분리한 감독 총평
+- 다음 경기에서 무엇을 언제 바꿀지 구체적인 처방
+
+맡기지 않는 일: 경기 결과·확률·난수 변경, 관전 연출 수정, 근거 없는 원인
+추측. 분석에 필요한 기록이 없으면 `game-agent`에 읽기 전용 관찰 데이터
+추가를 요청한다.
+
 ## 5. 지금 상태와 다음 할 일
 
 진행 현황은 **[`docs/progress.md`](docs/progress.md)** 에 있다. 스무 단계 체크리스트와 현재 위치가 맨 위에 있다.
