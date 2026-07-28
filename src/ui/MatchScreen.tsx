@@ -5,6 +5,7 @@ import { BENCH, getPlayer } from '../sim/squad'
 import { judge, MAX_ORDERS } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import { useMatch } from './useMatch'
+import { AnalysisPanel } from './AnalysisPanel'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
@@ -508,7 +509,7 @@ function Bench({
 }
 
 export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: number }) {
-  const { state, phase, start, reset, setLever, setFormation, substitute, setOrder } =
+  const { state, phase, start, reset, setLever, setFormation, substitute, setOrder, decisions } =
     useMatch(problem)
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
@@ -632,11 +633,12 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
                   onClick={reset}
                   style={{ textAlign: 'center', minWidth: 140 }}
                 >
-                  다시 풀기
+                  다시 도전
                 </button>
               </div>
             </section>
           )}
+          {phase === 'DONE' && <AnalysisPanel problem={problem} decisions={decisions.current} />}
 
           <StatBars state={state} />
         </div>

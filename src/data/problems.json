@@ -6,6 +6,11 @@
     "score": [0, 1],
     "initialTactics": { "line": 1, "press": 1, "width": 0 },
     "initialFormation": "5-4-1",
+    "recommendation": {
+      "formation": "3-4-3",
+      "tactics": { "line": 2, "press": 1, "width": 2 },
+      "explanation": "상대가 중앙을 막고 있습니다. 폭을 넓혀 길을 만들고 라인을 올려 공격 숫자를 늘립니다."
+    },
     "objective": { "type": "EQUALIZE", "bonusOnWin": true },
     "seed": 33104,
     "subsLeft": 3,
@@ -21,6 +26,11 @@
     "score": [1, 0],
     "initialTactics": { "line": 0, "press": 0, "width": 0 },
     "initialFormation": "4-4-2",
+    "recommendation": {
+      "formation": "4-3-3",
+      "tactics": { "line": 1, "press": 1, "width": 2 },
+      "explanation": "너무 깊이 잠그면 세트피스를 계속 내줍니다. 라인을 보통으로 풀고 넓게 빠져나옵니다."
+    },
     "objective": { "type": "SURVIVE", "bonusOnWin": false },
     "seed": 40712,
     "subsLeft": 3,
@@ -36,6 +46,11 @@
     "score": [1, 0],
     "initialTactics": { "line": 0, "press": 0, "width": 0 },
     "initialFormation": "4-4-2",
+    "recommendation": {
+      "formation": "5-4-1",
+      "tactics": { "line": 1, "press": 2, "width": 2 },
+      "explanation": "한 명이 적어도 골문 앞에만 몰리지 않습니다. 수비 줄은 유지하고 강하게 압박해 탈출구를 만듭니다."
+    },
     "objective": { "type": "SURVIVE", "bonusOnWin": false },
     "seed": 51823,
     "subsLeft": 2,

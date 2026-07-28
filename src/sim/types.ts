@@ -90,6 +90,18 @@ export interface Objective {
   bonusOnWin: boolean
 }
 
+/**
+ * 국면을 여러 번 재현해 찾은 권장 전술.
+ *
+ * 확률 상수가 아니라 국면 데이터다. 새 국면은 이 값을 JSON에 함께 적기만
+ * 하면 분석 화면이 같은 코드로 설명할 수 있다.
+ */
+export interface Recommendation {
+  formation: FormationId
+  tactics: Tactics
+  explanation: string
+}
+
 /** 지시했지만 아직 데드볼을 기다리는 교체 */
 export interface PendingSub {
   out: string
@@ -157,6 +169,8 @@ export interface Problem {
   /** 앞 감독이 세워둔 포메이션 */
   initialFormation: FormationId
   objective: Objective
+  /** 경기 종료 뒤 무개입·사용자 판단과 비교할 검증된 전술 */
+  recommendation?: Recommendation
   seed: number
   subsLeft: number
   /** 국면별 시작 체력 덮어쓰기. 없는 선수는 명단의 stamina0 을 쓴다 */

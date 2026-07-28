@@ -47,6 +47,15 @@ export function toProblem(p: (typeof raw)[number]): Problem {
       press: level(p.initialTactics.press, 'press'),
       width: level(p.initialTactics.width, 'width'),
     },
+    recommendation: {
+      formation: p.recommendation.formation as FormationId,
+      tactics: {
+        line: level(p.recommendation.tactics.line, 'recommendation.line'),
+        press: level(p.recommendation.tactics.press, 'recommendation.press'),
+        width: level(p.recommendation.tactics.width, 'recommendation.width'),
+      },
+      explanation: p.recommendation.explanation,
+    },
     objective: p.objective as Objective,
   }
 }

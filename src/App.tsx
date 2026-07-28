@@ -60,6 +60,15 @@ function toProblem(p: (typeof raw)[number]): Problem {
       press: level(p.initialTactics.press),
       width: level(p.initialTactics.width),
     },
+    recommendation: {
+      formation: p.recommendation.formation as FormationId,
+      tactics: {
+        line: level(p.recommendation.tactics.line),
+        press: level(p.recommendation.tactics.press),
+        width: level(p.recommendation.tactics.width),
+      },
+      explanation: p.recommendation.explanation,
+    },
     objective: p.objective as Objective,
   }
 }
@@ -108,7 +117,7 @@ function FixtureCard({
 
 const TICKER =
   '시계는 멈추지 않는다 — 일시정지 없음　　되돌릴 수 없다 — 교체 카드는 회수되지 않는다　　' +
-  '결과와 판단은 따로 채점한다 — 무너져도 명장일 수 있다　　판마다 정답이 다르다 — 만능 전술은 없다　　' +
+  '결과와 판단은 따로 본다 — 무너져도 좋은 판단일 수 있다　　판마다 더 나은 전술이 다르다 — 만능 전술은 없다　　' +
   '모든 국면·선수·수치는 창작이다　　'
 
 export function App() {
@@ -165,7 +174,7 @@ export function App() {
             <em>축구 사활</em>
           </h1>
           <p className="hero-sub">
-            경기 15분을 75초에 압축한 실시간 전술 사활 퍼즐.
+            경기 15분을 75초에 압축한 실시간 전술 시뮬레이션.
             <br />
             시계는 멈추지 않고, 내린 결정은 되돌릴 수 없다.
           </p>
@@ -183,7 +192,7 @@ export function App() {
       <section id="fixtures" className="board">
         <div className="board-head">
           <h2>국면 선택</h2>
-          <span>사활문제집 — 판마다 정답이 다르다</span>
+          <span>전술 상황 훈련 — 판마다 더 나은 선택이 다르다</span>
         </div>
         <div className="fixtures">
           {entries.map((e, i) => (
