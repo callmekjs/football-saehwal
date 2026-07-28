@@ -775,10 +775,29 @@ export class VisualMatch {
       // 빗나간다 — 리시버에 못 미치거나 옆으로 새서 주인 없는 공이 된다.
       // 라인 밖까지 나갈 수 있어야 한다. 여기서 경기장 안으로 가둬버리면
       // 공이 영영 밖으로 나가지 않아 스로인도 코너킥도 생기지 않는다
+      // 빗나간 패스가 어디로 가는가.
+      //
+      // 넓게 흩뿌리면 아무도 없는 곳에 떨어져 주인 없는 공이 경기의
+      // 5분의 1을 차지한다. 좁게 두면 반대로 받으려던 동료가 늘 주워서
+      // 실패가 실패로 보이지 않는다 — 실측으로 긴 패스 성공률이 100%가
+      // 나왔다. 실제 축구의 미스패스 절반은 마크하던 수비수에게 간다.
+      //
+      // 난수는 분기와 무관하게 셋 다 뽑는다. 조건 안에서 뽑으면 같은
+      // 시드에서도 이후 수열이 밀려 재현이 조용히 깨진다
       const ang = this.rng.next() * Math.PI * 2
-      const off = 3 + this.rng.next() * 5
-      tx = clamp(tx + Math.cos(ang) * off, -6, PITCH_W + 6)
-      ty = clamp(ty + Math.sin(ang) * off, -6, PITCH_H + 6)
+      const off = 2 + this.rng.next() * 4
+      const toMarker = this.rng.next() < 0.5
+      const marker = this.players.reduce<VPlayer | null>((m, o) => {
+        if (o.side === to.side || o.pos === 'GK') return m
+        return !m || dist(o, to) < dist(m, to) ? o : m
+      }, null)
+      if (toMarker && marker) {
+        tx = clamp(marker.x + Math.cos(ang) * 1.6, -6, PITCH_W + 6)
+        ty = clamp(marker.y + Math.sin(ang) * 1.6, -6, PITCH_H + 6)
+      } else {
+        tx = clamp(tx + Math.cos(ang) * off, -6, PITCH_W + 6)
+        ty = clamp(ty + Math.sin(ang) * off, -6, PITCH_H + 6)
+      }
       targetId = null
     }
 
@@ -917,9 +936,16 @@ export class VisualMatch {
         let ty = p.homeY
 
         if (holder) {
-          // 공 있는 쪽으로 팀 전체가 쏠린다. 반대편은 폭을 유지한다
-          const lateral = p.pos === 'DF' ? 0.35 : 0.5
-          ty = p.homeY + (holder.y - p.homeY) * lateral
+          // 공 있는 쪽으로 팀이 쏠리되 **폭 자체는 유지한다.**
+          //
+          // 각자를 공 쪽으로 끌어당기면 대형이 통째로 접혀 열한 명이 한
+          // 덩어리로 몰려다닌다. 실측으로 공이 세로 68m 중 9~55m 구간만
+          // 오갔다 — 양쪽 사이드가 통째로 비어 있었다는 뜻이다.
+          //
+          // 실제 축구는 블록을 옮기지 접지 않는다. 중심을 옮기고 서로의
+          // 간격은 그대로 둔다. 공격할 때는 오히려 더 벌린다
+          const shift = (holder.y - PITCH_H / 2) * (p.pos === 'DF' ? 0.3 : 0.42)
+          ty = PITCH_H / 2 + (p.homeY - PITCH_H / 2) * 0.98 + shift
 
           const d = dist(p, holder)
           if (d < 24 && p.pos !== 'DF') {
@@ -971,7 +997,11 @@ export class VisualMatch {
               : Math.max(tx, PITCH_W / 2 - limit)
 
           p.tx = clamp(tx, 3, PITCH_W - 3)
-          p.ty = clamp(p.homeY + (this.ball.y - p.homeY) * 0.68, 3, PITCH_H - 3)
+          // 수비 블록도 접는 것이 아니라 옮긴다. 공 쪽으로 중심을 옮기되
+          // 좁힐 때조차 서로의 간격은 남긴다 — 백 넷의 폭은 공이 어디
+          // 있든 30미터 안팎을 유지한다
+          const shift = (this.ball.y - PITCH_H / 2) * 0.6
+          p.ty = clamp(PITCH_H / 2 + (p.homeY - PITCH_H / 2) * 0.8 + shift, 3, PITCH_H - 3)
         }
       }
     }

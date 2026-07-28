@@ -528,10 +528,14 @@ describe('슛 — 거리가 멀수록 빗나간다', () => {
 })
 
 describe('패스 성공률 — 거리가 멀수록 떨어진다', () => {
-  const { frames } = watch()
-
-  /** 패스 하나하나의 (거리, 성공 여부)를 뽑는다 */
+  /**
+   * 패스 하나하나의 (거리, 성공 여부)를 뽑는다.
+   *
+   * 한 판이면 긴 패스 표본이 열 개도 안 돼 성공률이 0% 와 100% 사이를
+   * 오간다. 거리별 비교는 세 판을 합쳐야 뜻이 생긴다.
+   */
   const passes: Array<{ d: number; ok: boolean }> = []
+  for (const frames of MULTI) {
   for (let i = 1; i < frames.length; i++) {
     const f = frames[i]
     // 흘린 공(SPILL)은 패스가 아니다. 일부러 뺏긴 공을 섞으면 짧은
@@ -550,9 +554,10 @@ describe('패스 성공률 — 거리가 멀수록 떨어진다', () => {
     }
     passes.push({ d, ok })
   }
+  }
 
   it('표본이 충분하다', () => {
-    expect(passes.length).toBeGreaterThan(25)
+    expect(passes.length).toBeGreaterThan(75)
   })
 
   it('패스는 100% 성공하지 않는다', () => {
@@ -770,8 +775,9 @@ describe('시뮬레이션과의 일치', () => {
     }
     expect(scoredAt, '골이 한 번도 안 났다').toBeGreaterThan(0)
 
-    // 득점 직후 짧은 시간 안에 골망에 도달하고 세리머니가 뜬다
-    const window = frames.slice(scoredAt, scoredAt + 15)
+    // 득점 직후 골망에 도달하고 세리머니가 뜬다. 공이 그 팀에게 없으면
+    // 잡을 때까지 최대 2.5초 기다렸다 쏘므로 창은 그만큼 넉넉해야 한다
+    const window = frames.slice(scoredAt, scoredAt + 40)
     expect(window.some((f) => f.celebrating), '세리머니가 뜨지 않았다').toBe(true)
   })
 })
