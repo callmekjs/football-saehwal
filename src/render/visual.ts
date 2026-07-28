@@ -83,6 +83,14 @@ const SHOOT_RANGE = 32
  * 골이 된 것이다.
  */
 const LONG_SHOT_MAX = 38
+/**
+ * 화면의 공 주인이 시뮬과 어긋난 채 버틸 수 있는 시간(초).
+ *
+ * 짧게 잡으면 화면에서 방금 태클로 뺏은 공이 곧바로 되돌아가 압박이
+ * 무의미해진다. 길게 잡으면 시뮬이 골이라고 알릴 때 화면의 그 팀이
+ * 반대편에서 수비를 하고 있다.
+ */
+const OWNER_GRACE = 0.5
 
 /**
  * 태클이 성립하는 거리.
@@ -322,6 +330,10 @@ export class VisualMatch {
   private lastStats = { homeShot: 0, awayShot: 0 }
   private lastScore: [number, number] = [0, 0]
   private lastOwner: 'HOME' | 'AWAY' = 'HOME'
+  /** 시뮬이 말하는 지금의 공 주인. 화면은 이걸 따라간다 */
+  private simOwner: 'HOME' | 'AWAY' = 'HOME'
+  /** 화면의 공 주인이 시뮬과 어긋난 채 흐른 시간(초) */
+  private ownerDrift = 0
   private lastFormation = ''
   /**
    * 마지막으로 화면에 그린 우리 팀 명단.
@@ -704,20 +716,13 @@ export class VisualMatch {
       this.queueShot(newHomeShot > 0 ? 'HOME' : 'AWAY', false)
     }
 
+    // 시뮬이 말하는 소유 팀. 화면은 이걸 따라가야 한다
+    this.simOwner = state.ball.owner
+
     // 점유 전환 — 가장 가까운 상대가 뺏는 장면으로 만든다
     if (state.ball.owner !== this.lastOwner) {
       this.lastOwner = state.ball.owner
-      const holder = this.byId(this.ball.holder)
-      if (this.ball.mode === 'HELD' && holder && holder.side !== state.ball.owner) {
-        const taker = this.nearestOf(state.ball.owner, holder)
-        if (taker && dist(taker, holder) <= TACKLE_REACH) {
-          this.flash('TACKLE', this.ball.x, this.ball.y)
-          holder.recover = 0.5
-          this.giveTo(taker)
-        } else if (taker) {
-          this.spill(holder, taker)
-        }
-      }
+      this.takeOver(state.ball.owner)
     }
   }
 
@@ -758,6 +763,59 @@ export class VisualMatch {
       })
     }
     this.downLogLen = state.log.length
+  }
+
+  /**
+   * 공을 그 팀에게 넘긴다.
+   *
+   * 붙어 있으면 발밑에서 뺏는 장면, 멀면 터치가 길어 흘린 장면이 된다.
+   * 공이 날아가는 중이거나 죽어 있으면 아무것도 하지 않는다 — 그때는
+   * `reconcileOwner` 가 공이 잡히기를 기다렸다 다시 시도한다.
+   */
+  private takeOver(side: 'HOME' | 'AWAY'): boolean {
+    const holder = this.byId(this.ball.holder)
+    if (this.ball.mode !== 'HELD' || !holder || holder.side === side) return false
+    // 골키퍼가 손으로 잡은 공은 뺏을 수 없다. 곧 차낸다
+    if (holder.pos === 'GK') return false
+    const taker = this.nearestOf(side, holder)
+    if (!taker) return false
+    if (dist(taker, holder) <= TACKLE_REACH) {
+      this.flash('TACKLE', this.ball.x, this.ball.y)
+      holder.recover = 0.5
+      this.giveTo(taker)
+    } else {
+      this.spill(holder, taker)
+    }
+    return true
+  }
+
+  /**
+   * 화면의 공 주인을 시뮬에 맞춘다.
+   *
+   * 전에는 시뮬의 소유 팀이 **바뀌는 순간에만** 화면을 맞췄고, 그때 공이
+   * 날아가는 중이거나 죽어 있으면 그 전환을 그냥 버렸다. 공은 경기의
+   * 40%를 공중에서 보내므로 전환의 상당수가 조용히 사라졌고, 화면과 시뮬의
+   * 소유 팀이 **경기의 40% 동안 서로 달랐다**(실측 일치율 60.3%).
+   *
+   * 그래서 시뮬이 "이 팀이 골"이라고 알린 순간 화면에서는 그 팀이 반대편
+   * 골문 앞에서 수비를 하고 있었고, 연출은 슛을 만들 수가 없어 골 넷 중
+   * 셋을 슛 없이 골망 장면으로 때웠다. 사용자가 본 "갑작스러운 득점"이
+   * 이것이다.
+   *
+   * 이제 어긋난 채로 흐른 시간을 재서, 잠깐이면 화면의 자체 판단(태클·
+   * 인터셉트)을 존중하고 길어지면 시뮬 쪽으로 되돌린다. 매 프레임 강제로
+   * 맞추면 화면에서 방금 뺏은 공이 곧바로 되돌아가 태클이 무의미해진다.
+   */
+  private reconcileOwner(dt: number) {
+    const holder = this.byId(this.ball.holder)
+    if (this.ball.mode !== 'HELD' || !holder || holder.side === this.simOwner) {
+      this.ownerDrift = 0
+      return
+    }
+    if (holder.pos === 'GK') return
+    this.ownerDrift += dt
+    if (this.ownerDrift < OWNER_GRACE) return
+    if (this.takeOver(this.simOwner)) this.ownerDrift = 0
   }
 
   /**
@@ -874,10 +932,10 @@ export class VisualMatch {
      * 기다리는 시간이 길수록 자연스러운 슛이 나올 확률은 오르지만, 골은
      * 점수판이 이미 올라간 사건이라 장면이 늦으면 관전자가 무슨 일이
      * 일어난 건지 알 수 없다. 실측으로 2.4초는 골 넷 중 셋이 슛 없이
-     * 처리됐고, 3.4초는 장면 하나가 아예 늦어 사라졌다. 3.0초에서
-     * 골 장면이 득점 뒤 평균 3초에 뜨고 슛으로 들어가는 비율이 가장 높다.
+     * 처리됐다. 4.2초면 그 팀이 공을 받아 앞으로 한 번 길게 보내고 사정
+     * 거리에 들어갈 시간이 되고, 골 장면은 여전히 득점 뒤 6초 안에 뜬다.
      */
-    this.pending.push({ side, willScore, life: willScore ? 3.0 : 1.8 })
+    this.pending.push({ side, willScore, life: willScore ? 4.2 : 1.8 })
     const holder = this.byId(this.ball.holder)
     if (
       this.ball.mode === 'HELD' &&
@@ -917,6 +975,14 @@ export class VisualMatch {
     const q = this.pending[0]
     if (!q) return
     q.life -= dt
+    /**
+     * 골 예약이 걸린 팀이 화면에서 공을 안 가지고 있으면 즉시 넘겨준다.
+     *
+     * 시뮬에서는 이미 그 팀이 공을 몰고 가서 골을 넣었다. 화면이 반대편
+     * 팀에게 공을 쥐여준 채 기다리면 3초가 그냥 흘러가고, 결국 슛 없이
+     * 골망 장면으로 때우게 된다. 여기서는 유예를 두지 않는다
+     */
+    if (q.willScore) this.takeOver(q.side)
     const holder = this.byId(this.ball.holder)
     if (
       this.ball.mode === 'HELD' &&
@@ -1049,7 +1115,7 @@ export class VisualMatch {
     // 재개 시점에 밀려 있던 빗나갈 슛은 버린다. 골 예약은 점수판이 이미
     // 올라간 것이므로 살려두되 기다리는 시간을 다시 준다
     this.pending = this.pending.filter((q) => q.willScore)
-    for (const q of this.pending) q.life = 3.0
+    for (const q of this.pending) q.life = 4.2
     // 킥오프가 아웃 재개보다 우선한다
     this.restart = null
 
@@ -1621,7 +1687,17 @@ export class VisualMatch {
         // 공격할 때 가만히 서 있는 선수는 없다. 수비라인은 하프라인까지
         // 밀고 올라가고 미드필더는 상대 박스 근처까지 들어간다. 전진 폭이
         // 작으면 공만 앞에 가 있고 뒤에 아홉 명이 서 있는 화면이 된다.
-        const push = p.pos === 'FW' ? 22 : p.pos === 'MF' ? 30 : 32
+        /**
+         * 골 예약이 걸린 팀은 더 높이 올라간다.
+         *
+         * 시뮬은 이미 이 팀이 골을 넣었다고 정했다. 그런데 화면의 이 팀이
+         * 자기 진영에 웅크리고 있으면 3~4초 안에 골대 근처로 갈 수가 없고,
+         * 연출은 슛 없이 골망 장면으로 때우게 된다. 실제 축구의 역습처럼
+         * 앞선을 밀어올려 길게 보낼 자리를 만든다.
+         */
+        const chasing = this.pending[0]?.willScore && this.pending[0].side === p.side
+        const surge = chasing && p.pos !== 'DF' ? 14 : 0
+        const push = (p.pos === 'FW' ? 22 : p.pos === 'MF' ? 30 : 32) + surge
         let tx = p.homeX + push * dir
         let ty = p.homeY
 
@@ -2064,6 +2140,7 @@ export class VisualMatch {
     for (const p of this.players) this.movePlayer(p, step)
     this.separate()
     this.moveBall(step)
+    this.reconcileOwner(step)
     this.tryPendingShot(step)
   }
 }
