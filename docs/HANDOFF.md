@@ -158,8 +158,9 @@
 - 375×812 준비 화면 높이 **1939px → 846px**, 가로 넘침 0px. 피치·킥오프·
   탭·첫 전술 조작이 첫 화면에 들어온다.
 - 경기 분석은 확률 차이 배지와 포메이션·라인·압박·폭을 나눠 읽게 했다.
-- 재사용할 UX/UI 담당 지침: Codex는 `.codex/agents/uxui-agent.toml`,
-  Claude Code는 `.claude/agents/uxui-agent.md`.
+- 재사용할 UX/UI 담당 지침의 단일 원본은 `docs/agents/uxui-agent.md`.
+  Codex의 `.codex/agents/uxui-agent.toml`과 Claude Code의
+  `.claude/agents/uxui-agent.md`가 모두 이 원본을 읽는다.
 - `src/sim/`과 밸런스 숫자, 실제 선수 금지 원칙은 건드리지 않았다.
 
 ## 다음에 할 것

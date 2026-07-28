@@ -644,3 +644,10 @@
 작업에서도 재사용하도록 Codex용 `.codex/agents/uxui-agent.toml`과 Claude
 Code용 `.claude/agents/uxui-agent.md`를 만들고 `AGENTS.md`에 담당 범위와
 금지 범위를 연결했다. 시뮬레이션 규칙과 확률은 한 줄도 바꾸지 않았다.
+
+두 파일에 같은 지침을 복사해두면 한쪽만 고친 뒤 서로 다른 에이전트가 되는
+문제가 생긴다. 그래서 `docs/agents/uxui-agent.md`를 단일 원본으로 옮기고,
+Codex와 Claude Code의 플랫폼별 파일은 시작할 때 이 원본을 반드시 읽도록
+줄였다. 또한 사용자의 정정에 따라 대상은 설치형 모바일 앱이 아니라 동적
+웹서비스라고 명시했다. 375px 검사는 앱 설계가 아니라 휴대폰 웹 브라우저의
+반응형 품질 검사다.

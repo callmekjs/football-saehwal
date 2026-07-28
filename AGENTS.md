@@ -115,6 +115,19 @@ expect(low.setPiece).toBeCloseTo(4.2)                    // 나쁘다
 
 ---
 
+## 4.4 Codex ↔ Claude Code 에이전트 공통 규칙
+
+앞으로 새 전문 에이전트를 만들 때 역할 지침의 단일 원본은
+`docs/agents/<이름>.md`에 둔다. Codex의 `.codex/agents/*.toml`과 Claude
+Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 파일이며,
+작업 시작 전에 같은 공통 원본을 끝까지 읽도록 만든다.
+
+한 플랫폼에 전문 에이전트를 추가하면 같은 커밋에서 다른 플랫폼의 실행
+파일도 함께 추가한다. 역할·범위·금지선·검증 기준을 두 실행 파일에 복사하지
+않는다. 그래야 한쪽만 수정되어 서로 다른 에이전트가 되는 일을 막을 수 있다.
+
+---
+
 ## 4.5 게임 전문가 에이전트
 
 축구 룰과 게임 시스템은 **`game-agent`** 가 관리한다 (`.claude/agents/game-agent.md`).
@@ -131,9 +144,11 @@ expect(low.setPiece).toBeCloseTo(4.2)                    // 나쁘다
 
 ## 4.6 UX/UI 전문가 에이전트
 
-화면 정보 순서와 모바일 조작은 UX/UI 전문 에이전트가 관리한다.
+화면 정보 순서와 웹 조작·반응형 품질은 UX/UI 전문 에이전트가 관리한다.
 Codex에서는 **`uxui_agent`** (`.codex/agents/uxui-agent.toml`), Claude
 Code에서는 **`uxui-agent`** (`.claude/agents/uxui-agent.md`)를 쓴다.
+두 실행 파일은 동일한 **공통 원본** `docs/agents/uxui-agent.md`를 반드시
+읽는다. 역할을 바꿀 때는 공통 원본만 수정하고 두 실행 파일에 복제하지 않는다.
 
 이 에이전트에게 맡기는 일:
 - 첫 화면·국면 선택·경기 화면·결과 화면의 정보 구조
