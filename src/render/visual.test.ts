@@ -50,6 +50,8 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
     celebrating: boolean
     restart: { kind: string; side: string; x: number; y: number } | null
     scoredBy: 'HOME' | 'AWAY' | null
+    /** 점수판에 뜨는 점수. 골 장면이 나올 때 오르므로 시뮬보다 늦을 수 있다 */
+    shown: [number, number]
     flashes: string[]
     players: Array<{ id: string; x: number; y: number; v: number }>
   }> = []
@@ -83,11 +85,14 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
         ? { kind: vm.restart.kind, side: vm.restart.side, x: vm.restart.x, y: vm.restart.y }
         : null,
       scoredBy: vm.celebration?.side ?? null,
+      shown: [...vm.displayScore] as [number, number],
       flashes: vm.flashes.map((x) => x.kind),
       players: vm.players.map((p) => ({ id: p.id, x: p.x, y: p.y, v: Math.hypot(p.vx, p.vy) })),
     })
   }
-  return { frames, vm }
+  // 종료 휘슬을 한 번 더 흘려보낸다. 점수판이 시뮬과 맞춰지는 자리다
+  vm.sync(s)
+  return { frames, vm, final: s }
 }
 
 /**
@@ -329,30 +334,39 @@ describe('선수 움직임 — 출시 기준', () => {
   })
 
   it('점수판이 올라가면 반드시 골 장면이 나온다', () => {
-    // 점수만 소리 없이 바뀌면 안 된다. 실측으로 세 판에 골 셋 중 하나가
-    // 뒤이어 들어온 평범한 슛에 예약이 밀려 통째로 사라졌다
+    /**
+     * 점수만 소리 없이 바뀌면 안 된다.
+     *
+     * 화면은 골을 예약해두고 진짜 공격 장면을 만든 다음에 보여주므로
+     * 장면이 득점 신호보다 몇 초 늦을 수 있다. **몇 초 안에 나오는가가
+     * 아니라 하나도 빠짐없이 나오는가**를 본다. 골 장면의 수가 시뮬의
+     * 골 수와 같아야 한다
+     */
     let signals = 0
-    let shown = 0
+    let scenes = 0
     for (const fs of MULTI) {
-      // 마지막 5초에 들어간 골은 세리머니가 관측 구간을 넘어간다
-      for (let i = 1; i < fs.length - 70; i++) {
-        const d =
-          fs[i].state.score[0] - fs[i - 1].state.score[0] +
-          (fs[i].state.score[1] - fs[i - 1].state.score[1])
-        if (d <= 0) continue
-        signals += 1
-        // 예약이 기다리는 시간(2.5초) + 슛이 날아가는 시간, 그리고 그
-        // 사이에 데드볼이 낄 수 있는 것까지 감안해 6초
-        for (let j = i + 1; j < i + 60; j++) {
-          if (!fs[j - 1].celebrating && fs[j].celebrating) {
-            shown += 1
-            break
-          }
-        }
+      const last = fs[fs.length - 1]
+      signals += last.state.score[0] + last.state.score[1] - (P.score[0] + P.score[1])
+      for (let i = 1; i < fs.length; i++) {
+        if (fs[i].celebrating && !fs[i - 1].celebrating) scenes += 1
       }
     }
     expect(signals, '여섯 판 동안의 득점 신호').toBeGreaterThan(0)
-    expect(shown, `득점 신호 ${signals}회 중 골 장면 ${shown}회`).toBe(signals)
+    // 마지막 순간의 골은 세리머니가 종료 휘슬에 잘려 장면이 안 잡힐 수
+    // 있다. 그때도 점수판은 아래 테스트가 지킨다
+    expect(scenes, `득점 ${signals}회 중 골 장면 ${scenes}회`).toBeGreaterThanOrEqual(signals - 1)
+  })
+
+  it('종료 휘슬에서 점수판이 시뮬과 정확히 같다', () => {
+    /**
+     * 골 장면을 미루는 대가로 점수판이 잠깐 늦는다. **경기 결과가 바뀌는
+     * 것은 절대 아니다.** 승패는 시뮬의 점수로만 판정하고, 화면의 숫자는
+     * 종료 휘슬에서 반드시 시뮬과 같아진다. 여기가 그 보증이다
+     */
+    for (const seed of SEEDS) {
+      const { vm, final } = watch({ ...P, seed })
+      expect(vm.displayScore, `시드 ${seed}`).toEqual(final.score)
+    }
   })
 
   it('한 점에 뭉치지 않는다', () => {
@@ -1158,42 +1172,128 @@ describe('골은 갑자기 터지지 않는다', () => {
    * 슛은 그 사이 3미터를 간다 — 골문 앞 툭 밀어넣기는 슛이 시작된 프레임과
    * 골이 된 프레임이 같아서 "슛이 없었다"로 잘못 세어진다.
    */
-  const goals: Array<{ withShot: boolean }> = []
+  const goalOf = (side: 'HOME' | 'AWAY') => (side === 'HOME' ? PITCH_W : 0)
+  /** 그 팀의 공격 방향(= 상대 진영)에 공이 있는가 */
+  const attacking = (side: 'HOME' | 'AWAY', x: number) =>
+    side === 'HOME' ? x > PITCH_W / 2 : x < PITCH_W / 2
+
+  const goals: Array<{
+    withShot: boolean
+    /** 슛을 찬 지점이 그 팀의 공격 진영인가 */
+    shotInAttackHalf: boolean
+    /** 슛 지점에서 골대까지의 거리(m) */
+    shotDist: number
+    /** 골 직전에 공이 그 팀 공격 진영에 연속으로 있던 시간(초) */
+    buildup: number
+    /** 종료 휘슬까지 남은 시간(초) */
+    timeLeft: number
+  }> = []
+
   for (const fs of WIDE) {
     for (let i = 1; i < fs.length; i++) {
       if (!fs[i].celebrating || fs[i - 1].celebrating) continue
-      let withShot = false
+      const side = fs[i].scoredBy!
+
+      // 슛이 시작된 프레임을 찾는다. 직전 한 프레임만 보면 안 된다 —
+      // 한 프레임은 0.1초이고 초속 30미터짜리 슛은 그 사이 3미터를 간다.
+      // 골문 앞 툭 밀어넣기는 슛과 골이 같은 프레임에 잡힌다
+      let shotAt = -1
       for (let k = Math.max(0, i - 20); k <= i; k++) {
-        if (fs[k].mode === 'SHOT' && fs[k].ball.willScore) withShot = true
+        if (fs[k].mode === 'SHOT' && fs[k].ball.willScore && shotAt < 0) shotAt = k
       }
-      goals.push({ withShot })
+      while (shotAt > 0 && fs[shotAt - 1].mode === 'SHOT' && fs[shotAt - 1].ball.willScore) {
+        shotAt -= 1
+      }
+
+      // 전개 — 골 직전 3초(30프레임) 동안 공이 그 팀 공격 진영에 있었나
+      let run = 0
+      for (let k = i - 1; k >= Math.max(0, i - 30); k--) {
+        if (!attacking(side, fs[k].ball.x)) break
+        run += 1
+      }
+
+      // 득점 신호가 난 틱을 거꾸로 찾는다. 종료가 임박했는지 보려면
+      // 장면이 뜬 시각이 아니라 시뮬이 골을 정한 시각을 봐야 한다
+      let at = i
+      const sum = (f: (typeof fs)[number]) => f.state.score[0] + f.state.score[1]
+      while (at > 0 && sum(fs[at]) === sum(fs[at - 1])) at -= 1
+
+      goals.push({
+        withShot: shotAt >= 0,
+        shotInAttackHalf: shotAt >= 0 && attacking(side, fs[shotAt].ball.fromX),
+        shotDist:
+          shotAt >= 0
+            ? Math.hypot(goalOf(side) - fs[shotAt].ball.fromX, GOAL_MID - fs[shotAt].ball.fromY)
+            : Infinity,
+        buildup: run / 10,
+        timeLeft: (TOTAL_TICKS - at) * 0.1,
+      })
     }
   }
 
+  /**
+   * 종료 직전의 골은 구조적으로 전개를 만들 수 없다.
+   *
+   * 750틱이 끝나면 화면도 멈춘다. 남은 시간이 없는데 장면을 미루면 골이
+   * 영영 안 나오고 점수판만 끝에서 훌쩍 뛴다 — 그게 훨씬 나쁘다. 그래서
+   * 남은 시간이 짧으면 화면은 전개를 포기하고 곧바로 골망 장면으로
+   * 넘어간다. 그 골들은 아래 비율에서 뺀다. 점수가 맞는지는
+   * "종료 휘슬에서 점수판이 시뮬과 정확히 같다" 가 따로 지킨다
+   */
+  const buildable = goals.filter((g) => g.timeLeft > 14)
+
   it('표본이 충분하다', () => {
-    expect(goals.length, `열네 판 동안의 골 장면 ${goals.length}`).toBeGreaterThan(10)
+    expect(goals.length, `스물네 판 동안의 골 장면 ${goals.length}`).toBeGreaterThan(10)
+    expect(buildable.length, `그중 전개를 만들 시간이 있던 골 ${buildable.length}`).toBeGreaterThan(8)
   })
 
-  it('골은 대부분 슛이 들어가는 장면으로 나온다', () => {
+  it('골은 슛이 들어가는 장면으로 나온다', () => {
     /**
      * 시뮬이 "이 틱에 골"이라고 정하면 연출은 그걸 장면으로 만들어야
      * 한다. 그 순간 그 팀이 화면에서 골대 근처에 없으면 슛을 만들 수가
      * 없어 골망이 흔들리는 장면으로 건너뛴다 — 관전자에게는 공이 중원에
      * 있다가 갑자기 골이 되는 것으로 보인다.
      *
-     * 실측으로 골 넷 중 셋(64%)이 그렇게 처리되고 있었다. 원인은 화면의
-     * 공 주인이 시뮬과 자주 어긋나 있던 것이었다.
+     * 실측으로 골 넷 중 셋(64%)이 그렇게 처리되고 있었다. 화면이 골을
+     * 예약해두고 공격을 만든 뒤에 보여주게 되면서 백 판 기준 97%가 됐다
      */
-    /**
-     * 시드 60개로 재면 68%다(우리 득점 73% · 실점 63%). 여기 스물네 판에
-     * 잡히는 골은 서른 개 안팎이라 표본오차가 ±8%p 쯤 된다. 기준을 0.5로
-     * 두면 고치기 전(36%)은 확실히 걸리고 정상 범위에서는 안 흔들린다.
-     */
-    const shown = goals.filter((g) => g.withShot).length
+    const shown = buildable.filter((g) => g.withShot).length
     expect(
-      shown / goals.length,
-      `골 ${goals.length}회 중 슛으로 들어간 것 ${shown}회`,
-    ).toBeGreaterThan(0.5)
+      shown / buildable.length,
+      `골 ${buildable.length}회 중 슛으로 들어간 것 ${shown}회`,
+    ).toBeGreaterThan(0.9)
+  })
+
+  it('골은 상대 진영에서, 골대 사정거리 안에서 들어간다', () => {
+    /**
+     * 자기 진영에서 상대 골대로 때린 것이 골이 되면 그건 축구가 아니라
+     * 걷어내기가 골이 된 것이다. 40미터는 실제로 존재하는 중거리 골의
+     * 바깥 경계다
+     */
+    const bad = buildable.filter((g) => g.withShot && (!g.shotInAttackHalf || g.shotDist > 40))
+    expect(
+      bad.length,
+      `자기 진영이거나 40m를 넘는 슛으로 들어간 골 ${bad.length}회`,
+    ).toBe(0)
+  })
+
+  it('골 앞에는 전개가 있다 — 공이 하프라인을 넘어 있었다', () => {
+    /**
+     * 사용자가 지적한 결함이 이것이다. **"공은 아직 하프라인도 못 넘었는데"**
+     * 골이 났다.
+     *
+     * 뿌리는 시뮬에 있다. 시뮬은 확률로 득점을 정하고, 백 판을 재보니
+     * 득점을 정한 그 틱에 시뮬 자신의 볼 위치가 득점 팀의 공격 진영에
+     * 있던 것은 46%뿐이었다. 그 순간에 골대 앞 장면을 만들어낼 방법은
+     * 없다. 그래서 화면은 골을 예약해두고 **공을 그 팀에게 넘겨 상대
+     * 진영으로 밀어붙인 다음**, 공이 상대 진영에 3초 이상 머문 뒤에야
+     * 골을 넣는다.
+     */
+    const built = buildable.filter((g) => g.buildup >= 3)
+    expect(
+      built.length / buildable.length,
+      `골 ${buildable.length}회 중 3초 이상 전개가 있던 것 ${built.length}회`,
+    ).toBeGreaterThan(0.9)
   })
 
   it('화면의 공 주인이 시뮬과 오래 어긋나지 않는다', () => {
@@ -1210,6 +1310,19 @@ describe('골은 갑자기 터지지 않는다', () => {
       run = 0
       for (const f of fs) {
         if (f.mode !== 'HELD' || !f.holder || f.celebrating || f.restart) {
+          run = 0
+          continue
+        }
+        /**
+         * 골 장면을 아직 못 그린 동안은 일부러 어긋나 있다.
+         *
+         * 시뮬은 득점한 그 틱에 이미 킥오프 상태로 넘어가 공 주인을
+         * **먹힌 팀**으로 바꾼다. 화면은 그때부터 득점 팀에게 공을 주고
+         * 상대 진영으로 밀어붙여 골 장면을 만든다. 그 구간을 "어긋났다"고
+         * 세면 의도한 동작을 결함으로 세는 것이 된다. 점수판이 시뮬을
+         * 아직 못 따라잡았다는 것이 그 구간의 표시다
+         */
+        if (f.shown[0] !== f.state.score[0] || f.shown[1] !== f.state.score[1]) {
           run = 0
           continue
         }

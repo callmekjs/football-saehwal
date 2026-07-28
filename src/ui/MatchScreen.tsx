@@ -454,6 +454,20 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
+  /**
+   * 점수판에 띄우는 점수.
+   *
+   * 시뮬은 확률로 득점을 정하는데, 그 순간의 경기 상황이 골을 그릴 수
+   * 있는 상황이 아닌 경우가 절반이 넘는다. 그래서 연출은 골을 예약해두고
+   * 공격 장면을 만든 다음 보여주고, 점수판은 그 장면에 맞춰 오른다.
+   * 숫자가 먼저 오르면 "공은 하프라인도 못 넘었는데 골"이 된다.
+   *
+   * **승패 판정은 이 값을 쓰지 않는다.** 아래 `judge(state, ...)` 는
+   * 시뮬의 점수를 그대로 읽고, 이 숫자는 종료 휘슬에서 시뮬과 같아진다.
+   */
+  const [shown, setShown] = useState<[number, number]>(problem.score)
+  useEffect(() => setShown(problem.score), [problem])
+
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: 12, display: 'grid', gap: 12 }}>
       <header
@@ -488,7 +502,7 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
         )}
         <span style={{ fontSize: 13 }}>우리 팀</span>
         <strong style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
-          {state.score[0]} – {state.score[1]}
+          {shown[0]} – {shown[1]}
         </strong>
         <span style={{ fontSize: 13 }}>상대</span>
         <span style={{ fontSize: 12, color: 'var(--dim)' }}>교체 {state.subsLeft}</span>
@@ -506,7 +520,12 @@ export function MatchScreen({ problem, kickoff }: { problem: Problem; kickoff: n
 
         <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
           <div className="panel" style={{ padding: 8 }}>
-            <Pitch state={state} seed={problem.seed} live={phase === 'RUNNING'} />
+            <Pitch
+              state={state}
+              seed={problem.seed}
+              live={phase === 'RUNNING'}
+              onScore={setShown}
+            />
           </div>
 
           {/*

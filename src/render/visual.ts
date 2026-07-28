@@ -1,6 +1,7 @@
 import { createRng, type Rng } from '../sim/rng'
 import { getFormation, slotsForTenMen } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
+import { TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, Position } from '../sim/types'
 
 /**
@@ -91,6 +92,40 @@ const LONG_SHOT_MAX = 38
  * 반대편에서 수비를 하고 있다.
  */
 const OWNER_GRACE = 0.5
+
+/**
+ * 골 장면을 만들기 위해 확보하는 전개 시간(초).
+ *
+ * 시뮬은 확률로 득점을 정한다. **그 순간 시뮬 자신의 볼 위치조차 상대
+ * 진영이 아닌 경우가 절반이 넘는다** — 백 판을 재보니 득점을 정한 틱에
+ * 시뮬의 볼이 득점 팀의 공격 진영에 있던 것은 46%였다. 사용자가 본
+ * "공은 하프라인도 못 넘었는데 골"이 이것이다. 화면이 아무리 잘 그려도
+ * 그 순간에 골대 앞 장면을 만들어낼 수는 없다.
+ *
+ * 그래서 화면은 **골을 예약해두고 진짜 공격을 만든 다음에 보여준다.**
+ * 자기 진영에서 하프라인을 넘는 데 2~4초, 상대 진영에서 골문 앞까지
+ * 밀고 들어가는 데 다시 3~5초가 걸린다. 그만큼을 준다.
+ *
+ * 점수판은 이 장면에 맞춰 오른다(`displayScore`). 시뮬의 점수는 그대로다 —
+ * 늦는 것은 화면의 숫자뿐이고, 종료 휘슬에서 반드시 같아진다.
+ */
+const GOAL_RUNWAY = 11
+/**
+ * 골이 들어가기 전에 있어야 하는 최소 전개 시간(초).
+ *
+ * "공이 그 팀 발에 상대 진영에 있던 연속 시간"이다. 이 시간을 채우지
+ * 못하면 사정거리 안이어도 아직 쏘지 않는다. 골이 사건이 되려면 그 앞에
+ * 전개가 있어야 한다.
+ */
+const BUILDUP = 3
+/**
+ * 유예가 끝났을 때 전개가 진행 중이면 더 줄 수 있는 시간(초).
+ *
+ * 유예가 끝나는 그 순간 그 팀이 이미 상대 진영에서 공을 몰고 있으면,
+ * 남은 것은 전개 시간을 채우는 일뿐이다. 거기서 끊는 것은 다 지은 장면을
+ * 헐고 공을 순간이동시키는 것과 같다. `BUILDUP` 을 채울 만큼만 준다
+ */
+const GOAL_EXTRA = 4
 
 /**
  * 태클이 성립하는 거리.
@@ -325,6 +360,28 @@ export class VisualMatch {
   subPause = 0
   /** 방금 들어온 선수의 등번호. 화면에 잠깐 표시한다 */
   entering: number[] = []
+  /**
+   * 점수판에 띄우는 점수.
+   *
+   * 시뮬의 `state.score` 와 다를 수 있다. 시뮬이 득점을 정하는 순간의
+   * 경기 상황은 골을 그릴 수 있는 상황이 아닌 경우가 절반이 넘어서,
+   * 화면은 골을 예약해두고 진짜 공격 장면을 만든 다음에 보여준다.
+   * 그동안 숫자만 먼저 오르면 관전자는 "공이 하프라인에 있는데 골이
+   * 났다"를 보게 된다 — 사용자가 지적한 바로 그 결함이다.
+   *
+   * **경기 결과는 아무 영향도 받지 않는다.** 승패는 시뮬의 점수로만
+   * 판정하고, 이 숫자는 종료 휘슬에서 시뮬의 점수로 반드시 맞춰진다.
+   */
+  displayScore: [number, number] = [0, 0]
+  /**
+   * 각 팀이 상대 진영에서 공을 쥐고 밀고 있는 연속 시간(초).
+   *
+   * 골은 이 값이 `BUILDUP` 을 넘어야 들어간다. "골 앞에 전개가 있다"를
+   * 확률이 아니라 조건으로 만든다.
+   */
+  private attackTime: Record<'HOME' | 'AWAY', number> = { HOME: 0, AWAY: 0 }
+  /** 시뮬이 지금 몇 틱째인지. 남은 경기 시간으로 골 유예를 자른다 */
+  private simTick = 0
   private rng: Rng
   private decideIn = 0
   private lastStats = { homeShot: 0, awayShot: 0 }
@@ -374,7 +431,19 @@ export class VisualMatch {
    * 있었는데, 자리가 하나뿐이라 뒤엣것이 앞엣것을 덮어써서 골 하나가
    * 화면에서 통째로 사라졌다.
    */
-  private pending: Array<{ side: 'HOME' | 'AWAY'; willScore: boolean; life: number }> = []
+  private pending: Array<{
+    side: 'HOME' | 'AWAY'
+    willScore: boolean
+    life: number
+    /**
+     * 유예가 끝났을 때 전개가 진행 중이면 빌려 쓸 수 있는 여유(초).
+     *
+     * 유예가 끝나는 순간 그 팀이 이미 상대 진영에서 공을 몰고 있는 경우가
+     * 있다. 거기서 끊고 억지로 골을 만들면 방금까지 쌓아온 장면을 버리고
+     * 공을 순간이동시키게 된다. 몇 초만 더 주면 제대로 된 골이 된다
+     */
+    extra: number
+  }> = []
   private chaseIds: Record<'HOME' | 'AWAY', string[]> = { HOME: [], AWAY: [] }
   private chaseAt: Record<'HOME' | 'AWAY', number> = { HOME: -9, AWAY: -9 }
 
@@ -402,6 +471,7 @@ export class VisualMatch {
     }
     this.rebuild(state)
     this.lastScore = [...state.score] as [number, number]
+    this.displayScore = [...state.score] as [number, number]
     this.lastStats = { homeShot: state.stats.homeShot, awayShot: state.stats.awayShot }
     this.lastOwner = state.ball.owner
     // 경기는 킥오프로 시작한다.
@@ -638,6 +708,18 @@ export class VisualMatch {
    * 들어갔는지. 그것을 실제 장면으로 옮기는 것이 여기 할 일이다.
    */
   sync(state: MatchState) {
+    this.simTick = state.tick
+    /**
+     * 종료 휘슬 — 점수판을 시뮬에 맞춘다.
+     *
+     * 750틱이 끝나면 화면도 멈춘다. 미뤄둔 골이 남아 있으면 그 장면은
+     * 영영 안 나오는데, 그렇다고 숫자까지 안 오르면 시뮬의 결과와 화면이
+     * 어긋난 채로 경기가 끝난다. 장면을 놓치는 것보다 점수가 틀리는 것이
+     * 훨씬 나쁘다. 아래 `queueShot` 이 남은 시간을 보고 유예를 잘라서
+     * 여기까지 오는 일 자체가 거의 없게 해둔다
+     */
+    if (state.tick >= TOTAL_TICKS) this.displayScore = [...state.score] as [number, number]
+
     // 대형을 다시 짜기 전에 읽어야 한다. 다시 짜고 나면 빠진 선수가
     // 목록에서 사라져 어디에 쓰러졌는지 알 방법이 없다
     this.captureDowned(state)
@@ -716,13 +798,22 @@ export class VisualMatch {
       this.queueShot(newHomeShot > 0 ? 'HOME' : 'AWAY', false)
     }
 
-    // 시뮬이 말하는 소유 팀. 화면은 이걸 따라가야 한다
-    this.simOwner = state.ball.owner
+    /**
+     * 시뮬이 말하는 소유 팀. 화면은 이걸 따라가야 한다.
+     *
+     * **단, 골이 예약돼 있으면 따라가지 않는다.** 시뮬은 득점한 그 틱에
+     * 이미 킥오프 상태로 넘어가 공 주인을 **먹힌 팀**으로 바꿔버린다.
+     * 그대로 따라가면 화면은 골을 그려야 할 팀에게서 공을 도로 빼앗고,
+     * 예약된 골은 밀고 갈 공이 없어 결국 골망 장면으로 때워진다.
+     * 화면이 그 골을 다 그릴 때까지는 득점 팀이 공을 가지고 있어야 한다
+     */
+    const scoring = this.pending.find((q) => q.willScore)
+    this.simOwner = scoring ? scoring.side : state.ball.owner
 
     // 점유 전환 — 가장 가까운 상대가 뺏는 장면으로 만든다
     if (state.ball.owner !== this.lastOwner) {
       this.lastOwner = state.ball.owner
-      this.takeOver(state.ball.owner)
+      if (!scoring) this.takeOver(state.ball.owner)
     }
   }
 
@@ -927,23 +1018,59 @@ export class VisualMatch {
       return
     }
     /**
-     * 공이 사정거리에 들어올 때까지 기다린다.
+     * 공격을 만들 시간을 확보한다.
      *
-     * 기다리는 시간이 길수록 자연스러운 슛이 나올 확률은 오르지만, 골은
-     * 점수판이 이미 올라간 사건이라 장면이 늦으면 관전자가 무슨 일이
-     * 일어난 건지 알 수 없다. 실측으로 2.4초는 골 넷 중 셋이 슛 없이
-     * 처리됐다. 4.2초면 그 팀이 공을 받아 앞으로 한 번 길게 보내고 사정
-     * 거리에 들어갈 시간이 되고, 골 장면은 여전히 득점 뒤 6초 안에 뜬다.
+     * 전에는 4.2초였다. 점수판이 이미 올라간 뒤라 장면을 더 미룰 수가
+     * 없었기 때문이다. 이제 점수판이 장면을 기다리므로(`displayScore`)
+     * 진짜 공격 하나를 만들 만큼 넉넉히 잡는다.
+     *
+     * 다만 **종료 휘슬 뒤에는 화면이 멈춘다.** 남은 경기 시간보다 긴
+     * 유예를 잡으면 미뤄둔 골이 화면에 영영 안 나오고 점수판만 끝에서
+     * 훌쩍 뛴다. 세리머니 1.5초까지 감안해 2.5초를 남긴다
      */
-    this.pending.push({ side, willScore, life: willScore ? 4.2 : 1.8 })
+    const left = (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
+    const life = willScore ? clamp(Math.min(GOAL_RUNWAY, left), 0, GOAL_RUNWAY) : 1.8
+    this.pending.push({ side, willScore, life, extra: willScore ? GOAL_EXTRA : 0 })
     const holder = this.byId(this.ball.holder)
     if (
       this.ball.mode === 'HELD' &&
       holder &&
+      this.readyToScore(side, willScore) &&
       this.canShoot(holder, side, this.pendingRange(willScore))
     ) {
       this.pending.pop()
       this.shoot(holder, willScore)
+    }
+  }
+
+  /**
+   * 지금 골을 넣어도 되는가 — 앞에 전개가 있었는가.
+   *
+   * 빗나갈 슛에는 걸지 않는다. 골만 "갑자기 터졌다"로 보인다
+   */
+  private readyToScore(side: 'HOME' | 'AWAY', willScore: boolean) {
+    return !willScore || this.attackTime[side] >= BUILDUP
+  }
+
+  /**
+   * 이 팀이 지금 상대 진영에서 공을 쥐고 밀고 있는가.
+   *
+   * 골 앞의 전개를 세는 자다. 자기 진영으로 돌아가면 전개는 끊긴 것이라
+   * 처음부터 다시 센다. 상대 진영인데 잠깐 공이 상대에게 가 있는 것은
+   * 끊긴 것이 아니라 멈춘 것이므로 세지도 지우지도 않는다.
+   */
+  private updateAttackTime(dt: number) {
+    for (const side of ['HOME', 'AWAY'] as const) {
+      const inAttackHalf =
+        side === 'HOME' ? this.ball.x > PITCH_W / 2 : this.ball.x < PITCH_W / 2
+      if (!inAttackHalf) {
+        this.attackTime[side] = 0
+        continue
+      }
+      const holder = this.byId(this.ball.holder)
+      const mine =
+        this.ball.mode === 'HELD' ? holder?.side === side : this.ball.lastTouch === side
+      if (mine) this.attackTime[side] += dt
     }
   }
 
@@ -976,17 +1103,23 @@ export class VisualMatch {
     if (!q) return
     q.life -= dt
     /**
-     * 골 예약이 걸린 팀이 화면에서 공을 안 가지고 있으면 즉시 넘겨준다.
+     * 골 예약이 걸린 팀이 공을 안 가지고 있으면 곧바로 넘겨준다.
      *
-     * 시뮬에서는 이미 그 팀이 공을 몰고 가서 골을 넣었다. 화면이 반대편
-     * 팀에게 공을 쥐여준 채 기다리면 3초가 그냥 흘러가고, 결국 슛 없이
-     * 골망 장면으로 때우게 된다. 여기서는 유예를 두지 않는다
+     * 시뮬에서는 이미 그 팀이 공을 몰고 가서 골을 넣었다. 유예를 주면
+     * 상대가 그 공을 자기 진영으로 되돌려 전개가 매번 끊긴다 — 유예를
+     * `reconcileOwner` 의 0.5초로 맡겨봤더니 세 기준을 다 넘긴 골이
+     * 92.8%에서 85.7%로 내려갔고 점수판 지연은 4.5초에서 6.1초로 늘었다.
+     *
+     * 매 프레임 부르지만 공을 매 프레임 뺏는 것은 아니다. `takeOver` 는
+     * 공이 누군가의 발밑에 있을 때만 움직이고, 붙어 있으면 태클로
+     * 멀면 흘린 공으로 그린다. 상대가 다시 주울 때마다 한 번씩 걸린다
      */
     if (q.willScore) this.takeOver(q.side)
     const holder = this.byId(this.ball.holder)
     if (
       this.ball.mode === 'HELD' &&
       holder &&
+      this.readyToScore(q.side, q.willScore) &&
       this.canShoot(holder, q.side, this.pendingRange(q.willScore))
     ) {
       this.pending.shift()
@@ -994,6 +1127,24 @@ export class VisualMatch {
       return
     }
     if (q.life > 0) return
+
+    /**
+     * 유예가 끝났는데 전개가 한창이면 조금만 더 기다린다.
+     *
+     * 이 팀이 지금 상대 진영에서 공을 몰고 있다는 것은 몇 초 뒤에 제대로
+     * 된 골이 나온다는 뜻이다. 여기서 끊으면 그 장면을 헐고 공을
+     * 순간이동시켜야 한다. 빌릴 수 있는 여유는 한 번뿐이라 끝없이
+     * 늘어지지 않는다
+     */
+    if (q.willScore && q.extra > 0 && this.attackTime[q.side] > 0) {
+      // 여유는 **총량**이다. 쓴 만큼만 깎으므로, 전개가 한 번 끊겨도
+      // 남은 만큼 다시 빌릴 수 있고 총 대기 시간은 여전히 묶여 있다
+      const need = clamp(BUILDUP - this.attackTime[q.side] + 0.3, 0, q.extra)
+      q.extra -= need
+      q.life = need
+      if (need > 0) return
+    }
+
     this.pending.shift()
     // 기다려도 공이 오지 않는다. 빗나갈 슛이었다면 그냥 흘려보낸다 —
     // 안 보이는 슛 하나보다 공이 순간이동하는 장면이 훨씬 나쁘다
@@ -1069,7 +1220,20 @@ export class VisualMatch {
     b.y = GOAL_MID + (this.rng.next() - 0.5) * 4
     b.lastTouch = side
     this.flash('GOAL', b.x, b.y)
-    this.celebration = { side, life: 1.5, x: b.x, y: b.y }
+    this.beginCelebration(side, b.x, b.y)
+  }
+
+  /**
+   * 골 장면을 띄우고 **그때** 점수판을 올린다.
+   *
+   * 숫자와 장면이 같이 움직여야 관전자가 둘을 하나의 사건으로 읽는다.
+   * 시뮬의 점수는 여기서 건드리지 않는다 — 승패 판정은 시뮬 것만 쓴다
+   */
+  private beginCelebration(side: 'HOME' | 'AWAY', x: number, y: number) {
+    // 75초짜리 경기다. 세리머니가 길면 플레이 시간을 잡아먹는다
+    this.celebration = { side, life: 1.5, x, y }
+    if (side === 'HOME') this.displayScore[0] += 1
+    else this.displayScore[1] += 1
   }
 
   private nearestOf(side: 'HOME' | 'AWAY', to: { x: number; y: number }): VPlayer | undefined {
@@ -1112,10 +1276,17 @@ export class VisualMatch {
     this.ball.y = PITCH_H / 2
     this.ball.mode = 'HELD'
     this.stopBall()
-    // 재개 시점에 밀려 있던 빗나갈 슛은 버린다. 골 예약은 점수판이 이미
-    // 올라간 것이므로 살려두되 기다리는 시간을 다시 준다
+    // 중앙에서 다시 시작한다. 전개는 여기서 끊긴 것이므로 처음부터 센다
+    this.attackTime.HOME = 0
+    this.attackTime.AWAY = 0
+    // 재개 시점에 밀려 있던 빗나갈 슛은 버린다. 골 예약은 반드시 장면이
+    // 나와야 하므로 살려두되 기다리는 시간을 다시 준다
     this.pending = this.pending.filter((q) => q.willScore)
-    for (const q of this.pending) q.life = 4.2
+    const left = (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
+    for (const q of this.pending) {
+      q.life = clamp(Math.min(GOAL_RUNWAY, left), 0, GOAL_RUNWAY)
+      q.extra = GOAL_EXTRA
+    }
     // 킥오프가 아웃 재개보다 우선한다
     this.restart = null
 
@@ -1517,31 +1688,49 @@ export class VisualMatch {
     // 시뮬이 예약해둔 슛이 이 팀 것이면 그것부터 처리한다
     const q = this.pending[0]
     if (q && q.side === holder.side) {
-      if (this.canShoot(holder, undefined, this.pendingRange(q.willScore))) {
-        this.pending.shift()
-        this.shoot(holder, q.willScore)
-        return
-      }
       /**
-       * 사정거리 밖이다. 그렇다고 여기서 평범하게 옆으로 돌리면 예약이
-       * 만료되어 공이 골대 앞으로 순간이동한다. **앞으로 길게 보낸다.**
+       * 사정거리 안이어도 **전개가 모자라면 아직 안 쏜다.**
        *
-       * 실측으로 이 장치가 없을 때 슛 거리 최대가 67미터였다 — 자기
-       * 진영에서 때린 골이라는 뜻이다.
+       * 이 자리가 골 장면의 주된 통로다. 여기에 전개 조건을 안 걸어두면
+       * `tryPendingShot` 쪽만 막아놓아도 소용이 없다 — 실측으로 골 일흔
+       * 개가 이 경로로 나갔다. 전개가 덜 찼으면 아래 평범한 판단으로
+       * 내려가 상대 진영에서 공을 돌린다. 그동안 전개 시간이 쌓인다
        */
-      const outlet = this.forwardOutlet(holder)
-      if (outlet) {
-        this.pass(holder, outlet)
-        return
+      if (this.canShoot(holder, undefined, this.pendingRange(q.willScore))) {
+        if (this.readyToScore(q.side, q.willScore)) {
+          this.pending.shift()
+          this.shoot(holder, q.willScore)
+          return
+        }
+      } else {
+        /**
+         * 사정거리 밖이다. 그렇다고 여기서 평범하게 옆으로 돌리면 예약이
+         * 만료되어 공이 골대 앞으로 순간이동한다. **앞으로 길게 보낸다.**
+         *
+         * 실측으로 이 장치가 없을 때 슛 거리 최대가 67미터였다 — 자기
+         * 진영에서 때린 골이라는 뜻이다.
+         */
+        const outlet = this.forwardOutlet(holder)
+        if (outlet) {
+          this.pass(holder, outlet)
+          return
+        }
       }
     }
 
-    // 골대에 가까우면 슛이 먼저다.
-    //
-    // 이 슛은 **시뮬 결과를 건드리지 않는다.** willScore 가 false 이므로
-    // 골키퍼에게 막히거나 골대를 벗어난다. 점수판을 올리는 것은 시뮬이
-    // 골이라고 알려줄 때뿐이다
-    if (this.rng.next() < this.shotWant(holder, nearest)) {
+    /**
+     * 골대에 가까우면 슛이 먼저다.
+     *
+     * 이 슛은 **시뮬 결과를 건드리지 않는다.** willScore 가 false 이므로
+     * 골키퍼에게 막히거나 골대를 벗어난다. 점수판을 올리는 것은 시뮬이
+     * 골이라고 알려줄 때뿐이다.
+     *
+     * 단, 이 팀의 골이 예약돼 있고 전개를 채우는 중이라면 쏘지 않는다.
+     * 여기서 빗나가는 슛을 쏘면 골킥·코너로 넘어가 방금까지 쌓아온
+     * 공격이 통째로 날아가고, 예약된 골은 다시 처음부터 만들어야 한다
+     */
+    const buildingForGoal = q && q.side === holder.side && q.willScore
+    if (!buildingForGoal && this.rng.next() < this.shotWant(holder, nearest)) {
       this.shoot(holder, false)
       return
     }
@@ -1973,8 +2162,7 @@ export class VisualMatch {
       this.stopBall()
       b.x = gx === GOAL_LINE_HOME ? PITCH_W + 0.8 : -0.8
       this.flash('GOAL', b.x, b.y)
-      // 75초짜리 경기다. 세리머니가 길면 플레이 시간을 잡아먹는다
-      this.celebration = { side: b.lastTouch, life: 1.5, x: b.x, y: b.y }
+      this.beginCelebration(b.lastTouch, b.x, b.y)
       return true
     }
 
@@ -2140,6 +2328,8 @@ export class VisualMatch {
     for (const p of this.players) this.movePlayer(p, step)
     this.separate()
     this.moveBall(step)
+    // 공이 움직인 뒤에 센다. 전개 시간은 "지금 공이 어디 있나"의 함수다
+    this.updateAttackTime(step)
     this.reconcileOwner(step)
     this.tryPendingShot(step)
   }

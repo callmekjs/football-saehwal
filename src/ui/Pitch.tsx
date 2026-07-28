@@ -33,16 +33,28 @@ export function Pitch({
   state,
   seed,
   live = true,
+  onScore,
 }: {
   state: MatchState
   seed: number
   live?: boolean
+  /**
+   * 점수판에 띄울 점수가 바뀌었을 때 부른다.
+   *
+   * 연출은 골을 예약해두고 진짜 공격 장면을 만든 뒤에 보여준다. 그동안
+   * 숫자만 먼저 오르면 관전자는 공이 중원에 있는데 점수가 오르는 것을
+   * 본다. 점수판이 장면을 따라가야 둘이 하나의 사건으로 읽힌다.
+   * **경기 결과는 여전히 시뮬의 점수로만 판정한다.**
+   */
+  onScore?: (score: [number, number]) => void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef(state)
   const liveRef = useRef(live)
+  const onScoreRef = useRef(onScore)
   stateRef.current = state
   liveRef.current = live
+  onScoreRef.current = onScore
 
   useLayoutEffect(() => {
     const canvas = ref.current
@@ -51,6 +63,8 @@ export function Pitch({
     let raf = 0
     /** 연출이 지금까지 소화한 시간(초) */
     let vmTime = 0
+    /** 마지막으로 알린 점수. 바뀔 때만 알려야 매 프레임 다시 그리지 않는다 */
+    let told = ''
 
     const render = () => {
       const st = stateRef.current
@@ -87,6 +101,13 @@ export function Pitch({
         // 그래도 못 따라잡을 만큼 밀렸으면 포기하고 시각을 맞춘다.
         // 뒤처진 채로 두면 교체와 골 장면이 몇 십 초씩 늦게 나온다
         if (target - vmTime > MAX_LAG) vmTime = target - MAX_LAG
+      }
+
+      // 골 장면이 나온 순간(그리고 종료 휘슬에서) 점수판이 따라 오른다
+      const shown = `${vm.displayScore[0]}-${vm.displayScore[1]}`
+      if (shown !== told) {
+        told = shown
+        onScoreRef.current?.([...vm.displayScore] as [number, number])
       }
 
       const parent = canvas.parentElement
