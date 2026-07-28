@@ -90,18 +90,42 @@ export function initialPlayers(problem: Problem): PlayerState[] {
 }
 
 /**
+ * 지시를 얹은 실제 포지션.
+ *
+ * 감독이 "너는 내려가서 수비해라"라고 하면 그 선수는 그 순간부터
+ * 수비수다. 등번호에 적힌 포지션이 아니라 지금 서 있는 자리가 실점과
+ * 득점을 정한다.
+ *
+ * 이게 개별 지시 중 유일하게 **굵은 통로**다. 배후 실점은 수비 자원 중
+ * 가장 느린 선수 하나로 정해지므로, 발 빠른 미드필더를 내리면 그 값이
+ * 즉시 바뀐다. 난수를 하나도 더 뽑지 않고 확률이 움직인다.
+ *
+ * 골키퍼는 어떤 지시로도 자리를 옮기지 않는다.
+ */
+export function effectivePos(s: PlayerState): Position {
+  const base = getPlayer(s.id).pos
+  if (base === 'GK') return base
+  if (s.order === 'DROP_BACK') return 'DF'
+  if (s.order === 'PUSH_UP') return 'FW'
+  return base
+}
+
+/**
  * 피치 위 수비수 중 가장 느린 선수의 속도.
  *
  * 배후 실점 확률이 이 값 하나로 결정되므로, "느린 수비수를 빠른 수비수로
- * 교체한다"가 이 게임의 대표 승부처가 된다. 골키퍼는 세지 않는다 — 배후
- * 침투는 최종 수비 라인과 골키퍼 사이 공간에서 일어난다.
+ * 교체한다"가 이 시뮬레이션의 대표 승부처가 된다. 골키퍼는 세지 않는다 —
+ * 배후 침투는 최종 수비 라인과 골키퍼 사이 공간에서 일어난다.
+ *
+ * 내려가라고 지시받은 선수도 여기 포함된다. 다만 그 선수가 원래 수비수보다
+ * 느리면 오히려 이 값이 내려가 실점이 는다 — 아무나 내리면 손해다.
  */
 export function minDefenderSpeed(players: PlayerState[]): number {
   let min = Infinity
   for (const s of players) {
     if (!s.onPitch || s.out) continue
+    if (effectivePos(s) !== 'DF') continue
     const p = getPlayer(s.id)
-    if (p.pos !== 'DF') continue
     if (p.speed < min) min = p.speed
   }
   // 수비수가 전멸하면 골키퍼만 남은 상황이다. 최악값으로 처리한다.
@@ -120,13 +144,20 @@ export function meanStamina(players: PlayerState[]): number {
   return n === 0 ? 100 : sum / n
 }
 
-/** 피치 위 우리 선수 중 마무리가 가장 좋은 공격 자원 */
+/**
+ * 피치 위 우리 선수 중 마무리가 가장 좋은 공격 자원.
+ *
+ * 내려가라고 지시받은 선수는 여기서 빠진다 — 뒤로 내리면 골 넣을 사람이
+ * 하나 준다. 올려보낸 수비수는 반대로 들어온다. 지시의 대가와 이득이
+ * 같은 자리에서 갈린다.
+ */
 export function bestFinishing(players: PlayerState[]): number {
   let best = 0.7
   for (const s of players) {
     if (!s.onPitch || s.out) continue
+    const pos = effectivePos(s)
+    if (pos !== 'FW' && pos !== 'MF') continue
     const p = getPlayer(s.id)
-    if (p.pos !== 'FW' && p.pos !== 'MF') continue
     if (p.finishing > best) best = p.finishing
   }
   return best

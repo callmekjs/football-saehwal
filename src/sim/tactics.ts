@@ -125,6 +125,16 @@ export function applyOrders(c: Coefficients, players: PlayerState[]): Coefficien
       // 아껴 뛰면 체력이 남지만(그건 engine 쪽 소모 계수다) 그 선수가
       // 맡던 공간이 그만큼 헐거워진다
       oppOpen *= ORDERS.conserveOppOpen
+    } else if (s.order === 'DROP_BACK') {
+      // 뒤로 내리면 세트피스에서 막을 몸이 하나 늘고, 앞으로 나갈 몸이 하나 준다.
+      // 배후 쪽 이득은 squad.ts 의 실제 포지션 계산에서 따로 난다
+      oppShotXg *= ORDERS.dropBackOppShotXg
+      widthK *= ORDERS.dropBackWidthK
+    } else if (s.order === 'PUSH_UP') {
+      // 올려보내면 앞에 사람이 하나 늘고, 세트피스에서 막을 몸이 하나 준다.
+      // 대가가 없으면 가장 느린 수비수를 올리는 것이 공짜 이득이 된다
+      widthK *= ORDERS.pushUpWidthK
+      oppShotXg *= ORDERS.pushUpOppShotXg
     }
     // BACK_OFF 는 계수를 만지지 않는다. events.ts 의 후보 집합에서 빠진다
   }

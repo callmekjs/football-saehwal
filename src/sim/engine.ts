@@ -6,6 +6,7 @@ import { resolveEvents } from './events'
 import { drainTick, effectiveFactor } from './stamina'
 import {
   bestFinishing,
+  effectivePos,
   getPlayer,
   initialPlayers,
   meanStamina,
@@ -112,11 +113,25 @@ export function checkOrder(
   if (p.order === 'NONE' && active.length >= MAX_ORDERS) {
     return `지시는 ${MAX_ORDERS}명까지다. 하나를 풀어라`
   }
+  const pos = getPlayer(target).pos
+  if (pos === 'GK') return '골키퍼에게는 지시할 수 없다'
+
   if (order === 'HOLD') {
-    const pos = getPlayer(target).pos
     if (pos !== 'DF' && pos !== 'MF') return '골문 앞은 수비수와 미드필더만'
     const holding = active.filter((s) => s.order === 'HOLD' && s.id !== target)
     if (holding.length >= MAX_HOLD) return `골문 앞은 ${MAX_HOLD}명까지다`
+  }
+  // 이미 그 줄에 서 있는 선수에게 그리로 가라고 할 수는 없다
+  if (order === 'DROP_BACK' && pos === 'DF') return '이미 수비수다'
+  if (order === 'PUSH_UP' && pos === 'FW') return '이미 공격수다'
+
+  // 수비 자원을 전부 앞으로 올리면 배후가 통째로 빈다. 실점 공식이
+  // "수비수가 없으면 최악값"으로 떨어져 한 번의 조작으로 판이 끝난다
+  if (order === 'PUSH_UP') {
+    const backs = state.players.filter(
+      (s) => s.onPitch && !s.out && s.id !== target && effectivePos(s) === 'DF',
+    )
+    if (backs.length < 3) return '뒤에 수비가 셋은 남아야 한다'
   }
   return null
 }

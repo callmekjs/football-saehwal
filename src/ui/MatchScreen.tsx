@@ -258,6 +258,8 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
 }
 
 const ORDER_LABELS: Record<Exclude<PlayerOrder, 'NONE'>, { name: string; hint: string }> = {
+  DROP_BACK: { name: '내려서라', hint: '수비로 내려간다. 발이 빠르면 배후가 막힌다' },
+  PUSH_UP: { name: '올라가라', hint: '공격으로 올라간다. 골 넣을 사람이 하나 는다' },
   HOLD: { name: '골문 앞', hint: '공이 반대편에 있어도 골문 앞에 남는다' },
   BACK_OFF: { name: '물러서라', hint: '달려들지 않고 자리를 지킨다. 경고·퇴장을 피한다' },
   CONSERVE: { name: '아껴 뛰어라', hint: '전력으로 안 뛴다. 체력이 덜 닳는다' },
@@ -265,6 +267,8 @@ const ORDER_LABELS: Record<Exclude<PlayerOrder, 'NONE'>, { name: string; hint: s
 
 /** 지시가 걸린 선수 칩에 붙는 짧은 꼬리표 */
 const ORDER_TAG: Record<Exclude<PlayerOrder, 'NONE'>, string> = {
+  DROP_BACK: '↓수비',
+  PUSH_UP: '↑공격',
   HOLD: '골문',
   BACK_OFF: '물러',
   CONSERVE: '아껴',

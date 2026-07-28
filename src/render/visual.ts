@@ -773,7 +773,19 @@ export class VisualMatch {
       // 자리는 배열 순서가 아니라 선수에게 붙어 있는 자리 번호로 찾는다
       const slot = slots[v.slot]
       if (!slot || slot.pos === 'GK') continue
-      v.homeX = slot.x + lineShift
+      /**
+       * 자리를 바꾸라는 지시는 **기준 자리 자체를 옮긴다.**
+       *
+       * 다른 지시들은 공을 어떻게 쫓을지만 바꾸므로 기준 자리가 그대로여도
+       * 되지만, 내려서라·올라가라는 그 선수가 어느 줄에 서느냐를 바꾸는
+       * 지시다. 시뮬은 이미 그 선수를 수비수(또는 공격수)로 세고 있는데
+       * 화면에서 원래 자리에 서 있으면 감독이 무엇을 시켰는지 확인할 수
+       * 없다. 22미터는 한 줄을 건너뛰기에 충분하고 대형이 무너지지는
+       * 않는 폭이다.
+       */
+      const shift =
+        v.order === 'DROP_BACK' ? -22 : v.order === 'PUSH_UP' ? 22 : 0
+      v.homeX = clamp(slot.x + lineShift + shift, 12, 88)
       v.homeY = 34 + (slot.y - 34) * widthScale
     }
     const mood = state.opponent === 'ALL_OUT' ? -13 : state.opponent === 'PARK_BUS' ? 11 : 0

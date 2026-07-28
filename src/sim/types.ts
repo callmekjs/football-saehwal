@@ -48,13 +48,22 @@ export interface Player {
  * 시킨다"가 성립하지 않았다. 감독이 판 위의 특정한 한 점을 고르는 조작이
  * 없으면 조작 개수를 아무리 늘려도 같은 불만이 남는다.
  *
- * 셋은 **서로 다른 종류의 통로**를 쓴다. 같은 종류를 다섯 개 만드는 것보다
- * 다른 종류를 세 개 만드는 것이 실제로 판을 넓힌다.
+ * 다섯은 **서로 다른 종류의 통로**를 쓴다. 같은 종류를 다섯 개 만드는 것보다
+ * 다른 종류를 다섯 개 만드는 것이 실제로 판을 넓힌다.
  * - `HOLD` 는 계수 (세트피스 실점에 곱해진다)
  * - `BACK_OFF` 는 이산 집합 (반칙·퇴장 후보에서 빠진다)
  * - `CONSERVE` 는 적분 (체력이 덜 닳아 부상 임계를 피한다)
+ * - `DROP_BACK` · `PUSH_UP` 은 **자리 자체를 바꾼다** — 실점은 수비 자원 중
+ *   가장 느린 하나로, 득점은 공격 자원 중 마무리가 가장 좋은 하나로
+ *   정해지므로, 누가 어느 줄에 서 있느냐가 곧 확률이다. 다섯 중 가장 굵다
  */
-export type PlayerOrder = 'NONE' | 'HOLD' | 'BACK_OFF' | 'CONSERVE'
+export type PlayerOrder =
+  | 'NONE'
+  | 'HOLD'
+  | 'BACK_OFF'
+  | 'CONSERVE'
+  | 'DROP_BACK'
+  | 'PUSH_UP'
 
 export interface PlayerState {
   id: string
