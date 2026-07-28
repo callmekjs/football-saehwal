@@ -52,8 +52,12 @@ const CONTROL_DIST = 1.3
  * 시뮬이 "점유가 넘어갔다"고 알려도, 뺏는 선수가 이만큼 붙어 있지 않으면
  * 공만 옮겨서는 안 된다. 8미터 떨어진 수비수에게 공이 순간이동하는 장면은
  * 축구가 아니다. 멀면 홀더가 공을 흘린 것으로 그린다.
+ *
+ * 너무 좁게 잡으면 반대 문제가 생긴다. 소유권 전환이 거의 전부 "흘렸다"
+ * 로 그려져 발밑에서 뺏는 장면이 화면에서 사라진다 — 3.5m 로 뒀더니 세
+ * 판에 한 번밖에 안 나왔다. 한 걸음에 발이 닿는 거리로 잡는다.
  */
-const TACKLE_REACH = 3.5
+const TACKLE_REACH = 4.5
 
 export interface VPlayer {
   id: string
@@ -105,6 +109,36 @@ export interface VBall {
   lift: number
   /** 이 슛은 골로 끝난다. 시뮬이 이미 득점으로 판정한 슛이다 */
   willScore: boolean
+  /** 마지막으로 공을 찬 팀. 공이 밖으로 나갔을 때 누가 재개하는지를 정한다 */
+  lastTouch: 'HOME' | 'AWAY'
+  /**
+   * 이 공이 왜 굴러가고 있는지.
+   *
+   * 화면에는 안 나오지만 검증에는 필요하다. 흘린 공과 의도한 패스를
+   * 구분하지 못하면 패스 성공률 통계에 "일부러 뺏긴 공"이 섞인다.
+   */
+  kick: 'PASS' | 'SPILL' | 'SHOT' | 'RESTART'
+}
+
+/**
+ * 공이 밖으로 나간 뒤의 재개.
+ *
+ * 축구는 90분 내내 흐르지 않는다. 공은 계속 라인 밖으로 나가고, 그때마다
+ * 규칙이 정한 자리에서 정해진 팀이 다시 넣는다. 이것이 없으면 공이 벽에
+ * 튕기는 실내 경기처럼 보인다.
+ */
+export interface Restart {
+  kind: 'THROW_IN' | 'GOAL_KICK' | 'CORNER'
+  /** 다시 넣는 팀 */
+  side: 'HOME' | 'AWAY'
+  x: number
+  y: number
+  /** 남은 정지 시간(초) */
+  wait: number
+  /** 공을 가지러 가는 선수 */
+  takerId: string | null
+  /** 재개가 끝나지 않고 늘어지는 것을 막는 보호 시간 */
+  age: number
 }
 
 export interface Flash {
@@ -152,6 +186,8 @@ export class VisualMatch {
   flashes: Flash[] = []
   /** 골이 들어간 뒤의 세리머니. 이 동안은 경기가 멈춰 있다 */
   celebration: Celebration | null = null
+  /** 공이 밖으로 나가 재개를 기다리는 중 */
+  restart: Restart | null = null
   private rng: Rng
   private decideIn = 0
   private lastStats = { homeShot: 0, awayShot: 0 }
@@ -184,6 +220,8 @@ export class VisualMatch {
       targetId: null,
       lift: 0,
       willScore: false,
+      lastTouch: 'HOME',
+      kick: 'PASS',
     }
     this.rebuild(state)
     this.lastScore = [...state.score] as [number, number]
@@ -407,6 +445,8 @@ export class VisualMatch {
     this.ball.dur = clamp(d / PASS_SPEED, 0.14, PASS_MAX_T)
     this.ball.targetId = to.id
     this.ball.willScore = false
+    this.ball.lastTouch = holder.side
+    this.ball.kick = 'SPILL'
     holder.recover = 0.35
     this.flash('TACKLE', this.ball.x, this.ball.y)
   }
@@ -525,6 +565,8 @@ export class VisualMatch {
     // 올라간 것이므로 살려두되 기다리는 시간을 다시 준다
     if (this.pendingShot?.willScore) this.pendingShot.life = 2.5
     else this.pendingShot = null
+    // 킥오프가 아웃 재개보다 우선한다
+    this.restart = null
 
     const taker = this.nearestOf(side, { x: PITCH_W / 2, y: PITCH_H / 2 })
     if (taker) {
@@ -532,6 +574,106 @@ export class VisualMatch {
       taker.x = PITCH_W / 2 - (side === 'HOME' ? 1.5 : -1.5)
       taker.y = PITCH_H / 2
       this.giveTo(taker)
+    }
+  }
+
+  /**
+   * 공이 밖으로 나갔는지 본다.
+   *
+   * 규칙 그대로다. 터치라인을 넘으면 마지막에 찬 팀의 상대가 스로인.
+   * 골라인을 넘으면, 찬 팀이 상대 골라인 밖으로 낸 것이면 골킥이고
+   * 자기 골라인 밖으로 낸 것이면 코너킥이다.
+   */
+  private checkOut(): boolean {
+    const b = this.ball
+    const kicker = b.lastTouch
+    const other: 'HOME' | 'AWAY' = kicker === 'HOME' ? 'AWAY' : 'HOME'
+
+    if (b.y < 0 || b.y > PITCH_H) {
+      this.beginRestart('THROW_IN', other, clamp(b.x, 2, PITCH_W - 2), b.y < 0 ? 0 : PITCH_H)
+      return true
+    }
+    if (b.x >= 0 && b.x <= PITCH_W) return false
+
+    // 이 팀이 공격하는 골라인 밖으로 나갔으면 골킥, 자기 골라인이면 코너
+    const attacking = this.goalX(kicker)
+    const outAtAttackingEnd = attacking === GOAL_LINE_HOME ? b.x > PITCH_W : b.x < 0
+    const line = b.x < 0 ? GOAL_LINE_AWAY : GOAL_LINE_HOME
+    if (outAtAttackingEnd) {
+      this.beginRestart('GOAL_KICK', other, 0, 0)
+    } else {
+      this.beginRestart('CORNER', other, line, b.y < PITCH_H / 2 ? 0 : PITCH_H)
+    }
+    return true
+  }
+
+  /**
+   * 재개를 건다.
+   *
+   * 정지 시간은 짧다. 이 화면은 게임 내 15분을 75초로 압축해 보여주므로,
+   * 실제 스로인이 걸리는 10초는 여기서 1초가 안 된다.
+   */
+  private beginRestart(kind: Restart['kind'], side: 'HOME' | 'AWAY', x: number, y: number) {
+    let px = x
+    let py = y
+    if (kind === 'GOAL_KICK') {
+      // 골 에어리어 안에서 찬다. 자기 골대 쪽이다
+      const gl = this.goalX(side) === GOAL_LINE_HOME ? GOAL_LINE_AWAY : GOAL_LINE_HOME
+      px = gl === GOAL_LINE_AWAY ? 5.5 : PITCH_W - 5.5
+      py = GOAL_MID + (this.ball.y < PITCH_H / 2 ? -9 : 9)
+    }
+    const taker =
+      kind === 'GOAL_KICK'
+        ? this.players.find((p) => p.side === side && p.pos === 'GK')
+        : this.nearestOf(side, { x: px, y: py })
+    this.ball.mode = 'LOOSE'
+    this.ball.holder = null
+    this.ball.targetId = null
+    this.ball.lift = 0
+    this.ball.x = px
+    this.ball.y = py
+    this.restart = { kind, side, x: px, y: py, wait: 0.5, takerId: taker?.id ?? null, age: 0 }
+  }
+
+  /**
+   * 재개를 진행한다.
+   *
+   * 차는 선수가 공까지 걸어가고, 나머지는 각자 자리를 잡는다. 공이 나간
+   * 순간 전원이 얼어붙으면 정지 화면이 되고, 아무도 안 멈추면 공이 밖에
+   * 나갔다는 것 자체가 안 보인다.
+   */
+  private updateRestart(state: MatchState, step: number) {
+    const r = this.restart
+    if (!r) return
+    r.wait -= step
+    r.age += step
+
+    this.setTargets(state)
+    const taker = this.byId(r.takerId)
+    if (taker) {
+      taker.tx = r.x
+      taker.ty = r.y
+      taker.stx = r.x
+      taker.sty = r.y
+    }
+    for (const p of this.players) this.movePlayer(p, step)
+    this.separate()
+
+    this.ball.x = r.x
+    this.ball.y = r.y
+    this.ball.lift = 0
+
+    if (r.wait > 0) return
+    // 차는 선수가 공에 닿아야 재개된다. 아무도 못 가면(퇴장 등) 오래
+    // 붙잡혀 있을 수 없으므로 보호 시간을 둔다
+    if (taker && dist(taker, r) < 2.0) {
+      this.restart = null
+      this.giveTo(taker)
+    } else if (r.age > 4) {
+      const alt = this.nearestOf(r.side, r) ?? taker
+      this.restart = null
+      if (alt) this.giveTo(alt)
+      else this.ball.mode = 'LOOSE'
     }
   }
 
@@ -578,6 +720,8 @@ export class VisualMatch {
     this.ball.dur = clamp(d / SHOT_SPEED, 0.25, SHOT_MAX_T)
     this.ball.targetId = null
     this.ball.willScore = willScore
+    this.ball.lastTouch = shooter.side
+    this.ball.kick = 'SHOT'
     this.flash('SHOT', shooter.x, shooter.y)
   }
 
@@ -628,11 +772,13 @@ export class VisualMatch {
 
     let targetId: string | null = to.id
     if (this.rng.next() >= success) {
-      // 빗나간다 — 리시버에 못 미치거나 옆으로 새서 주인 없는 공이 된다
+      // 빗나간다 — 리시버에 못 미치거나 옆으로 새서 주인 없는 공이 된다.
+      // 라인 밖까지 나갈 수 있어야 한다. 여기서 경기장 안으로 가둬버리면
+      // 공이 영영 밖으로 나가지 않아 스로인도 코너킥도 생기지 않는다
       const ang = this.rng.next() * Math.PI * 2
       const off = 3 + this.rng.next() * 5
-      tx = clamp(tx + Math.cos(ang) * off, 2, PITCH_W - 2)
-      ty = clamp(ty + Math.sin(ang) * off, 2, PITCH_H - 2)
+      tx = clamp(tx + Math.cos(ang) * off, -6, PITCH_W + 6)
+      ty = clamp(ty + Math.sin(ang) * off, -6, PITCH_H + 6)
       targetId = null
     }
 
@@ -645,6 +791,8 @@ export class VisualMatch {
     this.ball.t = 0
     this.ball.dur = clamp(d / PASS_SPEED, 0.14, PASS_MAX_T)
     this.ball.targetId = targetId
+    this.ball.lastTouch = holder.side
+    this.ball.kick = 'PASS'
   }
 
   /** 공을 가진 선수가 무엇을 할지 정한다 */
@@ -917,6 +1065,10 @@ export class VisualMatch {
       b.y = b.fromY + (b.toY - b.fromY) * k
       b.lift = Math.sin(k * Math.PI) * (b.mode === 'SHOT' ? 1 : 0.45)
 
+      // 라인을 넘는 순간 아웃이다. 도착할 때까지 기다리면 공이 관중석
+      // 깊숙이 들어갔다가 되돌아 나온다
+      if (b.mode === 'PASS' && this.checkOut()) return
+
       if (k >= 1) {
         if (b.mode === 'SHOT') {
           const conceding = b.toX > 52 ? 'AWAY' : 'HOME'
@@ -936,10 +1088,26 @@ export class VisualMatch {
           } else {
             const gk = this.players.find((p) => p.side === conceding && p.pos === 'GK')
             const missedWide = Math.abs(b.toY - GOAL_MID) > GOAL_HALF
-            // 골대 안이면 선방, 밖이면 그냥 빗나간 것 — 골킥으로 이어진다
-            if (!missedWide) this.flash('SAVE', b.x, b.y)
-            if (gk) this.giveTo(gk)
-            else b.mode = 'LOOSE'
+            if (missedWide) {
+              // 골대 밖으로 빗나갔다. 공은 골라인을 넘어갔고 골킥이다.
+              // 여기서 골키퍼 발밑으로 공을 옮겨버리면 공이 십수 미터를
+              // 순간이동하고, 골킥이라는 장면 자체가 사라진다
+              this.beginRestart('GOAL_KICK', conceding, 0, 0)
+            } else {
+              // 골키퍼가 막았다. 쳐낸 공을 직접 줍게 둔다 — 여기서 바로
+              // 발밑에 붙이면 막는 동작 없이 공만 순간이동한다
+              this.flash('SAVE', b.x, b.y)
+              b.mode = 'LOOSE'
+              b.holder = null
+              b.targetId = null
+              b.lift = 0
+              if (gk) {
+                gk.tx = b.x
+                gk.ty = b.y
+                gk.stx = b.x
+                gk.sty = b.y
+              }
+            }
           }
         } else if (!b.targetId) {
           // 빗나간 패스 — 주인 없는 공. 제일 먼저 닿는 쪽이 줍는다
@@ -1025,6 +1193,12 @@ export class VisualMatch {
         this.celebration = null
         this.kickoff(restartFor)
       }
+      return
+    }
+
+    // 공이 밖으로 나갔다. 규칙대로 다시 넣을 때까지 경기는 멈춰 있다
+    if (this.restart) {
+      this.updateRestart(state, step)
       return
     }
 
