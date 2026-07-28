@@ -207,6 +207,7 @@ Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴�
 
 - 설계 명세 — [`docs/design.md`](docs/design.md)
 - 무엇을 왜 그렇게 정했는지 — [`docs/worklog.md`](docs/worklog.md)
+- Claude Code 시작 요약 — [`docs/CLAUDE_HANDOFF.md`](docs/CLAUDE_HANDOFF.md)
 
 **결정의 근거가 `worklog.md`에 있다.** 폐기한 설계를 다시 제안하기 전에 거기부터 읽는다. 특히 "실제 감독 vs 나"와 "레버 순서 퍼즐"은 이유가 있어 버렸다.
 
