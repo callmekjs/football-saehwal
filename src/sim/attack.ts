@@ -65,6 +65,14 @@ export function drawTick(rng: Rng): TickDraws {
 export interface AttackOutcome {
   homeGoals: number
   awayGoals: number
+  /**
+   * 분석 화면이 읽는 득점 경로.
+   *
+   * 판정에 새 값을 보태지 않고, 이미 참이 된 채널의 이름만 기록한다.
+   * 따라서 난수 소비와 득점 결과에는 영향이 없다.
+   */
+  homeGoalCauses: Array<'BUILD_UP'>
+  awayGoalCauses: Array<'BEHIND' | 'OPEN_PLAY' | 'SET_PIECE'>
   /** 화면의 양상 지표가 읽는다. 판정에는 쓰이지 않는다 */
   homeAttempt: number
   awayAttempt: number
@@ -83,6 +91,9 @@ export function resolveAttacks(
   const o: AttackOutcome = {
     homeGoals: 0,
     awayGoals: 0,
+    // 아래 원인 배열은 이미 난 득점을 설명할 뿐, 어느 판정에도 다시 들어가지 않는다.
+    homeGoalCauses: [],
+    awayGoalCauses: [],
     homeAttempt: 0,
     awayAttempt: 0,
     homeShot: 0,
@@ -97,7 +108,10 @@ export function resolveAttacks(
     o.behind += 1
     o.awayShot += 1
     // 일대일까지 갈 확률 0.75, 그 슛의 xG 0.185 → 합쳐서 0.139
-    if (d.behindShot < XG.oneOnOne * XG.shotSelectOneOnOne) o.awayGoals += 1
+    if (d.behindShot < XG.oneOnOne * XG.shotSelectOneOnOne) {
+      o.awayGoals += 1
+      o.awayGoalCauses.push('BEHIND')
+    }
   }
 
   // 우리 공격 — 폭이 시도 "횟수"에 곱해진다
@@ -105,7 +119,10 @@ export function resolveAttacks(
     o.homeAttempt += 1
     if (d.homeEnter < BASE.P_ENTER * c.openness) {
       o.homeShot += 1
-      if (d.homeShot < XG.boxCentre * c.entryXg * homeFactor) o.homeGoals += 1
+      if (d.homeShot < XG.boxCentre * c.entryXg * homeFactor) {
+        o.homeGoals += 1
+        o.homeGoalCauses.push('BUILD_UP')
+      }
     }
   }
 
@@ -115,7 +132,10 @@ export function resolveAttacks(
     o.awayAttempt += 1
     if (d.awayEnter < BASE.P_ENTER_OPP) {
       o.awayShot += 1
-      if (d.awayShot < XG.boxCentre * c.oppShotXg) o.awayGoals += 1
+      if (d.awayShot < XG.boxCentre * c.oppShotXg) {
+        o.awayGoals += 1
+        o.awayGoalCauses.push('OPEN_PLAY')
+      }
     }
   }
 
@@ -126,7 +146,10 @@ export function resolveAttacks(
   // 골문 앞에 남은 사람이 헤딩을 따낸다. 지시가 없으면 1.0이다
   if (d.setPiece < BASE.S0 * c.setPiece) {
     o.setPiece += 1
-    if (d.setPieceShot < XG.setPiece * c.oppShotXg) o.awayGoals += 1
+    if (d.setPieceShot < XG.setPiece * c.oppShotXg) {
+      o.awayGoals += 1
+      o.awayGoalCauses.push('SET_PIECE')
+    }
   }
 
   return o

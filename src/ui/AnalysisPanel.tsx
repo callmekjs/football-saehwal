@@ -4,6 +4,7 @@ import {
   compareDecisions,
   type MatchAnalysis,
 } from '../analysis/compare'
+import type { CoachFinding } from '../analysis/coach'
 import type { Decision, Level, Problem } from '../sim/types'
 
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
@@ -27,12 +28,33 @@ function pointDelta(delta: number) {
   return `${points > 0 ? '+' : ''}${points.toFixed(1)}%p`
 }
 
+function FindingCard({ finding }: { finding: CoachFinding }) {
+  return (
+    <article className="coach-finding">
+      <div className="coach-finding-meta">
+        <span>{finding.label}</span>
+        {finding.time && <time>{finding.time}</time>}
+        <b data-confidence={finding.confidence}>확신도 {finding.confidence}</b>
+      </div>
+      <strong>{finding.title}</strong>
+      <p>{finding.explanation}</p>
+      <ul>
+        {finding.evidence.map((evidence) => (
+          <li key={evidence}>{evidence}</li>
+        ))}
+      </ul>
+    </article>
+  )
+}
+
 export function AnalysisPanel({
   problem,
   decisions,
+  kickoff,
 }: {
   problem: Problem
   decisions: Decision[]
+  kickoff: number
 }) {
   const snapshot = useMemo(() => decisions.map((decision) => ({ ...decision })), [decisions])
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null)
@@ -46,7 +68,7 @@ export function AnalysisPanel({
     // 종료 결과를 먼저 그린 뒤 계산한다. 폰에서도 버튼이 멈춘 것처럼 보이지 않는다.
     const timer = window.setTimeout(() => {
       try {
-        const next = compareDecisions(problem, snapshot)
+        const next = compareDecisions(problem, snapshot, ANALYSIS_RUNS, kickoff)
         if (!cancelled) setAnalysis(next)
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
@@ -57,11 +79,11 @@ export function AnalysisPanel({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [problem, snapshot])
+  }, [kickoff, problem, snapshot])
 
   return (
     <section className="panel analysis">
-      <h2>판단 분석 · 같은 국면 {ANALYSIS_RUNS}번</h2>
+      <h2>감독 경기 분석 · 같은 국면 {ANALYSIS_RUNS}번 검증</h2>
       <div className="analysis-body" aria-live="polite">
         {!analysis && !error && (
           <span className="analysis-loading">성공 가능성을 계산하고 있습니다…</span>
@@ -69,6 +91,16 @@ export function AnalysisPanel({
         {error && <span className="analysis-error">{error}</span>}
         {analysis && (
           <>
+            <section className="coach-overview">
+              <span>COACH REPORT · 근거 기반</span>
+              <h3>{analysis.coach.headline}</h3>
+              <ul>
+                {analysis.coach.summary.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </section>
+
             <div className="analysis-headline">
               <strong className="analysis-verdict">{verdict(analysis.userDelta)}</strong>
               <span>방치 대비 {pointDelta(analysis.userDelta)}</span>
@@ -95,8 +127,44 @@ export function AnalysisPanel({
                 </div>
               ))}
             </div>
+
+            <div className="coach-section">
+              <h3>경기의 전환점</h3>
+              <FindingCard finding={analysis.coach.turningPoint} />
+            </div>
+
+            <details className="coach-details" open>
+              <summary>득점·실점 장면 분석</summary>
+              <div className="coach-findings">
+                {analysis.coach.goalsFor.map((finding) => (
+                  <FindingCard key={finding.id} finding={finding} />
+                ))}
+                {analysis.coach.goalsAgainst.map((finding) => (
+                  <FindingCard key={finding.id} finding={finding} />
+                ))}
+              </div>
+            </details>
+
+            <details className="coach-details">
+              <summary>내 결정은 무엇을 바꿨나</summary>
+              <div className="coach-findings">
+                {analysis.coach.decisionReview.map((finding) => (
+                  <FindingCard key={finding.id} finding={finding} />
+                ))}
+              </div>
+            </details>
+
+            <section className="coach-prescriptions">
+              <h3>다음 경기 처방</h3>
+              <ol>
+                {analysis.coach.prescriptions.map((prescription) => (
+                  <li key={prescription}>{prescription}</li>
+                ))}
+              </ol>
+            </section>
+
             <div className="analysis-advice">
-              <strong>다음에는 이렇게 바꿔보세요</strong>
+              <strong>검증된 권장 설정</strong>
               <div>
                 <span>
                   <small>포메이션</small>

@@ -26,6 +26,8 @@ describe('경기 분석', () => {
     const result = compareDecisions(problemAt(0), [])
     expect(result.rows[0].runs).toBe(150)
     expect(result.rows[1].rate).toBe(result.rows[0].rate)
+    expect(result.rows[1].profile).toEqual(result.rows[0].profile)
+    expect(result.coach.summary).toHaveLength(5)
   })
 
   it('같은 국면과 결정은 언제나 같은 분석을 만든다', () => {
@@ -37,6 +39,16 @@ describe('경기 분석', () => {
     for (let index = 0; index < raw.length; index++) {
       const result = compareDecisions(problemAt(index), [])
       expect(result.rows[2].rate).toBeGreaterThan(result.rows[0].rate + 0.1)
+    }
+  })
+
+  it('성공률을 재던 같은 경기에서 평균 득실과 위험 채널도 함께 계산한다', () => {
+    const result = compareDecisions(problemAt(1), [], 40)
+    for (const row of result.rows) {
+      expect(row.profile.goalsFor).toBeGreaterThanOrEqual(0)
+      expect(row.profile.goalsAgainst).toBeGreaterThanOrEqual(0)
+      expect(row.profile.homeAttempt).toBeGreaterThan(row.profile.homeShot)
+      expect(row.profile.setPiece).toBeGreaterThanOrEqual(0)
     }
   })
 })

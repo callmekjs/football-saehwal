@@ -669,7 +669,13 @@ export function MatchScreen({
             </section>
           )}
 
-          {phase === 'DONE' && <AnalysisPanel problem={problem} decisions={decisions.current} />}
+          {phase === 'DONE' && (
+            <AnalysisPanel
+              problem={problem}
+              decisions={decisions.current}
+              kickoff={kickoff}
+            />
+          )}
         </main>
 
         <aside className="match-console">

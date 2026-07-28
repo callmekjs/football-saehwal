@@ -827,6 +827,49 @@ button {
 .analysis-error { color: var(--away); }
 .analysis-verdict { font-size: 15px; }
 
+.coach-overview {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+  border-radius: 9px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 58%),
+    var(--panel-2);
+}
+
+.coach-overview > span {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.coach-overview h3 {
+  margin: 0;
+  max-width: 720px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.coach-overview ul {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-overview li {
+  padding: 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .analysis-headline {
   display: flex;
   align-items: flex-start;
@@ -881,6 +924,155 @@ button {
 .analysis-fill.user { background: var(--warn); }
 .analysis-fill.recommendation { background: var(--accent); }
 
+.coach-section {
+  display: grid;
+  gap: 7px;
+}
+
+.coach-section > h3,
+.coach-prescriptions > h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.coach-details {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.coach-details > summary {
+  min-height: 44px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 750;
+  list-style: none;
+}
+
+.coach-details > summary::-webkit-details-marker { display: none; }
+.coach-details > summary::after {
+  content: '+';
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 18px;
+}
+.coach-details[open] > summary::after { content: '−'; }
+
+.coach-findings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.coach-finding {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.coach-finding-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.coach-finding-meta span,
+.coach-finding-meta time,
+.coach-finding-meta b {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.coach-finding-meta span { color: var(--accent); }
+.coach-finding-meta b { margin-left: auto; }
+.coach-finding-meta b[data-confidence='높음'] { color: var(--accent); }
+.coach-finding-meta b[data-confidence='낮음'] { color: var(--warn); }
+
+.coach-finding > strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.coach-finding > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.coach-finding > ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-finding > ul li {
+  position: relative;
+  padding-left: 10px;
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.coach-finding > ul li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.56em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.coach-prescriptions {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+}
+
+.coach-prescriptions ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.coach-prescriptions li {
+  padding-left: 3px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.coach-prescriptions li::marker {
+  color: var(--accent);
+  font-weight: 800;
+}
+
 .analysis-advice {
   display: grid;
   gap: 9px;
@@ -923,4 +1115,7 @@ button {
 @media (max-width: 430px) {
   .analysis-headline { display: grid; }
   .analysis-headline > span { justify-self: start; }
+  .coach-overview ul,
+  .coach-findings { grid-template-columns: 1fr; }
+  .coach-overview h3 { font-size: 16px; }
 }

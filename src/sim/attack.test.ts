@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { drawTick, resolveAttacks } from './attack'
+import { drawTick, resolveAttacks, type TickDraws } from './attack'
 import { resolveCoefficients } from './tactics'
 import { createRng } from './rng'
 import { TOTAL_TICKS } from './constants'
@@ -54,6 +54,58 @@ describe('drawTick', () => {
 })
 
 describe('resolveAttacks — 무개입 기준', () => {
+  const noEvent: TickDraws = {
+    behind: 1,
+    behindShot: 1,
+    homeAttempt: 1,
+    homeEnter: 1,
+    homeShot: 1,
+    awayAttempt: 1,
+    awayEnter: 1,
+    awayShot: 1,
+    setPiece: 1,
+    setPieceShot: 1,
+    foul: 1,
+    foulTarget: 1,
+    card: 1,
+    penalty: 1,
+    penaltyShot: 1,
+    sendOff: 1,
+    injury: 1,
+    injuryTarget: 1,
+  }
+
+  it('이미 난 득점의 경로만 기록하며 결과와 개수가 일치한다', () => {
+    const c = resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
+    const home = resolveAttacks(
+      { ...noEvent, homeAttempt: 0, homeEnter: 0, homeShot: 0 },
+      c,
+      1,
+      70,
+    )
+    expect(home.homeGoals).toBe(1)
+    expect(home.homeGoalCauses).toEqual(['BUILD_UP'])
+
+    const away = resolveAttacks(
+      {
+        ...noEvent,
+        behind: 0,
+        behindShot: 0,
+        awayAttempt: 0,
+        awayEnter: 0,
+        awayShot: 0,
+        setPiece: 0,
+        setPieceShot: 0,
+      },
+      c,
+      1,
+      70,
+    )
+    expect(away.awayGoals).toBe(3)
+    expect(away.awayGoalCauses).toEqual(['BEHIND', 'OPEN_PLAY', 'SET_PIECE'])
+    expect(away.awayGoalCauses).toHaveLength(away.awayGoals)
+  })
+
   it('양 팀 합계가 15분에 0.9~1.4골이다', () => {
     const { home, away } = average(t(1, 1, 1), 'BALANCED')
     expect(home + away).toBeGreaterThan(0.9)

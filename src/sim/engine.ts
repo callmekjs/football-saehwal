@@ -247,12 +247,27 @@ export function tick(state: MatchState, rng: Rng): MatchState {
   if (ev.removed) {
     players = players.map((s) => (s.id === ev.removed ? { ...s, onPitch: false, out: true } : s))
   }
-  for (const e of ev.events) log.push({ tick: e.tick, kind: e.kind, target: e.target })
+  for (const e of ev.events) {
+    const detail =
+      e.kind === 'PENALTY' ? (e.conceded ? 'PENALTY_SCORED' : 'PENALTY_MISSED') : undefined
+    log.push({
+      tick: e.tick,
+      kind: e.kind,
+      target: e.target,
+      ...(detail ? { detail } : {}),
+    })
+  }
 
   score[0] += attacks.homeGoals
   score[1] += attacks.awayGoals + ev.awayGoals
-  if (attacks.homeGoals) log.push({ tick: state.tick, kind: 'GOAL' })
-  if (attacks.awayGoals) log.push({ tick: state.tick, kind: 'CONCEDE' })
+  if (attacks.homeGoals) {
+    const detail = attacks.homeGoalCauses?.join('+')
+    log.push({ tick: state.tick, kind: 'GOAL', ...(detail ? { detail } : {}) })
+  }
+  if (attacks.awayGoals) {
+    const detail = attacks.awayGoalCauses?.join('+')
+    log.push({ tick: state.tick, kind: 'CONCEDE', ...(detail ? { detail } : {}) })
+  }
 
   const ball = nextBall(state.ball, draws, c, attacks.homeGoals > 0, attacks.awayGoals > 0)
 
