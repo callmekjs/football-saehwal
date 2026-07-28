@@ -46,6 +46,15 @@ const SHOT_MAX_T = 0.8
 /** 공을 발밑에 두는 거리 */
 const CONTROL_DIST = 1.3
 
+/**
+ * 태클이 성립하는 거리.
+ *
+ * 시뮬이 "점유가 넘어갔다"고 알려도, 뺏는 선수가 이만큼 붙어 있지 않으면
+ * 공만 옮겨서는 안 된다. 8미터 떨어진 수비수에게 공이 순간이동하는 장면은
+ * 축구가 아니다. 멀면 홀더가 공을 흘린 것으로 그린다.
+ */
+const TACKLE_REACH = 3.5
+
 export interface VPlayer {
   id: string
   num: number
@@ -154,6 +163,8 @@ export class VisualMatch {
   private clock = 0
   /** 압박 게이지. 상대가 발밑에 붙어 있던 시간이 쌓인다 */
   private pressure = 0
+  /** 시뮬이 알린 슛인데 공이 아직 그 팀에게 없어 기다리는 중 */
+  private pendingShot: { side: 'HOME' | 'AWAY'; willScore: boolean; life: number } | null = null
   private chaseIds: Record<'HOME' | 'AWAY', string[]> = { HOME: [], AWAY: [] }
   private chaseAt: Record<'HOME' | 'AWAY', number> = { HOME: -9, AWAY: -9 }
 
@@ -326,9 +337,13 @@ export class VisualMatch {
       v.homeY = y
     })
 
-    // 세리머니 중에는 새 사건을 받지 않는다
+    // 세리머니 중에는 새 슛을 받지 않는다. 밀린 슛이 재개 직후 한꺼번에
+    // 터지면 그림이 엉킨다.
+    //
+    // 다만 **득점은 버리지 않는다.** lastScore 를 여기서 갱신하면 세리머니
+    // 도중에 들어온 골이 조용히 사라져 점수판만 혼자 올라간다. 실측으로
+    // 세 판에 골 셋 중 하나가 그렇게 없어졌다
     if (this.celebration) {
-      this.lastScore = [...state.score] as [number, number]
       this.lastStats = { homeShot: state.stats.homeShot, awayShot: state.stats.awayShot }
       this.lastOwner = state.ball.owner
       return
@@ -344,18 +359,14 @@ export class VisualMatch {
     // 골 — 시뮬이 점수를 올렸으면 실제로 골망에 꽂히는 슛을 만든다.
     // 여기서 바로 킥오프로 넘기면 골이 사건으로 보이지 않는다
     if (scored > 0 || conceded > 0) {
-      const side = scored > 0 ? 'HOME' : 'AWAY'
-      const shooter = this.pickShooter(side)
-      if (shooter) this.shoot(shooter, true)
+      this.queueShot(scored > 0 ? 'HOME' : 'AWAY', true)
       this.lastOwner = state.ball.owner
       return
     }
 
     // 슛 — 시뮬이 슈팅 상황을 셌으면 골대로 차되 막히거나 빗나간다
     if (newHomeShot > 0 || newAwayShot > 0) {
-      const side = newHomeShot > 0 ? 'HOME' : 'AWAY'
-      const shooter = this.pickShooter(side)
-      if (shooter) this.shoot(shooter, false)
+      this.queueShot(newHomeShot > 0 ? 'HOME' : 'AWAY', false)
     }
 
     // 점유 전환 — 가장 가까운 상대가 뺏는 장면으로 만든다
@@ -364,12 +375,85 @@ export class VisualMatch {
       const holder = this.byId(this.ball.holder)
       if (this.ball.mode === 'HELD' && holder && holder.side !== state.ball.owner) {
         const taker = this.nearestOf(state.ball.owner, holder)
-        if (taker) {
+        if (taker && dist(taker, holder) <= TACKLE_REACH) {
           this.flash('TACKLE', this.ball.x, this.ball.y)
           holder.recover = 0.5
           this.giveTo(taker)
+        } else if (taker) {
+          this.spill(holder, taker)
         }
       }
+    }
+  }
+
+  /**
+   * 공을 흘린다.
+   *
+   * 뺏는 선수가 발이 닿지 않는 거리에 있을 때 쓴다. 공이 홀더 발밑에서
+   * 상대 쪽으로 굴러가고, 상대가 달려가서 줍는다. 실제 축구의 "터치가
+   * 길어 뺏겼다"에 해당한다.
+   */
+  private spill(holder: VPlayer, to: VPlayer) {
+    const tx = clamp(to.x + to.vx * 0.3, 2, PITCH_W - 2)
+    const ty = clamp(to.y + to.vy * 0.3, 2, PITCH_H - 2)
+    const d = Math.hypot(tx - this.ball.x, ty - this.ball.y)
+    this.ball.mode = 'PASS'
+    this.ball.holder = null
+    this.ball.fromX = this.ball.x
+    this.ball.fromY = this.ball.y
+    this.ball.toX = tx
+    this.ball.toY = ty
+    this.ball.t = 0
+    this.ball.dur = clamp(d / PASS_SPEED, 0.14, PASS_MAX_T)
+    this.ball.targetId = to.id
+    this.ball.willScore = false
+    holder.recover = 0.35
+    this.flash('TACKLE', this.ball.x, this.ball.y)
+  }
+
+  /**
+   * 슛 예약.
+   *
+   * 시뮬은 "이 팀이 슛을 쐈다"만 알려준다. 그 순간 공이 상대 발밑에 있으면
+   * 곧바로 쏠 수 없다 — 슈터에게 공을 순간이동시켜야 하는데, 공이 30미터를
+   * 날아가 갑자기 슛이 되는 장면은 축구가 아니다. 그 팀이 공을 잡을 때까지
+   * 기다렸다 쏜다.
+   */
+  private queueShot(side: 'HOME' | 'AWAY', willScore: boolean) {
+    // 골 예약이 기다리는 중이면 빗나갈 슛으로 덮어쓰지 않는다. 점수판은
+    // 이미 올라갔으므로 골 장면은 반드시 나와야 한다. 실측으로 골 하나가
+    // 뒤이어 들어온 평범한 슛에 밀려 통째로 사라졌다
+    if (this.pendingShot?.willScore && !willScore) return
+    const holder = this.byId(this.ball.holder)
+    if (this.ball.mode === 'HELD' && holder?.side === side && holder.pos !== 'GK') {
+      this.shoot(holder, willScore)
+      return
+    }
+    // 골은 점수판이 이미 올라갔으므로 장면이 반드시 나와야 한다. 더 기다린다
+    this.pendingShot = { side, willScore, life: willScore ? 2.5 : 1.0 }
+  }
+
+  private tryPendingShot(dt: number) {
+    const q = this.pendingShot
+    if (!q) return
+    q.life -= dt
+    const holder = this.byId(this.ball.holder)
+    if (this.ball.mode === 'HELD' && holder?.side === q.side && holder.pos !== 'GK') {
+      this.pendingShot = null
+      this.shoot(holder, q.willScore)
+      return
+    }
+    if (q.life > 0) return
+    this.pendingShot = null
+    // 기다려도 공이 오지 않는다. 빗나갈 슛이었다면 그냥 흘려보낸다 —
+    // 안 보이는 슛 하나보다 공이 순간이동하는 장면이 훨씬 나쁘다
+    if (!q.willScore) return
+    // 공을 옮길 수밖에 없다면 옮기는 거리라도 짧아야 한다.
+    // 공에서 가장 가까운 그 팀 선수가 잡아서 쏜다
+    const shooter = this.nearestOf(q.side, this.ball) ?? this.pickShooter(q.side)
+    if (shooter) {
+      this.giveTo(shooter)
+      this.shoot(shooter, true)
     }
   }
 
@@ -437,6 +521,10 @@ export class VisualMatch {
     this.ball.y = PITCH_H / 2
     this.ball.mode = 'HELD'
     this.ball.lift = 0
+    // 재개 시점에 밀려 있던 빗나갈 슛은 버린다. 골 예약은 점수판이 이미
+    // 올라간 것이므로 살려두되 기다리는 시간을 다시 준다
+    if (this.pendingShot?.willScore) this.pendingShot.life = 2.5
+    else this.pendingShot = null
 
     const taker = this.nearestOf(side, { x: PITCH_W / 2, y: PITCH_H / 2 })
     if (taker) {
@@ -961,5 +1049,6 @@ export class VisualMatch {
     for (const p of this.players) this.movePlayer(p, step)
     this.separate()
     this.moveBall(step)
+    this.tryPendingShot(step)
   }
 }
