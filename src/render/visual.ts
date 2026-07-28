@@ -227,8 +227,12 @@ export class VisualMatch {
     this.lastScore = [...state.score] as [number, number]
     this.lastStats = { homeShot: state.stats.homeShot, awayShot: state.stats.awayShot }
     this.lastOwner = state.ball.owner
-    const centre = this.players.find((p) => p.side === 'HOME' && p.pos === 'MF')
-    if (centre) this.giveTo(centre)
+    // 경기는 킥오프로 시작한다.
+    //
+    // 전에는 미드필더 하나가 아무 자리에서 공을 들고 서 있는 것으로
+    // 시작했고, 시작 순간에 네 명이 하프라인 너머에 있었다. 심사자가
+    // 처음 보는 3초다 — 그 장면이 축구가 아니면 나머지도 안 믿는다
+    this.kickoff('HOME')
   }
 
   /** 포메이션·인원이 바뀌면 자리를 다시 만든다 */
@@ -895,7 +899,13 @@ export class VisualMatch {
         const out = clamp(14 - toBall * 0.25, 1.5, 9)
         const k = p.side === 'HOME' ? 1 : -1
         p.tx = p.homeX + out * k
-        p.ty = 34 + (this.ball.y - 34) * 0.45
+        // 골키퍼는 골문 앞을 벗어나지 않는다.
+        //
+        // 공 y 를 그냥 따라가게 두면 공이 사이드로 갈 때 골키퍼가 골대
+        // 밖으로 걸어 나가 골문을 통째로 비운다. 앞으로 나올수록 각을
+        // 줄이려 옆으로 더 움직일 수 있지만, 골라인 앞에서는 골대 폭이다
+        const span = GOAL_HALF + out * 0.7
+        p.ty = clamp(GOAL_MID + (this.ball.y - GOAL_MID) * 0.45, GOAL_MID - span, GOAL_MID + span)
         continue
       }
 

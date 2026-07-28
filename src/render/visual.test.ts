@@ -695,6 +695,27 @@ describe('킥오프 — 축구 규칙대로', () => {
     .map((f, i) => ({ f, i }))
     .filter(({ i }) => i > 0 && frames[i - 1].celebrating && !frames[i].celebrating)
 
+  it('경기가 킥오프로 시작한다', () => {
+    // 심사자가 처음 보는 3초다. 미드필더 하나가 아무 자리에서 공을
+    // 들고 서 있는 것으로 시작하면 그 뒤로도 축구로 안 보인다
+    const f = frames[0]
+    expect(Math.hypot(f.ball.x - PITCH_W / 2, f.ball.y - PITCH_H / 2), '시작 시 공 위치')
+      .toBeLessThan(12)
+  })
+
+  it('킥오프 순간 양 팀이 자기 진영에 있었다', () => {
+    // 첫 프레임은 이미 한 틱이 지난 뒤라 조금씩 움직였다. 규칙이 지켜진
+    // 배치에서 출발했는지만 본다
+    const f = frames[0]
+    let wrong = 0
+    for (const p of f.players) {
+      if (p.id === f.holder) continue
+      if (p.id.startsWith('H') && p.x > PITCH_W / 2 + 3) wrong += 1
+      if (p.id.startsWith('A') && p.x < PITCH_W / 2 - 3) wrong += 1
+    }
+    expect(wrong, `${wrong}명이 상대 진영에서 킥오프를 맞았다`).toBe(0)
+  })
+
   it('골 뒤에 반드시 재개한다', () => {
     expect(restarts.length).toBeGreaterThan(0)
   })
@@ -779,6 +800,42 @@ describe('시뮬레이션과의 일치', () => {
     // 잡을 때까지 최대 2.5초 기다렸다 쏘므로 창은 그만큼 넉넉해야 한다
     const window = frames.slice(scoredAt, scoredAt + 40)
     expect(window.some((f) => f.celebrating), '세리머니가 뜨지 않았다').toBe(true)
+  })
+})
+
+describe('골키퍼는 골문 앞을 지킨다', () => {
+  it('골대 폭을 크게 벗어나지 않는다', () => {
+    // 공을 따라 옆으로 걸어 나가면 골문이 통째로 빈다. 앞으로 나올수록
+    // 각을 줄이려 옆으로 더 움직일 수 있지만 한계가 있다
+    let out = 0
+    let total = 0
+    let worst = 0
+    for (const fs of MULTI) {
+      for (const f of fs) {
+        for (const p of f.players) {
+          if (p.id !== 'H1' && p.id !== 'A1') continue
+          total += 1
+          const off = Math.abs(p.y - PITCH_H / 2)
+          worst = Math.max(worst, off)
+          // 골대 반폭 + 앞으로 나온 만큼의 여유. 골 에어리어 폭이 한계다
+          if (off > 10) out += 1
+        }
+      }
+    }
+    expect(out / total, `골문 폭 밖 비율 ${((out / total) * 100).toFixed(1)}%, 최대 ${worst.toFixed(1)}m`)
+      .toBeLessThan(0.02)
+  })
+
+  it('자기 골대 앞을 떠나지 않는다', () => {
+    for (const fs of MULTI) {
+      for (const f of fs) {
+        const h = f.players.find((p) => p.id === 'H1')!
+        const a = f.players.find((p) => p.id === 'A1')!
+        // 우리 골대는 x=0, 상대 골대는 x=105
+        expect(h.x, '우리 골키퍼가 골대에서 멀리 나갔다').toBeLessThan(20)
+        expect(a.x, '상대 골키퍼가 골대에서 멀리 나갔다').toBeGreaterThan(PITCH_W - 20)
+      }
+    }
   })
 })
 
