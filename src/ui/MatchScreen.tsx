@@ -630,17 +630,29 @@ export function MatchScreen({
             />
           </div>
 
+          {/*
+            킥오프 전은 급수 타임이다. 실제 축구에서 주심이 경기를 잠시
+            세우고 양 팀이 물을 마시는 그 시간이며, 감독이 선수들을 불러
+            모아 지시할 수 있는 몇 안 되는 순간이다.
+            이 설정이 있어야 "왜 경기 전에 다 만질 수 있는가"가 설명된다.
+          */}
           {phase === 'READY' && (
-            <button
-              className="kickoff-button"
-              onClick={() => {
-                start()
-                setActiveTab('TACTICS')
-              }}
-            >
-              킥오프
-              <small>시계는 멈추지 않습니다</small>
-            </button>
+            <>
+              <p className="hydration-note">
+                <b>급수 타임</b> — 지금은 시계가 멈춰 있습니다. 포메이션 · 전술 · 선수 지시를
+                모두 걸어두고 나가세요. 휘슬이 울리면 <b>75초 동안 멈추지 않습니다.</b>
+              </p>
+              <button
+                className="kickoff-button"
+                onClick={() => {
+                  start()
+                  setActiveTab('TACTICS')
+                }}
+              >
+                지시 끝 · 경기 재개
+                <small>이후 시계는 멈추지 않습니다</small>
+              </button>
+            </>
           )}
 
           {phase === 'DONE' && (
@@ -681,7 +693,19 @@ export function MatchScreen({
         <aside className="match-console">
           <nav className="control-tabs" aria-label="감독 메뉴">
             {CONTROL_TABS.map((tab) => {
-              const disabled = tab.id === 'PLAYERS' && phase !== 'RUNNING'
+              /*
+               * 킥오프 전은 **급수 타임**이다. 감독이 선수들을 불러 모아
+               * 지시하는 시간이므로 선수 지시가 열려 있어야 한다.
+               *
+               * 전에는 경기 중에만 열려 있었다. 그러면 75초짜리 경기가
+               * 시작된 뒤에야 선수를 고르고 지시를 걸게 되어, 가장 바쁜
+               * 시간에 화면을 들여다보느라 경기를 못 본다. 포메이션과
+               * 전술은 킥오프 전에 되는데 선수 지시만 막혀 있어 일관성도
+               * 없었다.
+               *
+               * 끝난 뒤에는 닫는다. 이미 끝난 경기에 지시할 수는 없다.
+               */
+              const disabled = tab.id === 'PLAYERS' && phase === 'DONE'
               return (
                 <button
                   key={tab.id}
@@ -704,7 +728,12 @@ export function MatchScreen({
                 tenMen={state.homeCount < 11}
               />
             )}
-            {activeTab === 'PLAYERS' && phase === 'RUNNING' && (
+            {/*
+              급수 타임(킥오프 전)에도 열어둔다. 감독이 선수들을 불러 모아
+              지시하는 시간이므로 여기서 다 걸어두고 나가야 한다.
+              끝난 경기에는 지시할 수 없으므로 DONE 에서만 닫는다.
+            */}
+            {activeTab === 'PLAYERS' && phase !== 'DONE' && (
               <div className="player-controls">
                 <Orders state={state} onOrder={setOrder} />
                 <Bench state={state} onSub={substitute} />

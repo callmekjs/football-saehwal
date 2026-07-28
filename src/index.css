@@ -612,6 +612,28 @@ button {
 
 .pitch-card { padding: 8px; }
 
+/*
+ * 급수 타임 안내.
+ *
+ * 킥오프 전 화면이 "설정 메뉴"가 아니라 "경기 안의 한 장면"으로 읽혀야
+ * 한다. 감독이 선수들을 불러 모아 지시하는 시간이라는 것을 한 줄로
+ * 말해주면, 왜 지금은 다 만질 수 있고 왜 휘슬 뒤에는 시계가 안 멈추는지가
+ * 함께 설명된다.
+ */
+.hydration-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.hydration-note b { color: var(--accent); font-weight: 600; }
+
 .kickoff-button {
   min-height: 58px;
   display: grid;
