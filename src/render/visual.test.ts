@@ -1006,9 +1006,18 @@ describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
       const p = prev.players.find((x) => x.id === prev.holder)!
       // 찬 팀도 실제로 찬 쪽(lastTouch)으로 본다. 한 틱 안에 소유가
       // 바뀌면 직전 소유자와 실제 슈터의 팀이 다를 수 있다
-      const side = isShot ? (now.ball.lastTouch === 'HOME' ? 'H' : 'A') : prev.holder[0]
+      /**
+       * **패스도 실제로 찬 지점으로 잰다.**
+       *
+       * 위의 슛과 같은 이유다. 한 틱(0.1초) 안에 소유가 바뀌면 직전
+       * 프레임의 소유자는 그 공을 차지 않은 사람이다. 실측으로 이
+       * 오차가 "박스 안 백패스" 일곱 개를 만들어냈는데, 실제로 박스
+       * 안에서 패스를 고른 경우는 일흔두 판에 한 번이었다.
+       */
+      const side = now.ball.lastTouch === 'HOME' ? 'H' : 'A'
       const gx = GOAL_OF(side)
-      const from = isShot ? { x: now.ball.fromX, y: now.ball.fromY } : { x: p.x, y: p.y }
+      const from = { x: now.ball.fromX, y: now.ball.fromY }
+      void p
       kicks.push({
         side,
         goalDist: Math.hypot(gx - from.x, PITCH_H / 2 - from.y),

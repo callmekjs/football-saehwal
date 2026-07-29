@@ -1198,7 +1198,18 @@ export class VisualMatch {
     // 체력·경고를 갱신한다. 지친 선수는 실제로 느려진다
     const byNum = new Map(onPitch.map((s) => [`H${getPlayer(s.id).num}`, s]))
     const lineShift = (state.tactics.line - 1) * 8
-    const widthScale = 0.8 + state.tactics.width * 0.18
+    /**
+     * 폭 레버가 대형의 좌우를 정한다.
+     *
+     * 전에는 0.8 에서 시작해서, **좁게도 보통도 실제 대형보다 좁았다.**
+     * 4-4-2 의 좌우 끝이 y=12·56 인데 0.8 을 곱하면 y=17.6·50.4 로
+     * 들어와, 양쪽 터치라인 근처 11미터가 통째로 비었다. 그 상태에서는
+     * 아무리 옆으로 벌리는 패스에 값을 줘도 갈 사람이 거기 없다.
+     *
+     * 보통(1)이 실제 대형과 거의 같도록 잡는다. 레버 세 단계의 차이는
+     * 그대로 남는다 — 0.86 · 1.03 · 1.20.
+     */
+    const widthScale = 0.86 + state.tactics.width * 0.17
     for (const v of this.players) {
       if (v.side !== 'HOME') continue
       const s = byNum.get(v.id)
@@ -2715,7 +2726,10 @@ export class VisualMatch {
       : clamp(0.94 - (gd - 16.5) * 0.1, 0, 0.94)
     // 수비가 발앞에 있어도 문전에서는 슛이 우선이다. 완전히 같은 확률로
     // 두면 압박이 무의미해지므로 막힐 여지만 작게 남긴다
-    if (nearest < 1.7) want *= 0.88
+    // 박스 안에서는 감점을 작게 둔다. 대형을 실제 폭으로 넓히자 박스
+    // 안에서도 옆으로 치우친 자리가 늘었는데, 거기서까지 패스를 고르면
+    // 문전 백패스가 다시 늘어난다(실측 박스 안 슛 비율 0.74, 기준 0.75)
+    if (nearest < 1.7) want *= gd <= 16.5 ? 0.95 : 0.88
     return want
   }
 
@@ -3203,7 +3217,9 @@ export class VisualMatch {
           // 좁힐 때조차 서로의 간격은 남긴다 — 백 넷의 폭은 공이 어디
           // 있든 30미터 안팎을 유지한다
           const shift = (this.ball.y - PITCH_H / 2) * 0.6
-          p.ty = clamp(PITCH_H / 2 + (p.homeY - PITCH_H / 2) * 0.8 + shift, 3, PITCH_H - 3)
+          // 좁힐 때조차 0.9 는 남긴다. 0.8 이면 백 넷의 폭이 24미터로
+          // 줄어 측면이 통째로 비고, 상대가 옆으로 벌릴 곳이 사라진다
+          p.ty = clamp(PITCH_H / 2 + (p.homeY - PITCH_H / 2) * 0.9 + shift, 3, PITCH_H - 3)
         }
       }
 
