@@ -1,4 +1,5 @@
 import { getPlayer } from '../sim/squad'
+import { withJosa } from './josa'
 import type { MatchState, Problem } from '../sim/types'
 
 /**
@@ -89,10 +90,10 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   // ── 머리말: 몇 대 몇으로 마쳤나 ──
   const headline =
     us > them
-      ? `전반을 ${us} 대 ${them}으로 앞선 채 마쳤습니다.`
+      ? `전반을 ${us} 대 ${withJosa(them, '로으로')} 앞선 채 마쳤습니다.`
       : us < them
-        ? `전반을 ${us} 대 ${them}으로 뒤진 채 마쳤습니다.`
-        : `전반을 ${us} 대 ${them}으로 마쳤습니다.`
+        ? `전반을 ${us} 대 ${withJosa(them, '로으로')} 뒤진 채 마쳤습니다.`
+        : `전반을 ${us} 대 ${withJosa(them, '로으로')} 마쳤습니다.`
 
   // ── 목표를 기준으로 지금 위치 ──
   const chasing = problem.objective.type === 'EQUALIZE'

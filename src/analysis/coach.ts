@@ -1,4 +1,5 @@
 import { SEGMENT_MINUTES, halfLabel, kickoffMinute, type Half } from '../matchClock'
+import { withJosa } from './josa'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
@@ -264,9 +265,10 @@ function goalFinding(
     evidence.push(`우리 공격 전개 ${totals.homeAttempt}회 중 슈팅 ${totals.homeShot}회`)
     if (primary === 'BUILD_UP') {
       evidence.push(
-        `라인 ${LEVEL_LABEL.line[setup.tactics.line]}은 박스 진입 뒤 슈팅 가치에, 폭 ${
-          LEVEL_LABEL.width[setup.tactics.width]
-        }은 전진 시도 수에 영향을 줬습니다.`,
+        `라인 ${withJosa(LEVEL_LABEL.line[setup.tactics.line], '은는')} 박스 진입 뒤 슈팅 가치에, 폭 ${withJosa(
+          LEVEL_LABEL.width[setup.tactics.width],
+          '은는',
+        )} 전진 시도 수에 영향을 줬습니다.`,
       )
     }
   } else {
@@ -467,7 +469,7 @@ function halfSplitFinding(
     label: '반별 결정',
     title: perLeg.map(({ leg, items }) => `${halfLabel(leg.half)} ${items.length}회`).join(' · '),
     explanation: perLeg
-      .map(({ leg, items }) => `${halfLabel(leg.half)}은 ${categoryText(items)}`)
+      .map(({ leg, items }) => `${withJosa(halfLabel(leg.half), '은는')} ${categoryText(items)}`)
       .join(', ') + '였습니다.',
     evidence,
     confidence: '높음',
@@ -699,9 +701,10 @@ function prescriptionsOf(
   const items = [
     `킥오프 직후 ${recommendation.formation}, 라인 ${
       LEVEL_LABEL.line[recommendation.tactics.line]
-    }, 압박 ${LEVEL_LABEL.press[recommendation.tactics.press]}, 폭 ${
-      LEVEL_LABEL.width[recommendation.tactics.width]
-    }로 시작하세요.`,
+    }, 압박 ${LEVEL_LABEL.press[recommendation.tactics.press]}, 폭 ${withJosa(
+      LEVEL_LABEL.width[recommendation.tactics.width],
+      '로으로',
+    )} 시작하세요.`,
   ]
 
   const reached = reachesRecommendation(problem, timeline, legs)

@@ -1,6 +1,7 @@
 import { EVENTS, LINE } from '../sim/constants'
 import { getFormation } from '../sim/formations'
 import { AWAY_XI, BENCH, effectivePos, getPlayer } from '../sim/squad'
+import { withJosa } from './josa'
 import { LEVEL_WORD, presetOf } from './presets'
 import type {
   CaptainEffect,
@@ -273,7 +274,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
    * **지어내지 않는다.** 대형·경고·부상은 전부 `state.away` 의 실제
    * 값이고, 같은 시드는 같은 상대를 만든다.
    */
-  say(11, 'awayShape', '상대', `저쪽은 ${state.away.formation}로 나왔습니다.`)
+  say(11, 'awayShape', '상대', `저쪽은 ${withJosa(state.away.formation, '로으로')} 나왔습니다.`)
   if (state.away.booked.length > 0) {
     say(
       16,
