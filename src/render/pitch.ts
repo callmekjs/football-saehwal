@@ -5,6 +5,7 @@ import {
   PITCH_W,
   type Downed,
   type Leaving,
+  flagTipY,
   type Official,
   type Whistle,
   type VisualMatch,
@@ -484,12 +485,17 @@ function drawOfficial(
     return
   }
 
-  // 깃발 — 위쪽 부심은 위로, 아래쪽 부심은 아래로 든다.
-  // 각자 자기 터치라인 바깥쪽이라 경기장 안을 가리지 않는다
-  const up = o.kind === 'AR_TOP' ? -1 : 1
+  /**
+   * 깃발은 **경기장 안쪽으로** 뻗는다.
+   *
+   * 바깥쪽으로 그렸더니 화면 밖에 나가 통째로 안 보였다. 자세한 이유는
+   * `flagTipY` 의 주석에 있다 — 여기서는 그 함수가 준 좌표를 그대로 쓴다.
+   * 길이를 픽셀이 아니라 미터로 받으므로 화면 크기가 바뀌어도 잘리지
+   * 않는다.
+   */
   const raised = o.flag > 0
-  const len = rr * (raised ? 3.4 : 1.9)
-  const tipY = cy + up * len
+  const tipY = Y(flagTipY(o.kind, raised))
+  const dir = Math.sign(tipY - cy) || 1
   ctx.save()
   ctx.strokeStyle = COLORS.officialTrim
   ctx.lineWidth = Math.max(1.2, rr * 0.28)
@@ -498,12 +504,12 @@ function drawOfficial(
   ctx.lineTo(cx, tipY)
   ctx.stroke()
   if (raised) {
-    // 노랑-빨강 체크 깃발. 실제 부심 깃발의 색이다
+    // 노랑 깃발. 실제 부심 깃발의 색이다
     const s = rr * 1.5
     ctx.beginPath()
     ctx.moveTo(cx, tipY)
-    ctx.lineTo(cx + s, tipY - up * s * 0.2)
-    ctx.lineTo(cx, tipY - up * s * 0.85)
+    ctx.lineTo(cx + s, tipY - dir * s * 0.2)
+    ctx.lineTo(cx, tipY - dir * s * 0.85)
     ctx.closePath()
     ctx.fillStyle = COLORS.flag
     ctx.fill()

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { VisualMatch, PITCH_W, PITCH_H, GOAL_HALF, GOAL_MID } from './visual'
+import { VisualMatch, PITCH_W, PITCH_H, GOAL_HALF, GOAL_MID, flagTipY, FLAG_REACH } from './visual'
 import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
 import { getPlayer } from '../sim/squad'
@@ -2209,5 +2209,39 @@ describe('주심이 판정을 준다', () => {
     }
     expect(late).toBeGreaterThan(10)
     expect(near / late, `30m 안 ${((near / late) * 100).toFixed(0)}%`).toBeGreaterThan(0.5)
+  })
+})
+
+/**
+ * 부심 깃발이 화면 안에 그려진다.
+ *
+ * 실제로 브라우저에서 20초를 지켜봐도 깃발이 한 번도 안 보여서 찾은
+ * 결함이다. 실제 부심처럼 터치라인 **바깥쪽**으로 깃발을 뻗게 그렸는데,
+ * 우리 캔버스는 105×68에 여백 0으로 맞춰져 있고 부심은 라인 안쪽
+ * 1.1미터에 서 있다. 그래서 "바깥"이 곧 "화면 밖"이었다.
+ *
+ * 자동검사 342개가 전부 통과하는 동안 이 결함은 하나도 못 잡았다.
+ * 그리기 좌표는 **경기장 좌표계 안에 있는지**를 봐야 잡힌다.
+ */
+describe('부심 깃발이 경기장 안에 그려진다', () => {
+  it('깃발 끝이 캔버스 밖으로 나가지 않는다', () => {
+    for (const kind of ['AR_TOP', 'AR_BOTTOM'] as const) {
+      for (const raised of [false, true]) {
+        const y = flagTipY(kind, raised)
+        expect(y, `${kind} ${raised ? '들었을 때' : '내렸을 때'} y=${y}`).toBeGreaterThan(0)
+        expect(y, `${kind} ${raised ? '들었을 때' : '내렸을 때'} y=${y}`).toBeLessThan(PITCH_H)
+      }
+    }
+  })
+
+  it('깃발은 경기장 안쪽을 향한다', () => {
+    // 위쪽 부심은 아래로, 아래쪽 부심은 위로. 반대로 두면 화면 밖이다
+    expect(flagTipY('AR_TOP', true)).toBeGreaterThan(flagTipY('AR_TOP', false))
+    expect(flagTipY('AR_BOTTOM', true)).toBeLessThan(flagTipY('AR_BOTTOM', false))
+  })
+
+  it('들면 내렸을 때보다 확실히 길다', () => {
+    // 길이 차이가 작으면 들었는지 내렸는지 화면에서 구분이 안 된다
+    expect(FLAG_REACH.up).toBeGreaterThan(FLAG_REACH.down * 1.5)
   })
 })
