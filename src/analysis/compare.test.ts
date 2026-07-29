@@ -1,11 +1,50 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../data/problems.json' with { type: 'json' }
 import { toProblem } from '../sim/problems'
-import type { Decision, Problem } from '../sim/types'
+import { simulate, simulateHalves } from '../sim/engine'
+import type { Decision, MatchState, Problem } from '../sim/types'
+import type { OutcomeProfile } from './coach'
 import { compareDecisions } from './compare'
 
 function problemAt(index: number): Problem {
   return toProblem(raw[index])
+}
+
+const emptyProfile = (): OutcomeProfile => ({
+  goalsFor: 0,
+  goalsAgainst: 0,
+  homeAttempt: 0,
+  awayAttempt: 0,
+  homeShot: 0,
+  awayShot: 0,
+  setPiece: 0,
+  behind: 0,
+  sendOff: 0,
+  injury: 0,
+})
+
+function profileOf(problem: Problem, halves: MatchState[]): OutcomeProfile {
+  const final = halves[halves.length - 1]
+  const profile = emptyProfile()
+  profile.goalsFor = final.score[0] - problem.score[0]
+  profile.goalsAgainst = final.score[1] - problem.score[1]
+  for (const half of halves) {
+    profile.homeAttempt += half.stats.homeAttempt
+    profile.awayAttempt += half.stats.awayAttempt
+    profile.homeShot += half.stats.homeShot
+    profile.awayShot += half.stats.awayShot
+    profile.setPiece += half.stats.setPiece
+    profile.behind += half.stats.behind
+    profile.sendOff += half.log.filter((event) => event.kind === 'SEND_OFF').length
+    profile.injury += half.log.filter((event) => event.kind === 'INJURY').length
+  }
+  return profile
+}
+
+function expectProfileClose(actual: OutcomeProfile, expected: OutcomeProfile) {
+  for (const key of Object.keys(expected) as (keyof OutcomeProfile)[]) {
+    expect(actual[key]).toBeCloseTo(expected[key])
+  }
 }
 
 describe('경기 분석', () => {
@@ -50,6 +89,48 @@ describe('경기 분석', () => {
       result.coach.decisionReview.some((finding) => finding.id === 'decision-halves'),
     ).toBe(false)
     expect(JSON.stringify(result.coach)).not.toContain('전반')
+  })
+
+  it('한 반짜리 150판 프로필은 최종 상태 한 반만 집계한다', () => {
+    const problem = problemAt(1)
+    const runs = 12
+    const expected = emptyProfile()
+    let passed = 0
+
+    for (let i = 0; i < runs; i++) {
+      const replay = { ...problem, seed: problem.seed + i }
+      const run = simulate(replay, [])
+      const profile = profileOf(replay, [run.final])
+      for (const key of Object.keys(expected) as (keyof OutcomeProfile)[]) {
+        expected[key] += profile[key] / runs
+      }
+      if (run.passed) passed += 1
+    }
+
+    const row = compareDecisions(problem, [], runs).rows[1]
+    expect(row.passed).toBe(passed)
+    expectProfileClose(row.profile, expected)
+  })
+
+  it('두 반짜리 150판 프로필은 전반과 후반 기록을 모두 더한다', () => {
+    const problem = problemAt(1)
+    const runs = 12
+    const expected = emptyProfile()
+    let passed = 0
+
+    for (let i = 0; i < runs; i++) {
+      const replay = { ...problem, seed: problem.seed + i }
+      const run = simulateHalves(replay, [], [])
+      const profile = profileOf(replay, [run.halftime, run.final])
+      for (const key of Object.keys(expected) as (keyof OutcomeProfile)[]) {
+        expected[key] += profile[key] / runs
+      }
+      if (run.passed) passed += 1
+    }
+
+    const row = compareDecisions(problem, [], runs, 70, []).rows[1]
+    expect(row.passed).toBe(passed)
+    expectProfileClose(row.profile, expected)
   })
 
   it('성공률을 재던 같은 경기에서 평균 득실과 위험 채널도 함께 계산한다', () => {

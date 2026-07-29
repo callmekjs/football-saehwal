@@ -1155,6 +1155,13 @@ button {
 .stat-panel,
 .log-panel { min-width: 0; }
 
+.stat-panel > h2 small {
+  margin-left: 5px;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .stat-rows { padding: 8px 12px 10px; display: grid; gap: 7px; align-content: start; }
 .stat-row { display: grid; gap: 3px; }
 

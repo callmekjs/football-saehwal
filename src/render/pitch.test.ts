@@ -21,13 +21,13 @@ import type { Problem } from '../sim/types'
  */
 type Op =
   | { op: 'fill'; style: string; pts: Array<[number, number]> }
-  | { op: 'stroke'; style: string; pts: Array<[number, number]> }
+  | { op: 'stroke'; style: string; width: number; pts: Array<[number, number]> }
   | { op: 'fillRect'; style: string; x: number; y: number; w: number; h: number }
 
 function recorder() {
   const ops: Op[] = []
   let pts: Array<[number, number]> = []
-  const st = { fillStyle: '#000', strokeStyle: '#000', globalAlpha: 1 }
+  const st = { fillStyle: '#000', strokeStyle: '#000', globalAlpha: 1, lineWidth: 1 }
   const stack: Array<typeof st> = []
   const ctx = {
     get fillStyle() {
@@ -42,8 +42,13 @@ function recorder() {
     set strokeStyle(v: string) {
       st.strokeStyle = v
     },
+    get lineWidth() {
+      return st.lineWidth
+    },
+    set lineWidth(v: number) {
+      st.lineWidth = v
+    },
     globalAlpha: 1,
-    lineWidth: 1,
     lineCap: 'butt',
     font: '',
     textAlign: '',
@@ -75,7 +80,7 @@ function recorder() {
       ops.push({ op: 'fill', style: st.fillStyle, pts: [...pts] })
     },
     stroke: () => {
-      ops.push({ op: 'stroke', style: st.strokeStyle, pts: [...pts] })
+      ops.push({ op: 'stroke', style: st.strokeStyle, width: st.lineWidth, pts: [...pts] })
     },
     fillRect: (x: number, y: number, w: number, h: number) => {
       ops.push({ op: 'fillRect', style: st.fillStyle, x, y, w, h })
@@ -216,6 +221,16 @@ describe('오프사이드 라인', () => {
         Math.abs(o.pts[0][1] - o.pts[1][1]) > H * 0.8,
     )
 
+  /** 뒤에서 두 번째 수비수를 원하는 x에 세워 오프사이드 라인을 만든다 */
+  const placeOffsideLine = (vm: VisualMatch, x: number) => {
+    const side = vm.defendingSide()
+    const own = side === 'HOME' ? 0 : 105
+    const defenders = vm.players.filter((player) => player.side === side)
+    for (const player of defenders) player.x = side === 'HOME' ? 104 : 1
+    defenders[0].x = own === 0 ? 1 : 104
+    defenders[1].x = x
+  }
+
   it('수비하는 팀 색으로 세로 실선을 긋는다', () => {
     const ops = render(() => {})
     const side = (() => {
@@ -271,6 +286,31 @@ describe('오프사이드 라인', () => {
     expect(v.some((o) => o.style === teamColour)).toBe(true)
     expect(v.some((o) => o.style === COLORS.lineMarker)).toBe(true)
     expect(teamColour).not.toBe(COLORS.lineMarker)
+  })
+
+  it('하프라인 가까이에서는 좌표를 옮기지 않고 대비 테두리를 더 굵게 긋는다', () => {
+    const near = render((vm) => placeOffsideLine(vm, 52.5))
+    const clear = render((vm) => placeOffsideLine(vm, 70))
+    const nearLines = verticals(near)
+    const clearLines = verticals(clear)
+    const haloNear = nearLines.find(
+      (line) => line.style === COLORS.offsideHalo && Math.abs(line.pts[0][0] - W / 2) < 0.5,
+    )
+    const haloClear = clearLines.find((line) => line.style === COLORS.offsideHalo)
+
+    expect(haloNear).toBeDefined()
+    expect(haloClear).toBeDefined()
+    expect(haloNear!.width).toBeGreaterThan(haloClear!.width)
+
+    // 색 테두리만 바뀌고 실제 판정선은 정확히 하프라인 좌표에 남는다
+    const s = createState(P)
+    const vm = new VisualMatch(s, P.seed)
+    placeOffsideLine(vm, 52.5)
+    const teamColour = vm.defendingSide() === 'HOME' ? COLORS.home : COLORS.away
+    const teamLine = nearLines.find(
+      (line) => line.style === teamColour && Math.abs(line.pts[0][0] - W / 2) < 0.5,
+    )
+    expect(teamLine).toBeDefined()
   })
 
   it('골 세리머니 중에는 그리지 않는다', () => {

@@ -711,6 +711,17 @@ export interface OffsideCall {
   life: number
 }
 
+/**
+ * 화면과 함께 내보낼 소리 사건.
+ *
+ * `restart`·`celebration`의 현재 값만 보면, 느린 프레임 하나 사이에
+ * 생겼다가 끝난 짧은 사건을 놓친다. 사건을 순번으로 남기면 화면이
+ * 늦게 따라와도 각 휘슬과 함성을 정확히 한 번씩 소비할 수 있다.
+ */
+export type VisualAudioCue =
+  | { sequence: number; kind: 'OUT' }
+  | { sequence: number; kind: 'GOAL'; side: 'HOME' | 'AWAY' }
+
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y)
@@ -742,6 +753,9 @@ export class VisualMatch {
   players: VPlayer[] = []
   ball: VBall
   flashes: Flash[] = []
+  /** 이미 일어난 소리 사건. 순번이 있으므로 느린 화면에서도 건너뛰지 않는다 */
+  audioCues: VisualAudioCue[] = []
+  private nextAudioSequence = 1
   /** 골이 들어간 뒤의 세리머니. 이 동안은 경기가 멈춰 있다 */
   celebration: Celebration | null = null
   /** 공이 밖으로 나가 재개를 기다리는 중 */
@@ -1177,7 +1191,22 @@ export class VisualMatch {
      * 훨씬 나쁘다. 아래 `queueShot` 이 남은 시간을 보고 유예를 잘라서
      * 여기까지 오는 일 자체가 거의 없게 해둔다
      */
-    if (state.tick >= TOTAL_TICKS) this.displayScore = [...state.score] as [number, number]
+    if (state.tick >= TOTAL_TICKS) {
+      /**
+       * 종료 직전까지 장면을 못 만든 골도 소리 사건에서는 잃지 않는다.
+       *
+       * 종료 휘슬에서는 점수 정확성이 우선이라 화면 점수를 시뮬 점수로
+       * 맞춘다. 전에는 숫자만 바뀌고 함성은 `requestAnimationFrame`
+       * 전이에 매달려 사라질 수 있었다. 아직 보여주지 못한 골 수만큼
+       * 같은 사건 장부에 남긴다.
+       */
+      while (this.displayScore[0] < state.score[0]) this.revealGoal('HOME')
+      while (this.displayScore[1] < state.score[1]) this.revealGoal('AWAY')
+      this.displayScore = [...state.score] as [number, number]
+      // 이미 점수와 함성을 맞췄으므로 밀린 득점 슛이 다시 실행되면 안 된다
+      this.pending = this.pending.filter((shot) => !shot.willScore)
+      this.lastScore = [...state.score] as [number, number]
+    }
 
     // 대형을 다시 짜기 전에 읽어야 한다. 다시 짜고 나면 빠진 선수가
     // 목록에서 사라져 어디에 쓰러졌는지 알 방법이 없다
@@ -1286,7 +1315,13 @@ export class VisualMatch {
     // 골 — 시뮬이 점수를 올렸으면 실제로 골망에 꽂히는 슛을 만든다.
     // 여기서 바로 킥오프로 넘기면 골이 사건으로 보이지 않는다
     if (scored > 0 || conceded > 0) {
-      this.queueShot(scored > 0 ? 'HOME' : 'AWAY', true)
+      /**
+       * 숨긴 탭에서 시뮬이 여러 틱을 한 번에 따라오면 한 번의 `sync`에
+       * 골이 둘 이상 들어올 수 있다. 합계가 늘었다는 사실을 한 장면으로
+       * 뭉개면 뒤 골의 함성과 점수 장면이 사라진다.
+       */
+      for (let i = 0; i < scored; i++) this.queueShot('HOME', true)
+      for (let i = 0; i < conceded; i++) this.queueShot('AWAY', true)
       // 여기서 돌아가지 않는다. 시뮬이 골이라고 했다는 것은 시뮬에서 그
       // 팀이 공을 가졌다는 뜻이다. 화면의 공이 아직 반대편에 있으면 아래
       // 점유 전환으로 넘겨줘야 그 팀이 골대로 밀고 갈 수 있다
@@ -1769,8 +1804,14 @@ export class VisualMatch {
   private beginCelebration(side: 'HOME' | 'AWAY', x: number, y: number) {
     // 75초짜리 경기다. 세리머니가 길면 플레이 시간을 잡아먹는다
     this.celebration = { side, life: 1.5, x, y }
+    this.revealGoal(side)
+  }
+
+  /** 화면 점수와 골 함성 사건을 반드시 같은 문에서 올린다 */
+  private revealGoal(side: 'HOME' | 'AWAY') {
     if (side === 'HOME') this.displayScore[0] += 1
     else this.displayScore[1] += 1
+    this.audioCues.push({ sequence: this.nextAudioSequence++, kind: 'GOAL', side })
   }
 
   private nearestOf(side: 'HOME' | 'AWAY', to: { x: number; y: number }): VPlayer | undefined {
@@ -1927,6 +1968,9 @@ export class VisualMatch {
      */
     const wait = kind !== 'FREE_KICK' ? 0.35 : wall.length > 0 ? 0.95 : 0.5
     this.restart = { kind, side, x: px, y: py, wait, takerId: taker?.id ?? null, age: 0, wall }
+    if (kind !== 'FREE_KICK') {
+      this.audioCues.push({ sequence: this.nextAudioSequence++, kind: 'OUT' })
+    }
     // 재개에서 직접 받는 공은 오프사이드가 아니다. 규칙이다
     this.offsideMute = OFFSIDE_MUTE
     this.foulMute = FOUL_MUTE

@@ -108,14 +108,22 @@ function measure(
     if (result.passed) passed += 1
     totals.goalsFor += result.final.score[0] - problem.score[0]
     totals.goalsAgainst += result.final.score[1] - problem.score[1]
-    totals.homeAttempt += result.final.stats.homeAttempt
-    totals.awayAttempt += result.final.stats.awayAttempt
-    totals.homeShot += result.final.stats.homeShot
-    totals.awayShot += result.final.stats.awayShot
-    totals.setPiece += result.final.stats.setPiece
-    totals.behind += result.final.stats.behind
-    totals.sendOff += result.final.log.filter((event) => event.kind === 'SEND_OFF').length
-    totals.injury += result.final.log.filter((event) => event.kind === 'INJURY').length
+    // `simulateHalves` 의 최종 상태에는 후반 통계와 로그만 남는다.
+    // 점수는 전반부터 이어지지만, 나머지 프로필은 전반 종료 상태를 따로
+    // 더해야 이번 경기와 150판 평균이 같은 두 반을 비교한다.
+    const recordedHalves = result.halftime
+      ? [result.halftime, result.final]
+      : [result.final]
+    for (const half of recordedHalves) {
+      totals.homeAttempt += half.stats.homeAttempt
+      totals.awayAttempt += half.stats.awayAttempt
+      totals.homeShot += half.stats.homeShot
+      totals.awayShot += half.stats.awayShot
+      totals.setPiece += half.stats.setPiece
+      totals.behind += half.stats.behind
+      totals.sendOff += half.log.filter((event) => event.kind === 'SEND_OFF').length
+      totals.injury += half.log.filter((event) => event.kind === 'INJURY').length
+    }
   }
 
   if (!firstFinal) throw new Error('분석할 경기가 없다')

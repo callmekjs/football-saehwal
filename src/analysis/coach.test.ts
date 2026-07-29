@@ -59,7 +59,7 @@ describe('Coach 경기 분석', () => {
     )
   })
 
-  it('골 경로와 당시 전술을 근거로 높은 확신도의 원인을 낸다', () => {
+  it('반복된 골 경로와 당시 전술을 근거로 높은 확신도의 원인을 낸다', () => {
     const problem = problemAt()
     const final = finalWith({
       score: [1, 1],
@@ -77,18 +77,67 @@ describe('Coach 경기 분석', () => {
     expect(report.goalsAgainst[0].title).toContain('세트피스')
     expect(report.goalsAgainst[0].confidence).toBe('높음')
     expect(report.goalsAgainst[0].time).toMatch(/^\d+:\d{2}$/)
-    expect(report.goalsAgainst[0].evidence.some((item) => item.includes('9회'))).toBe(true)
+    expect(report.goalsAgainst[0].evidence).toContain('경기 전체 세트피스 위험 9')
+    expect(report.turningPoint.evidence).toContain('경기 전체 세트피스 위험 9')
   })
 
-  it('경로가 없는 실점은 추측하지 않고 낮은 확신도로 남긴다', () => {
+  it('근거가 늘고 반복될수록 확신도가 낮음에서 보통, 높음으로 올라간다', () => {
     const problem = problemAt()
-    const final = finalWith({
+    const unknown = finalWith({
       score: [1, 1],
       log: [{ tick: 500, kind: 'CONCEDE' }],
     })
-    const report = buildCoachReport(problem, final, [], metrics, 77)
-    expect(report.goalsAgainst[0].confidence).toBe('낮음')
-    expect(report.goalsAgainst[0].explanation).toContain('확정할 수 없습니다')
+    const observedOnce = finalWith({
+      score: [1, 1],
+      stats: {
+        homeAttempt: 0,
+        awayAttempt: 1,
+        homeShot: 0,
+        awayShot: 1,
+        setPiece: 0,
+        behind: 0,
+      },
+      log: [{ tick: 500, kind: 'PENALTY', detail: 'PENALTY_SCORED' }],
+    })
+    const repeated = finalWith({
+      score: [1, 1],
+      stats: {
+        homeAttempt: 0,
+        awayAttempt: 4,
+        homeShot: 0,
+        awayShot: 3,
+        setPiece: 5,
+        behind: 0,
+      },
+      log: [{ tick: 500, kind: 'CONCEDE', detail: 'SET_PIECE' }],
+    })
+    const confidenceRank = { 낮음: 0, 보통: 1, 높음: 2 }
+    const low = buildCoachReport(problem, unknown, [], metrics, 77).goalsAgainst[0]
+    const medium = buildCoachReport(problem, observedOnce, [], metrics, 77).goalsAgainst[0]
+    const high = buildCoachReport(problem, repeated, [], metrics, 77).goalsAgainst[0]
+
+    expect(confidenceRank[low.confidence]).toBeLessThan(confidenceRank[medium.confidence])
+    expect(confidenceRank[medium.confidence]).toBeLessThan(confidenceRank[high.confidence])
+    expect(low.explanation).toContain('확정할 수 없습니다')
+  })
+
+  it('내부 세트피스 위험값에는 실제 횟수처럼 회를 붙이지 않는다', () => {
+    const final = finalWith({
+      score: [1, 1],
+      stats: {
+        homeAttempt: 12,
+        awayAttempt: 6,
+        homeShot: 3,
+        awayShot: 2,
+        setPiece: 9,
+        behind: 1,
+      },
+      log: [{ tick: 500, kind: 'CONCEDE', detail: 'SET_PIECE' }],
+    })
+    const report = buildCoachReport(problemAt(), final, [], metrics, 77)
+
+    expect(JSON.stringify(report)).not.toMatch(/세트피스 (?:허용 |위험 )?\d+(?:\.\d+)?회/)
+    expect(report.summary[2]).toContain('세트피스 위험 9')
   })
 
   it('같은 틱의 복수 실점과 성공한 페널티를 각각 한 골로 분석한다', () => {
@@ -276,7 +325,7 @@ describe('Coach 두 반 분석', () => {
     // 공격 10+8 · 슈팅 3+2 · 득점 1골(전반 1 · 후반 0)
     expect(report.summary[0]).toBe('우리 공격 18회 → 슈팅 5회 → 득점 1골 (전반 1 · 후반 0)')
     expect(report.summary[1]).toBe('상대 공격 11회 → 슈팅 5회 → 실점 2골 (전반 1 · 후반 1)')
-    expect(report.summary[2]).toBe('위험 허용: 세트피스 9회 · 배후 침투 3회')
+    expect(report.summary[2]).toBe('세트피스 위험 9 · 배후 침투 3회')
   })
 
   it('전환점은 두 반을 통틀어 가장 늦은 장면이다', () => {

@@ -1,25 +1,25 @@
 import { useLayoutEffect, useRef } from 'react'
 import { drawPitch } from '../render/pitch'
-import { VisualMatch } from '../render/visual'
 import { TOTAL_TICKS } from '../sim/constants'
 import { endLabel, type Half } from '../matchClock'
-import { whistle } from './sound'
+import { cheer, whistle } from './sound'
+import { VisualClock } from './visualClock'
 import type { MatchState } from '../sim/types'
+import type { VisualAudioCue } from '../render/visual'
 
-/** 시뮬 한 틱이 연출에서 차지하는 시간. 엔진은 100ms 마다 한 번 돈다 */
-const TICK_SECONDS = 0.1
-/** 연출을 한 번에 진행시키는 폭. 물리와 판단이 이 간격으로 돈다 */
-const STEP = 1 / 60
 /**
- * 한 프레임에 따라잡을 수 있는 연출 시간.
+ * 화면 그리기와 별개로 연출 시계를 깨우는 간격.
  *
- * 초당 60프레임이면 실시간의 스물네 배까지 따라잡을 수 있고, 초당
- * 다섯 프레임으로 떨어져도 두 배는 된다. 무제한으로 두면 탭을 오래
- * 비웠다 돌아왔을 때 한 프레임에서 브라우저가 몇 초씩 멈춘다.
+ * `requestAnimationFrame`은 숨긴 탭에서 완전히 멈출 수 있다. 일반
+ * 타이머도 느려질 수는 있지만 절대 시각을 향해 다시 따라오며, 그 사이의
+ * 사건을 장부로 남기므로 아웃 휘슬과 골 함성을 건너뛰지 않는다.
  */
-const CATCHUP_PER_FRAME = 0.4
-/** 이보다 더 뒤처지면 따라잡기를 포기하고 시각을 맞춘다 */
-const MAX_LAG = 1.5
+const CLOCK_PULSE_MS = 16
+/** 오래 숨겼다가 돌아와도 한 번에 브라우저를 오래 붙잡지 않는 처리 폭 */
+const CATCHUP_PER_PULSE = 5
+/** 밀린 소리가 한꺼번에 겹치지 않게 두는 최소 간격 */
+const OUT_CUE_GAP_MS = 380
+const GOAL_CUE_GAP_MS = 900
 
 /**
  * 경기 화면의 피치. 시뮬 상태를 구독해 관전 연출을 그린다.
@@ -70,78 +70,57 @@ export function Pitch({
   useLayoutEffect(() => {
     const canvas = ref.current
     if (!canvas) return
-    let vm = new VisualMatch(stateRef.current, seed)
+    const clock = new VisualClock(stateRef.current, seed)
     let raf = 0
-    /** 연출이 지금까지 소화한 시간(초) */
-    let vmTime = 0
+    let pulseTimer = 0
+    let audioTimer = 0
+    const audioQueue: VisualAudioCue[] = []
     /** 마지막으로 알린 점수. 바뀔 때만 알려야 매 프레임 다시 그리지 않는다 */
     let told = ''
+
     /**
-     * 직전 프레임의 재개 종류. 공이 밖으로 나간 순간에 휘슬을 불려면
-     * **없다가 생긴 순간**을 잡아야 한다.
-     *
-     * 프리킥은 여기서 불지 않는다 — 반칙은 시뮬 기록에서 이미 불었고,
-     * 여기서 또 불면 한 번에 두 번 울린다.
+     * 숨긴 탭에서 밀린 사건이 여러 개면 간격을 두고 순서대로 재생한다.
+     * 모두 같은 `AudioContext.currentTime`에 던지면 휘슬이 겹쳐 한 번처럼
+     * 들리고, 함성 위에 다음 휘슬이 덮인다.
      */
-    let lastRestart: string | null = null
+    const playNextCue = () => {
+      audioTimer = 0
+      const cue = audioQueue.shift()
+      if (!cue) return
+      if (cue.kind === 'OUT') whistle(1, true)
+      else cheer(cue.side === 'HOME')
+      const gap = cue.kind === 'OUT' ? OUT_CUE_GAP_MS : GOAL_CUE_GAP_MS
+      audioTimer = window.setTimeout(playNextCue, gap)
+    }
 
-    const render = () => {
+    const queueCues = (cues: VisualAudioCue[]) => {
+      if (cues.length === 0) return
+      audioQueue.push(...cues)
+      if (!audioTimer) playNextCue()
+    }
+
+    /**
+     * 관전 연출을 최신 시뮬 시각으로 보낸다.
+     *
+     * 이 함수는 rAF와 일반 타이머가 함께 부른다. 둘 중 하나가 멈춰도
+     * 다른 쪽이 사건 장부와 점수판을 계속 전달한다.
+     */
+    const pulse = () => {
       const st = stateRef.current
-      /**
-       * 연출은 **시뮬 시계를 따라간다.**
-       *
-       * 전에는 프레임 간 실제 경과 시간으로 진행했고, 한 프레임에 최대
-       * 0.05초로 잘랐다. 프레임이 밀리면 연출이 그만큼 뒤처지고 **영영
-       * 따라잡지 못한다.** 시뮬은 절대 시각으로 750틱을 정확히 도는데
-       * 연출만 느려지므로, 실측으로 시뮬이 90분을 지나는 동안 화면은
-       * 2초밖에 진행하지 못했다. 교체를 눌러도 화면에서 선수가 안 바뀌고,
-       * 골이 나도 장면이 안 나오는 것이 전부 이 한 가지 원인이었다.
-       *
-       * 한 틱은 100ms 다. 목표 시각은 언제나 `tick × 0.1초`이고, 뒤처진
-       * 만큼 한 프레임 안에서 여러 번 나눠 진행해 따라잡는다.
-       */
-      const target = st.tick * TICK_SECONDS
-
-      // 경기가 처음부터 다시 시작됐다. 지난 경기의 연출을 이어 그리면 안 된다
-      if (target + 0.5 < vmTime) {
-        vm = new VisualMatch(st, seed)
-        vmTime = target
-      }
-
-      vm.sync(st)
-      if (liveRef.current) {
-        let budget = CATCHUP_PER_FRAME
-        while (vmTime + 1e-6 < target && budget > 0) {
-          const s = Math.min(STEP, target - vmTime)
-          vm.advance(st, s)
-          vmTime += s
-          budget -= s
-        }
-        // 그래도 못 따라잡을 만큼 밀렸으면 포기하고 시각을 맞춘다.
-        // 뒤처진 채로 두면 교체와 골 장면이 몇 십 초씩 늦게 나온다
-        if (target - vmTime > MAX_LAG) vmTime = target - MAX_LAG
-      }
-
-      /**
-       * 공이 밖으로 나갔다 — 아웃 휘슬.
-       *
-       * 사용자가 요청했다. 실제 축구에서 스로인마다 휘슬이 울리지는
-       * 않지만 사용자가 넣으라고 정했다. 대신 **짧고 작게** 분다 —
-       * 아웃은 한 판에 수십 번이라 같은 세기로 울리면 금방 거슬린다.
-       */
-      const nowRestart = vm.restart ? vm.restart.kind : null
-      if (nowRestart !== lastRestart) {
-        if (nowRestart && nowRestart !== 'FREE_KICK') whistle(1, true)
-        lastRestart = nowRestart
-      }
+      const update = clock.update(st, liveRef.current ? CATCHUP_PER_PULSE : 0)
+      queueCues(update.cues)
 
       // 골 장면이 나온 순간(그리고 종료 휘슬에서) 점수판이 따라 오른다
-      const shown = `${vm.displayScore[0]}-${vm.displayScore[1]}`
+      const shown = `${update.score[0]}-${update.score[1]}`
       if (shown !== told) {
         told = shown
-        onScoreRef.current?.([...vm.displayScore] as [number, number])
+        onScoreRef.current?.(update.score)
       }
+    }
 
+    const render = () => {
+      pulse()
+      const vm = clock.vm
       const parent = canvas.parentElement
       if (parent) {
         const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -173,8 +152,13 @@ export function Pitch({
       }
       raf = requestAnimationFrame(render)
     }
+    pulseTimer = window.setInterval(pulse, CLOCK_PULSE_MS)
     raf = requestAnimationFrame(render)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearInterval(pulseTimer)
+      if (audioTimer) clearTimeout(audioTimer)
+    }
   }, [seed])
 
   return <canvas ref={ref} style={{ display: 'block', width: '100%', borderRadius: 8 }} />

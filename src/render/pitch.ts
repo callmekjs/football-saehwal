@@ -44,6 +44,8 @@ export const COLORS = {
   medical: '#d92d20',
   /** 수비라인 안내선. 팀 색과 겹치지 않는 하늘색 */
   lineMarker: '#7cd4ec',
+  /** 오프사이드 실선의 어두운 테두리. 다른 세로선과 붙어도 경계를 남긴다 */
+  offsideHalo: 'rgba(4,16,12,0.88)',
   holder: '#ffffff',
   /**
    * 심판 옷. 두 팀 어느 색과도 겹치지 않아야 한다 — 실제 축구 규정이다.
@@ -542,6 +544,7 @@ function drawOffsideLine(
   X: (v: number) => number,
   Y: (v: number) => number,
   sx: number,
+  defensiveLine: number,
 ) {
   // 골 세리머니 중에는 전원이 킥오프 자리로 돌아가 선이 의미 없이 튄다
   if (vm.celebration) return
@@ -549,10 +552,27 @@ function drawOffsideLine(
   const x = vm.offsideLine(side)
   // 골라인에 딱 붙으면 골대 선과 겹쳐 읽히지 않는다
   if (x < 1.5 || x > PITCH_W - 1.5) return
+  const guideX = 24 + (defensiveLine - 1) * 9
+  const nearAnotherLine = Math.min(Math.abs(x - PITCH_W / 2), Math.abs(x - guideX)) <= 3
 
   ctx.save()
+  /**
+   * 먼저 어두운 테두리를 긋고 그 위에 팀 색 실선을 올린다.
+   *
+   * 오프사이드 계산 좌표를 옮기면 부심과 실제 판정선이 갈린다. 좌표는
+   * 그대로 두고, 하프라인이나 수비라인 안내선 3m 안에서는 테두리만 더
+   * 굵게 해서 정확성과 가독성을 함께 지킨다.
+   */
+  ctx.strokeStyle = COLORS.offsideHalo
+  ctx.globalAlpha = nearAnotherLine ? 0.92 : 0.68
+  ctx.lineWidth = Math.max(nearAnotherLine ? 4.8 : 3.4, sx * (nearAnotherLine ? 0.88 : 0.66))
+  ctx.beginPath()
+  ctx.moveTo(X(x), Y(1))
+  ctx.lineTo(X(x), Y(PITCH_H - 1))
+  ctx.stroke()
+
   ctx.strokeStyle = side === 'HOME' ? COLORS.home : COLORS.away
-  ctx.globalAlpha = 0.62
+  ctx.globalAlpha = nearAnotherLine ? 0.88 : 0.72
   ctx.lineWidth = Math.max(1.6, sx * 0.34)
   ctx.beginPath()
   ctx.moveTo(X(x), Y(1))
@@ -604,7 +624,7 @@ export function drawPitch(
 
   // 오프사이드 라인은 잔디 바로 위, 선수 밑이다. 선이 선수를 가리면
   // 누가 앞서 있는지가 오히려 안 보인다
-  drawOffsideLine(ctx, vm, X, Y, sx)
+  drawOffsideLine(ctx, vm, X, Y, sx, state.tactics.line)
 
   // 심판을 선수보다 먼저 그린다. 겹치면 선수가 위로 지나가야 한다 —
   // 심판이 선수를 가리면 그 순간 화면의 주인공이 바뀐다

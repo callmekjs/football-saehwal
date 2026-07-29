@@ -11,12 +11,18 @@ import { buildHalftime } from '../analysis/halftime'
 import { useVoice, type VoiceHandle } from './useVoice'
 import { applyCommand, parseCommand } from './voice'
 import { scoreboardScore } from './scoreboard'
-import { cheer, isMuted, setMuted, whistle } from './sound'
+import { isMuted, setMuted, whistle } from './sound'
+import {
+  nextOpponentView,
+  opponentViewOf,
+  withOpponentView,
+} from './visibleOpponent'
 import {
   addedTimeOf,
   breakLabel,
   clockOf,
   endLabel,
+  halfLabel,
   inAddedTime,
   kickoffMinute,
   minuteAt,
@@ -280,7 +286,7 @@ export function Levers({
  * 전부 엔진이 실제로 센 횟수다. 레버를 당기면 몇 초 안에 이 숫자가
  * 움직이고, 그것이 "내가 뭘 바꿨는지"를 알려주는 주 채널이다.
  */
-function StatBars({ state }: { state: MatchState }) {
+export function StatBars({ state, half }: { state: MatchState; half: Half }) {
   const s = state.stats
   const rows: Array<[string, number, number, boolean]> = [
     ['공격 전개', s.homeAttempt, s.awayAttempt, false],
@@ -291,7 +297,9 @@ function StatBars({ state }: { state: MatchState }) {
 
   return (
     <section className="panel stat-panel">
-      <h2>경기 기록</h2>
+      <h2>
+        {halfLabel(half)} 경기 기록 <small>이 반만</small>
+      </h2>
       <div className="stat-rows">
         {rows.map(([label, home, away, oneSided]) => {
           const total = home + away
@@ -566,6 +574,26 @@ export function MatchScreen({
 
   const [scene, setScene] = useState<[number, number]>(problem.score)
   useEffect(() => setScene(problem.score), [problem])
+  const shown = scoreboardScore(phase === 'DONE', state.score, scene)
+
+  /**
+   * 상대 성향과 대형은 보이는 점수보다 먼저 답을 말하면 안 된다.
+   *
+   * 엔진은 골이 난 틱에 즉시 대형을 바꾸지만, 점수판은 골 장면을
+   * 기다린다. 장면이 따라오기 전에는 직전 상대 정보를 유지한다.
+   */
+  const [opponentView, setOpponentView] = useState(() => opponentViewOf(state))
+  useEffect(() => {
+    setOpponentView((previous) => nextOpponentView(previous, state, shown))
+  }, [
+    state.opponent,
+    state.away.formation,
+    state.score[0],
+    state.score[1],
+    shown[0],
+    shown[1],
+  ])
+  const visibleOpponentState = withOpponentView(state, opponentView)
 
   /**
    * 소리 — 전부 **덤**이다.
@@ -574,22 +602,6 @@ export function MatchScreen({
    * 표시된다(주심이 달려가고, 카드를 들고, 깃발이 오르고, 문구가 뜬다).
    */
   const [mutedNow, setMutedNow] = useState(isMuted)
-
-  /**
-   * 골과 실점의 함성.
-   *
-   * 점수판 숫자가 바뀌는 순간에 건다. 시뮬이 골을 정한 순간이 아니라
-   * **화면에 골 장면이 나온 순간**이라 소리와 그림이 어긋나지 않는다 —
-   * 그 둘을 맞추는 데 이미 한참 걸렸다.
-   */
-  const scenePrev = useRef<[number, number]>(scene)
-  useEffect(() => {
-    const [us, them] = scene
-    const [pu, pt] = scenePrev.current
-    if (us > pu) cheer(true)
-    else if (them > pt) cheer(false)
-    scenePrev.current = scene
-  }, [scene])
 
   /**
    * 주심의 휘슬 — 반칙·페널티킥·부상.
@@ -622,7 +634,6 @@ export function MatchScreen({
       lastPhase.current = phase
     }
   }, [phase])
-  const shown = scoreboardScore(phase === 'DONE', state.score, scene)
   // 휘슬이 울리면 마이크를 놓는다. 급수 타임 밖에서는 듣지 않는다
   const releaseVoice = voice.release
   useEffect(() => {
@@ -780,13 +791,13 @@ export function MatchScreen({
 
         <div className="match-col center">
           <div className="pane center-info" data-pane="INFO">
-            <StatBars state={state} />
+            <StatBars state={state} half={half} />
             <Log state={state} half={half} />
           </div>
 
           <div className="panel pitch-card">
             <Pitch
-              state={state}
+              state={visibleOpponentState}
               seed={problem.seed}
               half={half}
               live={phase === 'RUNNING'}
@@ -801,7 +812,7 @@ export function MatchScreen({
 
         <div className="match-col right">
           <div className="pane" data-pane="AWAY">
-            <AwayPanel state={state} />
+            <AwayPanel state={visibleOpponentState} />
           </div>
 
           {/*
