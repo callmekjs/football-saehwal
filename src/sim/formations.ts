@@ -283,17 +283,132 @@ export function shapeOf(id: FormationId): Record<Position, number> {
 }
 
 /**
- * 열 명이 됐을 때의 배치.
+ * 실제 피치 위 인원에 맞춘 포메이션 자리.
  *
- * 공격수를 한 명 빼고 남은 선수가 그 폭을 나눠 메운다. 실제 감독도
- * 대개 앞에서 한 명을 뺀다.
+ * 전에는 열 명이면 언제나 공격수 자리를 하나 지웠다. 수비수가 퇴장한
+ * 4-4-2에서도 그 규칙을 쓰면 남아 있는 공격수 한 명이 수비 자리에
+ * 들어가고, 화면은 4-4-1인데 엔진은 3-4-2로 세는 모순이 생긴다.
+ *
+ * 지금은 포메이션의 자리 수와 실제 등록 포지션 수를 비교해 **사람이
+ * 모자란 줄의 자리부터** 뺀다. 선택한 포메이션과 명단 구성이 달라 완전히
+ * 같게 만들 수 없을 때도 어긋남이 가장 큰 줄부터 줄이므로, 공격수를
+ * 무조건 희생하는 것보다 역할 변경이 적다.
  */
-export function slotsForTenMen(id: FormationId): Slot[] {
-  const slots = getFormation(id).slots
-  const forwards = slots.filter((s) => s.pos === 'FW')
-  const drop = forwards[forwards.length - 1]
-  const kept = slots.filter((s) => s !== drop)
+export function slotsForPlayers(id: FormationId, playerPositions: readonly Position[]): Slot[] {
+  const kept = [...getFormation(id).slots]
+  const playerCounts: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
+  for (const pos of playerPositions) playerCounts[pos] += 1
 
-  // 남은 선수를 가운데 쪽으로 조금씩 당긴다
-  return kept.map((s) => (s.pos === 'GK' ? s : { ...s, y: s.y + (34 - s.y) * 0.18 }))
+  while (kept.length > playerPositions.length) {
+    const slotCounts: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
+    for (const slot of kept) slotCounts[slot.pos] += 1
+
+    // 같은 차이면 앞선부터 줄이는 축구의 일반적인 열 명 대형을 따른다.
+    // 실제 결원이 있는 줄은 차이가 더 커서 이 기본값보다 먼저 선택된다.
+    const priority: Position[] = ['FW', 'MF', 'DF', 'GK']
+    let dropPos = priority[0]
+    for (const pos of priority.slice(1)) {
+      if (slotCounts[pos] - playerCounts[pos] > slotCounts[dropPos] - playerCounts[dropPos]) {
+        dropPos = pos
+      }
+    }
+
+    let index = -1
+    for (let i = kept.length - 1; i >= 0; i -= 1) {
+      if (kept[i].pos === dropPos) {
+        index = i
+        break
+      }
+    }
+    if (index < 0) break
+    kept.splice(index, 1)
+  }
+
+  // 줄마다 남은 선수들이 한쪽에 몰리지 않게 그 줄의 중심을 다시 맞춘다.
+  const centered = kept.map((slot) => ({ ...slot }))
+  for (const pos of ['DF', 'MF', 'FW'] as const) {
+    const line = centered.filter((slot) => slot.pos === pos)
+    if (line.length === 0) continue
+    const mean = line.reduce((sum, slot) => sum + slot.y, 0) / line.length
+    for (const slot of line) slot.y += 34 - mean
+  }
+  return centered
+}
+
+/** 기존 호출을 위한 열 명 전용 이름. 실제 남은 포지션을 넘겨야 결원 줄을 안다. */
+export function slotsForTenMen(
+  id: FormationId,
+  playerPositions: readonly Position[] = [],
+): Slot[] {
+  if (playerPositions.length > 0) return slotsForPlayers(id, playerPositions)
+  const fallback = getFormation(id).slots.map((slot) => slot.pos)
+  const lastForward = fallback.lastIndexOf('FW')
+  if (lastForward >= 0) fallback.splice(lastForward, 1)
+  return slotsForPlayers(id, fallback)
+}
+
+export interface SlottedPlayer<T> {
+  player: T
+  slot: Slot
+  slotIndex: number
+}
+
+/**
+ * 선수를 자리에 나누는 단일 규칙.
+ *
+ * 배치판과 중앙 경기장이 이 함수를 함께 쓴다. 같은 자리 모양 안에서
+ * 교체할 때만 기존 자리를 보존하고, 포메이션이 바뀌어 새 자리 모양이
+ * 오면 호출자가 빈 `before`를 넘겨 등록 역할부터 다시 맞춘다.
+ */
+export function assignFormationSlots<T extends { id: string }>(
+  players: readonly T[],
+  slots: readonly Slot[],
+  positionOf: (player: T) => Position,
+  before: ReadonlyMap<string, number> = new Map(),
+): { placed: Array<SlottedPlayer<T>>; seats: Map<string, number> } {
+  const taken: Array<T | null> = new Array(slots.length).fill(null)
+  const rest: T[] = []
+
+  for (const player of players) {
+    const index = before.get(player.id)
+    if (
+      index !== undefined &&
+      index >= 0 &&
+      index < slots.length &&
+      taken[index] === null
+    ) {
+      taken[index] = player
+    } else {
+      rest.push(player)
+    }
+  }
+
+  const unmatched: T[] = []
+  for (const player of rest) {
+    const pos = positionOf(player)
+    const index = taken.findIndex((value, i) => value === null && slots[i].pos === pos)
+    if (index >= 0) taken[index] = player
+    else unmatched.push(player)
+  }
+  // 역할이 맞는 사람을 전부 세운 뒤에도 남은 선수만 빈자리를 맡는다.
+  // 이 순서가 뒤집히면 명단 앞쪽의 남는 수비수가 미드필더 자리를 먼저
+  // 가져가, 뒤에 있는 진짜 미드필더가 공격수 자리까지 밀려난다.
+  for (const player of unmatched) {
+    const index = taken.findIndex((value) => value === null)
+    if (index >= 0) taken[index] = player
+  }
+
+  const placed: Array<SlottedPlayer<T>> = []
+  const seats = new Map<string, number>()
+  taken.forEach((player, slotIndex) => {
+    if (!player) return
+    placed.push({ player, slot: slots[slotIndex], slotIndex })
+    seats.set(player.id, slotIndex)
+  })
+  return { placed, seats }
+}
+
+/** 자리 모양이 같은지 비교하는 값. 같을 때만 교체 전 자리를 보존한다. */
+export function formationSlotKey(slots: readonly Slot[]): string {
+  return slots.map((slot) => `${slot.pos}:${slot.x}:${slot.y}`).join('|')
 }

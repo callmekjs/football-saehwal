@@ -218,11 +218,13 @@ function CaptainBrief({ briefing, voice }: { briefing: Briefing; voice: VoiceHan
   )
 }
 
-function Levers({
+export function Levers({
   tactics,
+  locked,
   onSet,
 }: {
   tactics: MatchState['tactics']
+  locked: boolean
   onSet: (t: 'LINE' | 'PRESS' | 'WIDTH', v: Level) => void
 }) {
   const rows = [
@@ -249,6 +251,7 @@ function Levers({
             key={p.name}
             className="chip tactic-preset"
             aria-pressed={matched?.name === p.name}
+            disabled={locked}
             onClick={() => {
               onSet('LINE', p.v[0])
               onSet('PRESS', p.v[1])
@@ -272,6 +275,7 @@ function Levers({
                     key={text}
                     className="chip"
                     aria-pressed={value === i}
+                    disabled={locked}
                     onClick={() => onSet(key, i as Level)}
                   >
                     {text}
@@ -671,7 +675,7 @@ export function MatchScreen({
           </div>
 
           <div className="pane" data-pane="TACTICS">
-            <Levers tactics={state.tactics} onSet={setLever} />
+            <Levers tactics={state.tactics} locked={phase === 'DONE'} onSet={setLever} />
           </div>
         </div>
 

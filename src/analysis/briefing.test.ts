@@ -151,6 +151,20 @@ describe('주장 브리핑', () => {
     expect(text).toContain(String(minDefenderSpeed(state.players)))
   })
 
+  it('상대가 열 명이면 배치판에서 빠진 11번을 위협 후보에서도 뺀다', () => {
+    const p = byId('p05')
+    const state = stateOf('p05')
+    const text = textOf(state, p, 'top-threat')!
+    expect(state.awayCount).toBe(10)
+    expect(text).not.toContain('11번')
+    expect(text).toContain('7번')
+  })
+
+  it('상대가 열한 명이면 가장 빠른 11번 설명을 유지한다', () => {
+    const p = byId('p02')
+    expect(textOf(stateOf('p02'), p, 'top-threat')).toContain('11번')
+  })
+
   it('뒷선이 바뀌면 대조하는 숫자도 함께 바뀐다', () => {
     const p = byId('p02')
     const before = stateOf('p02')

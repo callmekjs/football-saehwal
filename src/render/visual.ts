@@ -1,5 +1,9 @@
 import { createRng, type Rng } from '../sim/rng'
-import { getFormation, slotsForTenMen } from '../sim/formations'
+import {
+  assignFormationSlots,
+  formationSlotKey,
+  slotsForPlayers,
+} from '../sim/formations'
 import { getPlayer } from '../sim/squad'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, PlayerOrder, Position } from '../sim/types'
@@ -514,6 +518,8 @@ export class VisualMatch {
   /** 화면의 공 주인이 시뮬과 어긋난 채 흐른 시간(초) */
   private ownerDrift = 0
   private lastFormation = ''
+  /** 같은 자리 모양 안에서 교체할 때만 기존 자리 번호를 보존한다 */
+  private lastFormationSlots = ''
   /**
    * 마지막으로 화면에 그린 우리 팀 명단.
    *
@@ -613,7 +619,6 @@ export class VisualMatch {
 
   /** 명단·포메이션이 바뀌면 자리를 다시 만든다 */
   private rebuild(state: MatchState) {
-    const tenMen = state.homeCount < 11
     const onPitch = state.players.filter((s) => s.onPitch && !s.out)
     /**
      * 자리 수는 실제 인원을 넘지 않는다.
@@ -622,8 +627,11 @@ export class VisualMatch {
      * 되면 남는 자리에 **등번호 0번인 유령이 그려졌다.** 화면에서 실제로
      * 봤다 — 우리 팀이 열 명이라고 적혀 있는데 피치에는 0번이 뛰고 있었다.
      */
-    const slots = (tenMen ? slotsForTenMen(state.formation) : getFormation(state.formation).slots)
-      .slice(0, onPitch.length)
+    const slots = slotsForPlayers(
+      state.formation,
+      onPitch.map((s) => getPlayer(s.id).pos),
+    )
+    const currentSlotKey = formationSlotKey(slots)
 
     const keep = new Map(this.players.map((p) => [p.id, p]))
     const next: VPlayer[] = []
@@ -638,24 +646,23 @@ export class VisualMatch {
      * 새로 들어온 선수가 받는다. 빈자리가 여럿이면 포지션이 맞는 자리를
      * 먼저 준다 — 수비수가 최전방 자리를 받으면 안 된다.
      */
-    const taken: Array<(typeof onPitch)[number] | null> = new Array(slots.length).fill(null)
-    const rest: typeof onPitch = []
-    for (const s of onPitch) {
-      const prev = keep.get(`H${getPlayer(s.id).num}`)
-      const k = prev?.slot
-      if (k !== undefined && k >= 0 && k < slots.length && taken[k] === null) taken[k] = s
-      else rest.push(s)
-    }
-    for (const s of rest) {
-      const pos = getPlayer(s.id).pos
-      let k = taken.findIndex((v, i) => v === null && slots[i].pos === pos)
-      if (k < 0) k = taken.findIndex((v) => v === null)
-      if (k >= 0) taken[k] = s
-    }
+    const previousSeats =
+      this.lastFormation === state.formation && this.lastFormationSlots === currentSlotKey
+        ? new Map(
+            onPitch.flatMap((player) => {
+              const previous = keep.get(`H${getPlayer(player.id).num}`)
+              return previous ? [[player.id, previous.slot] as const] : []
+            }),
+          )
+        : new Map<string, number>()
+    const assigned = assignFormationSlots(
+      onPitch,
+      slots,
+      (player) => getPlayer(player.id).pos,
+      previousSeats,
+    )
 
-    taken.forEach((s, i) => {
-      if (!s) return
-      const slot = slots[i]
+    assigned.placed.forEach(({ player: s, slot, slotIndex }) => {
       const num = getPlayer(s.id).num
       const id = `H${num}`
       const prev = keep.get(id)
@@ -675,7 +682,7 @@ export class VisualMatch {
         ty: slot.y,
         stx: prev?.stx ?? entry?.x ?? slot.x,
         sty: prev?.sty ?? entry?.y ?? slot.y,
-        slot: i,
+        slot: slotIndex,
         homeX: slot.x,
         homeY: slot.y,
         top: TOP_SPEED[slot.pos],
@@ -722,6 +729,7 @@ export class VisualMatch {
 
     this.players = next
     this.lastFormation = state.formation
+    this.lastFormationSlots = currentSlotKey
     this.lastLineup = this.lineupOf(state).join(',')
   }
 
@@ -860,9 +868,10 @@ export class VisualMatch {
     }
 
     const onPitch = state.players.filter((s) => s.onPitch && !s.out)
-    const slots = state.homeCount < 11
-      ? slotsForTenMen(state.formation)
-      : getFormation(state.formation).slots
+    const slots = slotsForPlayers(
+      state.formation,
+      onPitch.map((s) => getPlayer(s.id).pos),
+    )
 
     // 체력·경고를 갱신한다. 지친 선수는 실제로 느려진다
     const byNum = new Map(onPitch.map((s) => [`H${getPlayer(s.id).num}`, s]))

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  assignFormationSlots,
   FORMATION_IDS,
+  formationSlotKey,
   getFormation,
-  shapeOf,
-  slotsForTenMen,
+  slotsForPlayers,
   type FormationId,
-  type Slot,
 } from '../sim/formations'
 import { effectivePos, getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkOrder } from '../sim/engine'
@@ -78,44 +78,6 @@ function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | n
   return null
 }
 
-/**
- * 선수를 포메이션 자리에 나눠 놓는다.
- *
- * **관전 화면(`src/render/visual.ts`)과 같은 규칙**이어야 한다. 옆 전술판과
- * 경기장이 서로 다른 자리를 가리키면 둘 중 하나는 거짓말이 된다.
- * 규칙은 하나다 — 뛰던 선수는 쓰던 자리를 그대로 지키고, 빈자리는 새로
- * 들어온 선수가 받되 포지션이 맞는 자리를 먼저 준다.
- */
-function assign(
-  before: Map<string, number>,
-  players: PlayerState[],
-  slots: Slot[],
-): { placed: Array<{ s: PlayerState; slot: Slot }>; next: Map<string, number> } {
-  const taken: Array<PlayerState | null> = new Array(slots.length).fill(null)
-  const rest: PlayerState[] = []
-
-  for (const s of players) {
-    const k = before.get(s.id)
-    if (k !== undefined && k >= 0 && k < slots.length && taken[k] === null) taken[k] = s
-    else rest.push(s)
-  }
-  for (const s of rest) {
-    const pos = getPlayer(s.id).pos
-    let k = taken.findIndex((v, i) => v === null && slots[i].pos === pos)
-    if (k < 0) k = taken.findIndex((v) => v === null)
-    if (k >= 0) taken[k] = s
-  }
-
-  const placed: Array<{ s: PlayerState; slot: Slot }> = []
-  const next = new Map<string, number>()
-  taken.forEach((s, i) => {
-    if (!s) return
-    placed.push({ s, slot: slots[i] })
-    next.set(s.id, i)
-  })
-  return { placed, next }
-}
-
 /** 드래그가 진행 중인 동안만 존재하는 화면 상태 */
 interface DragView {
   id: string
@@ -183,7 +145,17 @@ export function SquadPanel({
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const seats = useRef<{ key: string; map: Map<string, number> }>({ key: '', map: new Map() })
+  const seats = useRef<{
+    key: string
+    formation: FormationId | ''
+    slotKey: string
+    map: Map<string, number>
+  }>({
+    key: '',
+    formation: '',
+    slotKey: '',
+    map: new Map(),
+  })
   /** 자리를 바꿨다고 화면에 알리는 신호. `seats` 는 ref 라 저 혼자로는 안 그려진다 */
   const [, bumpSeats] = useState(0)
 
@@ -249,19 +221,40 @@ export function SquadPanel({
 
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
   const tenMen = state.homeCount < 11
-  const slots = (tenMen ? slotsForTenMen(state.formation) : getFormation(state.formation).slots)
-    .slice(0, onPitch.length)
+  const slots = slotsForPlayers(
+    state.formation,
+    onPitch.map((s) => getPlayer(s.id).pos),
+  )
+  const currentSlotKey = formationSlotKey(slots)
 
-  const key = `${state.formation}|${tenMen}|${onPitch.map((s) => s.id).join(',')}`
+  const key = `${state.formation}|${onPitch.map((s) => s.id).join(',')}`
   if (seats.current.key !== key) {
-    seats.current = { key, map: assign(seats.current.map, onPitch, slots).next }
+    // 교체처럼 자리 모양이 그대로일 때만 뛰던 자리를 보존한다. 포메이션
+    // 또는 결원 줄이 바뀌면 raw 자리 번호는 뜻이 달라지므로 역할부터 다시 맞춘다.
+    const before =
+      seats.current.formation === state.formation && seats.current.slotKey === currentSlotKey
+        ? seats.current.map
+        : new Map()
+    const assigned = assignFormationSlots(onPitch, slots, (s) => getPlayer(s.id).pos, before)
+    seats.current = {
+      key,
+      formation: state.formation,
+      slotKey: currentSlotKey,
+      map: assigned.seats,
+    }
   }
-  const { placed } = assign(seats.current.map, onPitch, slots)
+  const placed = assignFormationSlots(
+    onPitch,
+    slots,
+    (s) => getPlayer(s.id).pos,
+    seats.current.map,
+  ).placed.map(({ player: s, slot }) => ({ s, slot }))
 
   const active = onPitch.filter((s) => s.order !== 'NONE')
   const cur = picked ? onPitch.find((s) => s.id === picked) : null
   const orders = Object.keys(ORDER_LABELS) as Array<Exclude<PlayerOrder, 'NONE'>>
-  const shape = shapeOf(state.formation)
+  const shape: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
+  for (const slot of slots) shape[slot.pos] += 1
 
   /**
    * 앞뒤 줄을 옮긴 카드는 새 줄의 가장 넓은 빈칸에 세운다.
@@ -332,6 +325,8 @@ export function SquadPanel({
     if (target.kind === 'SWAP') {
       seats.current = {
         key: seats.current.key,
+        formation: seats.current.formation,
+        slotKey: seats.current.slotKey,
         map: swapSeats(seats.current.map, id, target.id),
       }
       bumpSeats((v) => v + 1)
@@ -469,7 +464,7 @@ export function SquadPanel({
     <section className="panel squad-panel" aria-label="우리 포메이션과 선수 지시">
       <h2>
         우리 팀
-        {tenMen && <span style={{ color: 'var(--away)' }}> · 10명</span>}
+        {tenMen && <span style={{ color: 'var(--away)' }}> · {state.homeCount}명</span>}
         <b>지시 {active.length}/{MAX_ORDERS}</b>
       </h2>
 
@@ -484,6 +479,7 @@ export function SquadPanel({
             key={id}
             className="chip formation-choice"
             aria-pressed={id === state.formation}
+            disabled={locked}
             title={`${getFormation(id).label} — ${getFormation(id).hint}`}
             onClick={() => onFormation(id)}
           >
@@ -682,14 +678,30 @@ const AWAY_SHAPE: Array<{ pos: Position; x: number; y: number; num: number }> = 
 /** 상대 판도 자기 골문이 아래다. 상대 좌표를 뒤집어 같은 규칙으로 그린다 */
 const awayTop = (x: number) => pct((1 - (105 - x) / 64) * 100)
 
+export function awaySummary(state: MatchState): string {
+  const shown = AWAY_SHAPE.slice(0, state.awayCount)
+  const counts: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
+  for (const player of shown) counts[player.pos] += 1
+  const shape = `수비 ${counts.DF} · 중원 ${counts.MF} · 공격 ${counts.FW}`
+
+  if (state.opponent === 'ALL_OUT') {
+    return `상대는 전부 올라와 강하게 압박합니다. 현재 ${shape} 형태입니다.`
+  }
+  if (state.opponent === 'PARK_BUS') {
+    return `상대는 뒤로 물러나 골문 앞을 채웁니다. 현재 ${shape} 형태입니다.`
+  }
+  return `상대는 균형을 유지하고 있습니다. 현재 ${shape} 형태입니다.`
+}
+
 export function AwayPanel({ state }: { state: MatchState }) {
-  const shown = AWAY_SHAPE.slice(0, state.awayCount === 11 ? 11 : 10)
-  const line = shown.filter((p) => p.pos === 'DF').length
+  const shown = AWAY_SHAPE.slice(0, state.awayCount)
   return (
     <section className="panel away-panel" aria-label="상대 포메이션">
       <h2>
         상대 포메이션
-        {state.awayCount < 11 && <span style={{ color: 'var(--accent)' }}> · 10명</span>}
+        {state.awayCount < 11 && (
+          <span style={{ color: 'var(--accent)' }}> · {state.awayCount}명</span>
+        )}
         <b>읽기 전용</b>
       </h2>
 
@@ -710,8 +722,8 @@ export function AwayPanel({ state }: { state: MatchState }) {
       </div>
 
       <p className="away-note">
-        상대는 뒤로 물러나 {line}명을 뒤에 세우고 골문 앞을 채웠습니다. 개별 능력치는
-        볼 수 없습니다 — 보이는 것은 서 있는 자리뿐입니다.
+        {awaySummary(state)} 개별 능력치는 볼 수 없습니다 — 보이는 것은 서 있는
+        자리뿐입니다.
       </p>
     </section>
   )

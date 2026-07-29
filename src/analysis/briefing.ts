@@ -136,10 +136,17 @@ export function captainOf(onPitch: PlayerState[]): number {
  * 공격 자원이 곧 우리에게 위협이다. 위협의 정의가 시뮬레이션 안에
  * 이미 있으므로 따로 지어낼 필요가 없다.
  */
-function awayThreats(): Player[] {
-  return AWAY_XI.filter((p) => p.pos === 'FW' || p.pos === 'MF').sort(
-    (a, b) => b.speed - a.speed,
-  )
+function awayThreats(awayCount: number): Player[] {
+  /**
+   * 상대 배치판과 관전 화면은 10명일 때 마지막 자리인 11번을 제외한다.
+   * 브리핑도 같은 피치 위 인원만 봐야, 화면에 없는 11번을 가장 위험한
+   * 선수라고 부르는 모순이 생기지 않는다.
+   */
+  const visibleNumbers = new Set([1, 2, 5, 4, 3, 7, 8, 10, 6, 9, 11].slice(0, awayCount))
+  return AWAY_XI.filter(
+    (player) =>
+      visibleNumbers.has(player.num) && (player.pos === 'FW' || player.pos === 'MF'),
+  ).sort((a, b) => b.speed - a.speed)
 }
 
 /**
@@ -269,7 +276,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
   )
 
   // ── 6. 가장 위협적인 상대 선수 vs 우리 뒷선에서 가장 느린 발 ──
-  const threats = awayThreats()
+  const threats = awayThreats(state.awayCount)
   const slow = slowestDefender(onPitch)
   if (slow && threats.length > 0 && threats[0].speed > slow.speed) {
     const top = threats[0]

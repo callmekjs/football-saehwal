@@ -9,6 +9,46 @@ const TICK_MS = 100
 
 export type Phase = 'READY' | 'RUNNING' | 'DONE'
 
+type FormationRecord =
+  | { type: 'FORMATION'; value: FormationId }
+  | { type: 'ORDER'; target: string; order: 'NONE' }
+
+/**
+ * 포메이션을 바꿀 때 위치를 직접 옮기던 지시만 함께 푼다.
+ *
+ * `PUSH_UP`·`DROP_BACK`을 남기면 새 포메이션 자리에 다시 ±22m가 더해져
+ * 방금 고른 형태가 즉시 무너진다. 골문 앞 지키기·물러서기·체력 아끼기는
+ * 위치선 변경이 아니므로 그대로 둔다. 자동 해제도 결정 이력에 `ORDER
+ * NONE`으로 남겨 종료 뒤 재현과 실제 상태가 같게 한다.
+ */
+export function changeFormation(
+  state: MatchState,
+  value: FormationId,
+): { next: MatchState; records: FormationRecord[] } {
+  if (state.formation === value) return { next: state, records: [] }
+  const cleared = state.players.filter(
+    (player) =>
+      player.onPitch &&
+      !player.out &&
+      (player.order === 'PUSH_UP' || player.order === 'DROP_BACK'),
+  )
+  const records: FormationRecord[] = [
+    { type: 'FORMATION', value },
+    ...cleared.map((player) => ({ type: 'ORDER' as const, target: player.id, order: 'NONE' as const })),
+  ]
+  const clearedIds = new Set(cleared.map((player) => player.id))
+  return {
+    next: {
+      ...state,
+      formation: value,
+      players: state.players.map((player) =>
+        clearedIds.has(player.id) ? { ...player, order: 'NONE' } : player,
+      ),
+    },
+    records,
+  }
+}
+
 /**
  * 10Hz 엔진을 화면에 연결한다.
  *
@@ -109,8 +149,11 @@ export function useMatch(problem: Problem) {
     (value: FormationId) => {
       const cur = stateRef.current
       if (cur.formation === value) return
-      record({ type: 'FORMATION', value } as Omit<Decision, 'tick'>)
-      const next = { ...cur, formation: value }
+      const changed = changeFormation(cur, value)
+      for (const decision of changed.records) {
+        record(decision as Omit<Decision, 'tick'>)
+      }
+      const next = changed.next
       stateRef.current = next
       setState(next)
     },
