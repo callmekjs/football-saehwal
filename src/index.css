@@ -982,6 +982,69 @@ button {
 }
 
 .squad-card.away .squad-num { font-size: 14px; }
+
+/*
+ * 상대 팀 체력바.
+ *
+ * 사용자가 정했다 — "상대도 부상 지침 그리고 체력바가 우리랑 비슷하게
+ * 닮아야 해". 우리 선수 카드의 막대와 **같은 클래스**를 쓴다. 모양이
+ * 다르면 같은 뜻으로 안 읽힌다.
+ *
+ * 다만 상대는 개별 선수 체력을 추적하지 않는다. 팀 하나의 값이므로
+ * 카드마다 붙이지 않고 판 위에 한 줄로 세운다 — 없는 값을 지어내지
+ * 않는다.
+ */
+.away-vitals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.away-vitals .squad-stamina {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  flex: 1;
+  height: 6px;
+}
+.away-vitals b { color: var(--text); font-size: 12px; min-width: 22px; text-align: right; }
+
+/*
+ * 경고와 부상은 **색이 아니라 모양**으로 말한다.
+ *
+ * 이 프로젝트에서 이미 한 번 겪었다 — 빨강이 "상대 팀"과 "체력 고갈"
+ * 두 뜻이었고 아무도 못 읽었다. 경고는 노란 네모(카드), 부상은 흰 바탕
+ * 빨간 십자다. 경기장 캔버스의 배지와 같은 모양이라 두 화면이 같은
+ * 말을 한다.
+ */
+.away-card-mark,
+.away-hurt-mark {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 12px;
+  border-radius: 2px;
+}
+.away-card-mark { background: #f5c518; }
+.away-hurt-mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+}
+.away-hurt-mark::before,
+.away-hurt-mark::after {
+  content: '';
+  position: absolute;
+  background: #d7263d;
+}
+.away-hurt-mark::before { left: 5px; top: 2px; width: 2px; height: 8px; }
+.away-hurt-mark::after { left: 2px; top: 5px; width: 8px; height: 2px; }
+.squad-card.away[data-hurt='on'] { border-color: #d7263d; }
 .away-note {
   margin: 0;
   padding: 10px 12px;

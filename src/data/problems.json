@@ -68,6 +68,17 @@
         "width": [
           0
         ]
+      },
+      "away": {
+        "booked": [
+          0,
+          2
+        ],
+        "stamina": [
+          86,
+          100
+        ],
+        "injuryChance": 0.35
       }
     }
   },
@@ -143,6 +154,17 @@
           0,
           2
         ]
+      },
+      "away": {
+        "booked": [
+          0,
+          2
+        ],
+        "stamina": [
+          86,
+          100
+        ],
+        "injuryChance": 0.35
       }
     }
   },
@@ -220,6 +242,17 @@
         "width": [
           0
         ]
+      },
+      "away": {
+        "booked": [
+          0,
+          2
+        ],
+        "stamina": [
+          86,
+          100
+        ],
+        "injuryChance": 0.35
       }
     }
   },
@@ -298,6 +331,17 @@
           0,
           2
         ]
+      },
+      "away": {
+        "booked": [
+          0,
+          2
+        ],
+        "stamina": [
+          86,
+          100
+        ],
+        "injuryChance": 0.35
       }
     }
   },
@@ -372,6 +416,17 @@
         "width": [
           0
         ]
+      },
+      "away": {
+        "booked": [
+          0,
+          2
+        ],
+        "stamina": [
+          86,
+          100
+        ],
+        "injuryChance": 0.35
       }
     }
   }

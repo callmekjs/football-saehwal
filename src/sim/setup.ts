@@ -1,9 +1,12 @@
 import { createRng, type Rng } from './rng'
 import { CAPTAIN_EFFECT } from './constants'
 import { HOME_SQUAD, effectivePos, getPlayer } from './squad'
+import { AWAY_SHAPES, AWAY_SHAPE_BY_MOOD, type AwayFormationId } from './awayShape'
 import type {
+  AwaySetup,
   CaptainEffect,
   Level,
+  Mentality,
   PlayerOrder,
   PlayerState,
   Problem,
@@ -35,6 +38,8 @@ import type {
 const SETUP_OFFSET = 0x85ebca6b
 /** 시작 조건 슬롯이 늘어도 같은 시드의 주장 보고는 바뀌지 않게 분리한다 */
 const CAPTAIN_OFFSET = 0xc2b2ae35
+/** 상대 인카운터도 자기 스트림을 쓴다. 우리 팀 슬롯이 늘어도 안 바뀐다 */
+const AWAY_OFFSET = 0x27d4eb2f
 
 export function setupRngFor(seed: number): Rng {
   return createRng((seed ^ SETUP_OFFSET) >>> 0)
@@ -42,6 +47,10 @@ export function setupRngFor(seed: number): Rng {
 
 export function captainRngFor(seed: number): Rng {
   return createRng((seed ^ CAPTAIN_OFFSET) >>> 0)
+}
+
+export function awayRngFor(seed: number): Rng {
+  return createRng((seed ^ AWAY_OFFSET) >>> 0)
 }
 
 /**
@@ -229,6 +238,51 @@ export function rollSetup(
   const captainEffect = rollCaptainEffect(captainRngFor(problem.seed))
   const players = applyCaptainEffect(rolledPlayers, captainEffect)
   return { tactics, players, captainEffect }
+}
+
+/**
+ * 이번 판에 만날 상대를 뽑는다.
+ *
+ * 사용자가 정했다 — *"매번 play할때 마다 상대 포메이션은 랜덤으로
+ * 바꿔주고"*. 전에는 상대가 성향과 인원수뿐이라 같은 국면을 열 번 해도
+ * 언제나 똑같은 팀을 만났다.
+ *
+ * **전용 스트림을 쓴다.** 경기의 매 틱 18개, 우리 팀 시작 조건, 주장 보고
+ * 어느 것의 소비 순서도 건드리지 않는다. 뽑는 개수는 조건과 무관하게
+ * 고정이다 — 필요 없는 슬롯도 뽑아서 버린다.
+ *
+ * **대형은 성향이 정한 후보 안에서만** 고른다. 버스를 세운 팀이 4-3-3 으로
+ * 서 있으면 화면이 브리핑과 다른 말을 한다.
+ */
+export function rollAway(problem: Problem, mood: Mentality, rng: Rng): AwaySetup {
+  const v = problem.variation?.away
+  const pool = AWAY_SHAPE_BY_MOOD[mood]
+  const formation = pool[Math.min(pool.length - 1, Math.floor(rng.next() * pool.length))] as AwayFormationId
+
+  // 경고 — 뒷선과 중원에서 나온다. 반칙을 범하는 자리가 거기다
+  const nums = AWAY_SHAPES[formation]
+    .filter(([pos]) => pos === 'DF' || pos === 'MF')
+    .map(([, , , num]) => num)
+  const [bLo, bHi] = v?.booked ?? [0, 0]
+  const want = pickInt(rng, bLo, Math.max(bLo, bHi))
+  const booked = new Set<number>()
+  // 상한만큼 늘 뽑고 필요 없는 것은 버린다
+  for (let i = 0; i < Math.max(bLo, bHi); i++) {
+    const at = Math.floor(rng.next() * Math.max(1, nums.length))
+    if (i < want && nums.length > 0) booked.add(nums[at % nums.length])
+  }
+
+  // 부상 — 무릎이 안 좋은 선수 하나. 골키퍼는 뽑지 않는다
+  const field = AWAY_SHAPES[formation].filter(([pos]) => pos !== 'GK').map(([, , , num]) => num)
+  const hurtRoll = rng.next()
+  const hurtAt = Math.floor(rng.next() * Math.max(1, field.length))
+  const injured = hurtRoll < (v?.injuryChance ?? 0) ? field[hurtAt % field.length] : null
+
+  // 체력 — 상대도 여기까지 뛰어왔다
+  const [sLo, sHi] = v?.stamina ?? [100, 100]
+  const stamina = clamp(Math.round(sLo + rng.next() * (sHi - sLo)), 0, 100)
+
+  return { formation, booked: [...booked].sort((a, b) => a - b), injured, stamina }
 }
 
 /** 벤치에 선발보다 이만큼 빠른 수비수가 반드시 있어야 한다 */

@@ -1,4 +1,5 @@
 import type { FormationId } from './formations'
+import type { AwayFormationId } from './awayShape'
 
 /** 전술 레버의 3단계. 0 = 낮음/약/좁게, 1 = 보통/중/보통, 2 = 높음/강/넓게 */
 export type Level = 0 | 1 | 2
@@ -184,6 +185,14 @@ export interface MatchState {
    * 성향 테이블로 다루기 때문이다.
    */
   awayStamina: number
+  /**
+   * 이번 판에 만난 상대.
+   *
+   * 사용자가 정했다 — *"각 play마다 상대 포메이션 그리고 상대 팀 경고나
+   * 체력 그리고 부상 등 랜덤으로 인카운터하게 해줘"*. 전에는 상대가
+   * 성향과 인원수뿐이라 같은 국면을 열 번 해도 언제나 똑같은 팀을 만났다.
+   */
+  away: AwaySetup
   homeCount: number
   awayCount: number
   subsLeft: number
@@ -244,6 +253,29 @@ export interface Problem {
 }
 
 /**
+ * 이번 판에 만난 상대 한 벌.
+ *
+ * 국면 시드에서 파생한 **별도 스트림**으로 경기 시작 전에 한 번만 뽑는다.
+ * `drawTick()` 의 매 틱 18슬롯은 한 톨도 건드리지 않는다.
+ *
+ * **확률에 닿는 것은 `stamina` 하나뿐이다.** 나머지는 화면과 브리핑이
+ * 읽는 상태다 — 대형과 경고와 부상이 확률을 가르게 하려면 다섯 국면
+ * 밸런스를 처음부터 다시 재야 하고, 파라미터 동결을 앞두고 할 일이 아니다.
+ * 그래도 지어낸 값은 하나도 없다 — 전부 시드에서 나온 실제 상태이고,
+ * 같은 시드는 언제나 같은 상대를 만든다.
+ */
+export interface AwaySetup {
+  /** 상대가 서는 대형. 성향에 어울리는 것만 뽑는다 */
+  formation: AwayFormationId
+  /** 경고를 이미 안고 있는 상대 등번호 */
+  booked: number[]
+  /** 무릎이 안 좋은 상대 등번호. 없으면 null */
+  injured: number | null
+  /** 상대의 시작 체력(0~100). 여기서부터 매 틱 닳는다 */
+  stamina: number
+}
+
+/**
  * 시작 조건을 판마다 흔드는 범위.
  *
  * **흔드는 것은 세부이고 전제는 고정이다.** 스코어·목표·인원, 그리고 앞
@@ -270,6 +302,20 @@ export interface Variation {
   orderKinds?: PlayerOrder[]
   /** 레버별로 뽑을 수 있는 값. 적지 않은 레버는 `initialTactics` 그대로 */
   tactics?: { line?: Level[]; press?: Level[]; width?: Level[] }
+  /**
+   * 이번 판에 만나는 상대를 흔드는 범위.
+   *
+   * **코드가 아니라 국면 데이터에 적는다.** 새 국면은 자기 띠만 적으면
+   * 되고 엔진을 고칠 일이 없다.
+   */
+  away?: {
+    /** 상대 경고 보유 인원 */
+    booked?: [number, number]
+    /** 상대 시작 체력 */
+    stamina?: [number, number]
+    /** 무릎이 안 좋은 선수가 있을 확률(0~1) */
+    injuryChance?: number
+  }
 }
 
 /**

@@ -44,6 +44,20 @@ function variationOf(id: string, v: unknown): Variation | undefined {
           width: levelsOf(id, 'variation.width', t.width),
         }
       : undefined,
+    away: awayOf(o.away),
+  }
+}
+
+/** 이번 판에 만날 상대를 흔드는 띠. 안 적으면 상대는 늘 같은 팀이다 */
+function awayOf(v: unknown): Variation['away'] {
+  if (!v || typeof v !== 'object') return undefined
+  const o = v as Record<string, unknown>
+  const booked = o.booked as number[] | undefined
+  const stamina = o.stamina as number[] | undefined
+  return {
+    booked: booked ? [booked[0], booked[1]] : undefined,
+    stamina: stamina ? [stamina[0], stamina[1]] : undefined,
+    injuryChance: o.injuryChance as number | undefined,
   }
 }
 

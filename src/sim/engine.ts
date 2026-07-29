@@ -20,7 +20,7 @@ import {
   minDefenderSpeed,
   onPitchCount,
 } from './squad'
-import { rollSetup } from './setup'
+import { rollAway, awayRngFor, rollSetup } from './setup'
 import { EVENTS, FREE_POSITION, TOTAL_TICKS } from './constants'
 import type {
   Decision,
@@ -54,6 +54,12 @@ export function createState(problem: Problem): MatchState {
    */
   const rolled = rollSetup(problem, initialPlayers(problem))
   const players = rolled.players
+  /**
+   * 이번 판에 만나는 상대. 대형·경고·부상·체력이 판마다 다르다.
+   * 전용 스트림이라 우리 팀 시작 조건의 난수 순서는 그대로다.
+   */
+  const mood = mentalityOf(problem.score)
+  const away = rollAway(problem, mood, awayRngFor(problem.seed))
   return {
     tick: 0,
     score: [...problem.score] as [number, number],
@@ -64,9 +70,10 @@ export function createState(problem: Problem): MatchState {
     ball: { x: 0.5, y: 0.5, owner: 'HOME', tilt: 0 },
     stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },
     players,
-    opponent: mentalityOf(problem.score),
-    // 상대도 100에서 시작해 같이 닳는다
-    awayStamina: 100,
+    opponent: mood,
+    // 상대도 자기 자리에서 시작해 같이 닳는다. 국면 데이터가 띠를 정한다
+    awayStamina: away.stamina,
+    away,
     homeCount: onPitchCount(players),
     awayCount: problem.awayCount,
     subsLeft: problem.subsLeft,

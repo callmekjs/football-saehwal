@@ -263,6 +263,34 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     )
   }
 
+  /**
+   * ── 5-1. 오늘 만난 상대 ──
+   *
+   * 사용자가 정했다 — *"각 play마다 상대 포메이션 그리고 상대 팀 경고나
+   * 체력 그리고 부상 등 랜덤으로 인카운터하게 해줘"*. 상대가 판마다
+   * 다르면 주장이 그것을 말해줘야 감독이 대응할 수 있다.
+   *
+   * **지어내지 않는다.** 대형·경고·부상은 전부 `state.away` 의 실제
+   * 값이고, 같은 시드는 같은 상대를 만든다.
+   */
+  say(11, 'awayShape', '상대', `저쪽은 ${state.away.formation}로 나왔습니다.`)
+  if (state.away.booked.length > 0) {
+    say(
+      16,
+      'awayBooked',
+      '상대',
+      `저쪽 ${state.away.booked.map((n) => `${n}번`).join(' · ')}이 경고를 안고 있습니다.`,
+    )
+  }
+  if (state.away.injured !== null) {
+    say(
+      17,
+      'awayInjury',
+      '상대',
+      `저쪽 ${state.away.injured}번이 무릎을 절뚝입니다.`,
+    )
+  }
+
   // ── 6. 저쪽이 지금 무엇을 하고 있는가 ──
   say(
     18,

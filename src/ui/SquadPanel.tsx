@@ -7,6 +7,7 @@ import {
   slotsForPlayers,
   type FormationId,
 } from '../sim/formations'
+import { awaySlots } from '../sim/awayShape'
 import { getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkPosition } from '../sim/engine'
 import {
@@ -728,38 +729,14 @@ export function SquadPanel({
   )
 }
 
-/**
- * 상대 배치. 읽기 전용이다.
- *
- * 좌표는 `src/render/visual.ts` 의 상대 대형과 같은 자리다. 그 파일은
- * 관전 연출 소관이라 이번 화면 작업에서 건드리지 않기로 했고, 여기서
- * 쓰는 것은 화면에 그릴 좌표뿐이라 이 층에 따로 적었다. 상대 대형을
- * 옮길 일이 생기면 두 곳을 함께 고쳐야 한다.
- *
- * **상대 선수의 이름·능력치는 없다.** 등번호와 서 있는 자리만 보여준다.
- */
-const AWAY_SHAPE: Array<{ pos: Position; x: number; y: number; num: number }> = [
-  { pos: 'GK', x: 103, y: 34, num: 1 },
-  { pos: 'DF', x: 84, y: 12, num: 2 },
-  { pos: 'DF', x: 86, y: 27, num: 5 },
-  { pos: 'DF', x: 86, y: 41, num: 4 },
-  { pos: 'DF', x: 84, y: 56, num: 3 },
-  { pos: 'MF', x: 66, y: 14, num: 7 },
-  { pos: 'MF', x: 64, y: 29, num: 8 },
-  { pos: 'MF', x: 64, y: 39, num: 10 },
-  { pos: 'MF', x: 66, y: 54, num: 6 },
-  { pos: 'FW', x: 46, y: 27, num: 9 },
-  { pos: 'FW', x: 46, y: 41, num: 11 },
-]
-
 /** 상대 판도 자기 골문이 아래다. 상대 좌표를 뒤집어 같은 규칙으로 그린다 */
 const awayTop = (x: number) => pct((1 - (105 - x) / 64) * 100)
 
 export function awaySummary(state: MatchState): string {
-  const shown = AWAY_SHAPE.slice(0, state.awayCount)
+  const shown = awaySlots(state.away.formation, state.awayCount)
   const counts: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
-  for (const player of shown) counts[player.pos] += 1
-  const shape = `수비 ${counts.DF} · 중원 ${counts.MF} · 공격 ${counts.FW}`
+  for (const [pos] of shown) counts[pos] += 1
+  const shape = `${state.away.formation} · 수비 ${counts.DF} · 중원 ${counts.MF} · 공격 ${counts.FW}`
 
   if (state.opponent === 'ALL_OUT') {
     return `상대는 전부 올라와 강하게 압박합니다. 현재 ${shape} 형태입니다.`
@@ -771,11 +748,20 @@ export function awaySummary(state: MatchState): string {
 }
 
 export function AwayPanel({ state }: { state: MatchState }) {
-  const shown = AWAY_SHAPE.slice(0, state.awayCount)
+  const shown = awaySlots(state.away.formation, state.awayCount)
+  /**
+   * 상대 체력은 **팀 하나의 값**이다(`state.awayStamina`).
+   *
+   * 사용자가 정했다 — *"상대도 부상 지침 그리고 체력바가 우리랑 비슷하게
+   * 닮아야 해"*. 다만 상대는 개별 선수를 추적하지 않으므로 선수마다 다른
+   * 막대를 만들면 그건 지어낸 값이다. 팀 막대 하나로 보여준다.
+   */
+  const stamina = Math.max(0, Math.min(100, state.awayStamina))
   return (
     <section className="panel away-panel" aria-label="상대 포메이션">
       <h2>
         상대 포메이션
+        <span style={{ color: 'var(--muted)' }}> · {state.away.formation}</span>
         {state.awayCount < 11 && (
           <span style={{ color: 'var(--accent)' }}> · {state.awayCount}명</span>
         )}
@@ -784,23 +770,45 @@ export function AwayPanel({ state }: { state: MatchState }) {
 
       <p className="squad-caption">위쪽이 우리 골문 · 등번호와 서 있는 자리만 보입니다</p>
 
+      <div className="away-vitals">
+        <span className="away-vitals-label">상대 팀 체력</span>
+        <span className="squad-stamina" aria-hidden>
+          <i style={{ width: `${stamina}%` }} data-low={stamina < 60 ? 'on' : undefined} />
+        </span>
+        <b aria-label={`상대 팀 체력 ${Math.round(stamina)}`}>{Math.round(stamina)}</b>
+      </div>
+
       <div className="squad-shape away">
         <div className="squad-field">
-          {shown.map((p) => (
-            <span
-              key={p.num}
-              className="squad-card away"
-              style={{ top: `${awayTop(p.x)}%`, left: `${slotLeft(p.y)}%` }}
-            >
-              <span className="squad-num">{p.num}</span>
-            </span>
-          ))}
+          {shown.map(([pos, x, y, num]) => {
+            const booked = state.away.booked.includes(num)
+            const hurt = state.away.injured === num
+            const mark = booked ? ' · 경고' : ''
+            return (
+              <span
+                key={num}
+                className="squad-card away"
+                data-booked={booked ? 'on' : undefined}
+                data-hurt={hurt ? 'on' : undefined}
+                title={`${num}번 ${pos}${mark}${hurt ? ' · 무릎이 안 좋다' : ''}`}
+                style={{ top: `${awayTop(x)}%`, left: `${slotLeft(y)}%` }}
+              >
+                <span className="squad-num">{num}</span>
+                {booked && <i className="away-card-mark" aria-hidden />}
+                {hurt && <i className="away-hurt-mark" aria-hidden />}
+              </span>
+            )
+          })}
         </div>
       </div>
 
       <p className="away-note">
-        {awaySummary(state)} 개별 능력치는 볼 수 없습니다 — 보이는 것은 서 있는
-        자리뿐입니다.
+        {awaySummary(state)}
+        {state.away.booked.length > 0 &&
+          ` 경고를 안고 뛰는 선수는 ${state.away.booked.map((n) => `${n}번`).join(' · ')}입니다.`}
+        {state.away.injured !== null &&
+          ` ${state.away.injured}번은 무릎이 안 좋아 보입니다.`}
+        {' '}개별 능력치는 볼 수 없습니다 — 보이는 것은 서 있는 자리뿐입니다.
       </p>
     </section>
   )

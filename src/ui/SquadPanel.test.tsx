@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createState } from '../sim/engine'
 import { FORMATION_IDS } from '../sim/formations'
 import { PROBLEMS } from '../sim/problems'
+import { AWAY_SHAPE_BY_MOOD, awaySlots } from '../sim/awayShape'
 import { AwayPanel, SquadPanel, awaySummary } from './SquadPanel'
 
 const stateOf = (id: string) =>
@@ -64,9 +65,39 @@ describe('상대 배치판', () => {
     expect(renderToStaticMarkup(<AwayPanel state={state} />)).toContain(text)
   })
 
-  it('열 명이면 실제 4-4-1 형태를 말한다', () => {
+  it('열 명이어도 최전방을 통째로 지우지 않는다', () => {
+    /**
+     * 상대 대형은 판마다 다르므로 특정 숫자를 박지 않는다. 지켜야 하는
+     * 것은 **줄 하나가 통째로 사라지지 않는다**는 것이다. 앞에서부터
+     * 기계적으로 자르면 5-4-1 에서 유일한 공격수가 없어진다.
+     */
     const state = stateOf('p05')
     expect(state.awayCount).toBe(10)
-    expect(awaySummary(state)).toContain('수비 4 · 중원 4 · 공격 1')
+    const shown = awaySlots(state.away.formation, state.awayCount)
+    expect(shown.length).toBe(10)
+    for (const pos of ['GK', 'DF', 'MF', 'FW'] as const) {
+      expect(shown.filter(([p]) => p === pos).length, `${pos} 수`).toBeGreaterThan(0)
+    }
+    expect(awaySummary(state)).toContain(state.away.formation)
+  })
+
+  it('상대 대형은 성향에 어울리는 것만 나온다', () => {
+    // 버스를 세운 팀이 4-3-3 으로 서 있으면 화면이 브리핑과 다른 말을 한다
+    for (const id of ['p01', 'p02', 'p03', 'p04', 'p05'] as const) {
+      const state = stateOf(id)
+      expect(
+        AWAY_SHAPE_BY_MOOD[state.opponent] as readonly string[],
+        `${id} · ${state.opponent}`,
+      ).toContain(state.away.formation)
+    }
+  })
+
+  it('같은 국면이라도 시드가 다르면 다른 상대를 만난다', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 40; i++) {
+      const s = createState({ ...PROBLEMS[1], seed: 1000 + i * 37 })
+      seen.add(`${s.away.formation}|${s.away.booked.join('.')}|${s.away.injured}|${s.away.stamina}`)
+    }
+    expect(seen.size, '마흔 시드에서 서로 다른 상대').toBeGreaterThan(20)
   })
 })

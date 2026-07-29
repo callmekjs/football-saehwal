@@ -151,15 +151,20 @@ describe('공과 선수의 연결 — 출시 기준', () => {
   })
 
   it('패스가 실제로 오간다', () => {
+    // **한 판으로 재지 않는다.** 판마다 스물여덟에서 마흔까지 흔들려,
+    // 연출을 어느 방향으로 손대든 한 판 기준은 동전 던지기가 된다
     let passes = 0
-    for (let i = 1; i < frames.length; i++) {
-      if (frames[i].mode === 'PASS' && frames[i - 1].mode !== 'PASS') passes += 1
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        if (fs[i].mode === 'PASS' && fs[i - 1].mode !== 'PASS') passes += 1
+      }
     }
+    const perMatch = passes / MULTI.length
     // 관전자가 보는 것은 75초의 실시간 축구다. 실제 축구는 75초에 양 팀
     // 합쳐 스무 번 안팎 주고받는다. 서른 번 밑으로 떨어지면 공이 한
     // 사람에게 오래 머물러 정적으로 보인다.
-    expect(passes).toBeGreaterThan(30)
-    expect(passes).toBeLessThan(90)
+    expect(perMatch, `판당 패스 ${perMatch.toFixed(1)}`).toBeGreaterThan(30)
+    expect(perMatch).toBeLessThan(90)
   })
 
   it('공을 잡는 선수가 계속 바뀐다', () => {
@@ -353,19 +358,27 @@ describe('선수 움직임 — 출시 기준', () => {
      * 아니라 하나도 빠짐없이 나오는가**를 본다. 골 장면의 수가 시뮬의
      * 골 수와 같아야 한다
      */
+    /**
+     * **마지막 순간의 골은 세지 않는다.**
+     *
+     * 세리머니가 종료 휘슬에 잘려 장면이 안 잡힐 수 있다. 전에는 그
+     * 사정을 "하나까지는 봐준다"는 절대 허용치로 적었는데, 그러면 판
+     * 수를 늘리는 것만으로 검사가 깨진다 — 늦은 골도 판 수에 비례해
+     * 늘기 때문이다. 아예 그런 골을 표본에서 뺀다. 이쪽이 더 엄격하다.
+     */
+    const TAIL = 25
     let signals = 0
     let scenes = 0
     for (const fs of MULTI) {
-      const last = fs[fs.length - 1]
-      signals += last.state.score[0] + last.state.score[1] - (P.score[0] + P.score[1])
       for (let i = 1; i < fs.length; i++) {
+        const before = fs[i - 1].state.score
+        const now = fs[i].state.score
+        if (now[0] + now[1] > before[0] + before[1] && fs.length - i > TAIL) signals += 1
         if (fs[i].celebrating && !fs[i - 1].celebrating) scenes += 1
       }
     }
-    expect(signals, '여섯 판 동안의 득점 신호').toBeGreaterThan(0)
-    // 마지막 순간의 골은 세리머니가 종료 휘슬에 잘려 장면이 안 잡힐 수
-    // 있다. 그때도 점수판은 아래 테스트가 지킨다
-    expect(scenes, `득점 ${signals}회 중 골 장면 ${scenes}회`).toBeGreaterThanOrEqual(signals - 1)
+    expect(signals, '세리머니가 들어갈 시간이 남은 득점').toBeGreaterThan(0)
+    expect(scenes, `득점 ${signals}회 중 골 장면 ${scenes}회`).toBeGreaterThanOrEqual(signals)
   })
 
   it('종료 휘슬에서 점수판이 시뮬과 정확히 같다', () => {
@@ -744,11 +757,30 @@ describe('공격할 때는 팀 전체가 올라간다', () => {
   })
 
   it('우리가 공을 가지면 수비라인이 올라간다', () => {
-    // 공 기준 상대 위치가 아니라 절대 위치로 잰다. 공격 상황과 수비
-    // 상황은 공 위치 자체가 다르므로, 상대 위치로 재면 두 효과가 섞인다
-    const up = meanX(ours, isDF)
-    const back = meanX(theirs, isDF)
-    expect(up, `수비라인 x — 공격 ${up.toFixed(1)} vs 수비 ${back.toFixed(1)}`).toBeGreaterThan(back)
+    /**
+     * 공 기준 상대 위치가 아니라 **절대 위치**로 잰다. 공격 상황과 수비
+     * 상황은 공 위치 자체가 다르므로, 상대 위치로 재면 두 효과가 섞인다.
+     *
+     * **다만 "우리가 공을 가졌다"가 곧 "공격 중"은 아니다.** 자기 진영에서
+     * 뒤로 돌리며 빌드업하는 시간이 그 표본의 절반이고, 그때 수비라인은
+     * 당연히 낮다. 두 상황을 뭉쳐서 재면 실측 차이가 ±1미터 안으로
+     * 좁아져(0.97 ↔ −0.75) 연출을 어느 방향으로 손대든 부호가 뒤집힌다 —
+     * 검사가 축구 원칙이 아니라 특정 시드의 지문을 지키게 된다.
+     *
+     * 그래서 **공이 어느 진영에 있는지까지 함께 본다.** 상대 진영에서
+     * 우리가 공을 쥔 순간이 공격이고, 우리 진영에서 상대가 공을 쥔
+     * 순간이 수비다. 이쪽 차이는 5~7미터로 뚜렷하다.
+     */
+    const attack = ours.filter((f) => f.ball.x > PITCH_W / 2)
+    const defend = theirs.filter((f) => f.ball.x < PITCH_W / 2)
+    expect(attack.length, '공격 표본').toBeGreaterThan(50)
+    expect(defend.length, '수비 표본').toBeGreaterThan(50)
+    const up = meanX(attack, isDF)
+    const back = meanX(defend, isDF)
+    expect(
+      up,
+      `수비라인 x — 공격 ${up.toFixed(1)} vs 수비 ${back.toFixed(1)}`,
+    ).toBeGreaterThan(back + 3)
   })
 
   it('공격수는 공보다 앞에 있다', () => {
@@ -1806,7 +1838,17 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
   it('재개를 기다리는 동안 공이 그 자리에 멈춰 있다', () => {
     for (const fs of MULTI) {
       for (let i = 1; i < fs.length; i++) {
-        if (!fs[i].restart || !fs[i - 1].restart) continue
+        const a = fs[i - 1].restart
+        const b = fs[i].restart
+        if (!a || !b) continue
+        /**
+         * **같은 재개 안에서만 본다.**
+         *
+         * 한 틱 안에서 앞의 재개가 끝나고 새 재개가 걸리면 공은 당연히
+         * 다른 자리에 놓인다 — 그건 심판이 공을 놓은 것이지 순간이동이
+         * 아니다. 공이 밖으로 더 자주 나가게 만들면 그 경우가 늘어난다.
+         */
+        if (a.kind !== b.kind || a.side !== b.side || Math.hypot(a.x - b.x, a.y - b.y) > 0.01) continue
         expect(Math.hypot(fs[i].ball.x - fs[i - 1].ball.x, fs[i].ball.y - fs[i - 1].ball.y))
           .toBeLessThan(0.01)
       }
@@ -1980,7 +2022,7 @@ describe('심판 셋과 오프사이드', () => {
       rows.push({
         officials: vm.officials.map((o) => ({ kind: o.kind, x: o.x, y: o.y, flag: o.flag })),
         ball: { x: vm.ball.x, y: vm.ball.y, mode: vm.ball.mode },
-        restart: vm.restart ? vm.restart.kind : null,
+        restart: vm.restart ? `${vm.restart.kind}|${vm.restart.side}|${vm.restart.x.toFixed(2)}|${vm.restart.y.toFixed(2)}` : null,
         line: { home: vm.offsideLine('HOME'), away: vm.offsideLine('AWAY') },
       })
     }
@@ -2128,7 +2170,10 @@ describe('심판 셋과 오프사이드', () => {
   it('재개를 기다리는 동안 공이 그 자리에 있다', () => {
     for (const { rows } of RUNS) {
       for (let i = 1; i < rows.length; i++) {
-        if (!rows[i].restart || !rows[i - 1].restart) continue
+        // 같은 재개 안에서만 본다. 한 틱 안에서 앞의 재개가 끝나고 새
+        // 재개가 걸리면 공은 당연히 다른 자리에 놓인다 — 그건 심판이
+        // 공을 놓은 것이지 순간이동이 아니다
+        if (!rows[i].restart || rows[i].restart !== rows[i - 1].restart) continue
         const d = Math.hypot(
           rows[i].ball.x - rows[i - 1].ball.x,
           rows[i].ball.y - rows[i - 1].ball.y,

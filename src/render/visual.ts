@@ -5,6 +5,7 @@ import {
   slotsForPlayers,
 } from '../sim/formations'
 import { effectivePos, getPlayer } from '../sim/squad'
+import { AWAY_SHAPES, awaySlots } from '../sim/awayShape'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, PlayerOrder, Position } from '../sim/types'
 
@@ -734,20 +735,6 @@ const passSpeed = (d: number) => clamp(11 + d * 0.5, 13, 26)
 const bounceGrip = (impact: number) => clamp(1 - impact * 0.035, 0.72, 1)
 
 /** 상대 기본 배치. 성향에 따라 통째로 앞뒤로 옮겨간다 */
-const AWAY_SHAPE: Array<[Position, number, number]> = [
-  ['GK', 103, 34],
-  ['DF', 84, 12],
-  ['DF', 86, 27],
-  ['DF', 86, 41],
-  ['DF', 84, 56],
-  ['MF', 66, 14],
-  ['MF', 64, 29],
-  ['MF', 64, 39],
-  ['MF', 66, 54],
-  ['FW', 46, 27],
-  ['FW', 46, 41],
-]
-const AWAY_NUMS = [1, 2, 5, 4, 3, 7, 8, 10, 6, 9, 11]
 
 const TOP_SPEED: Record<Position, number> = { GK: 5.2, DF: 7.4, MF: 7.6, FW: 8.0 }
 
@@ -1017,9 +1004,12 @@ export class VisualMatch {
       })
     })
 
-    const awayLimit = state.awayCount === 11 ? 11 : 10
-    AWAY_SHAPE.slice(0, awayLimit).forEach(([pos, x, y], i) => {
-      const num = AWAY_NUMS[i]
+    /**
+     * 상대 대형은 판마다 다르다(`state.away.formation`).
+     * 좌표의 단일 원본은 `src/sim/awayShape.ts` 다 — 큰 경기장과 오른쪽
+     * 상대 패널이 서로 다른 자리를 가리키면 둘 중 하나가 거짓말이 된다.
+     */
+    awaySlots(state.away.formation, state.awayCount).forEach(([pos, x, y, num], i) => {
       const id = `A${num}`
       const prev = keep.get(id)
       next.push({
@@ -1039,8 +1029,9 @@ export class VisualMatch {
         homeX: x,
         homeY: y,
         top: TOP_SPEED[pos],
-        stamina: 84,
-        booked: false,
+        // 상대는 팀 하나의 체력을 쓴다. 개인별 값을 지어내지 않는다
+        stamina: state.awayStamina,
+        booked: state.away.booked.includes(num),
         // 지시는 우리 팀에게만 내린다
         order: 'NONE',
         recover: prev?.recover ?? 0,
@@ -1250,12 +1241,12 @@ export class VisualMatch {
       v.homeY = 34 + (slot.y - 34) * widthScale
     }
     const mood = state.opponent === 'ALL_OUT' ? -13 : state.opponent === 'PARK_BUS' ? 11 : 0
-    AWAY_SHAPE.forEach(([pos, x, y], i) => {
-      const v = this.byId(`A${AWAY_NUMS[i]}`)
-      if (!v) return
+    for (const [pos, x, y, num] of AWAY_SHAPES[state.away.formation]) {
+      const v = this.byId(`A${num}`)
+      if (!v) continue
       v.homeX = pos === 'GK' ? x : x + mood
       v.homeY = y
-    })
+    }
 
     // 세리머니 중에는 새 슛을 받지 않는다. 밀린 슛이 재개 직후 한꺼번에
     // 터지면 그림이 엉킨다.
@@ -2048,7 +2039,14 @@ export class VisualMatch {
       taker.stx = r.x
       taker.sty = r.y
       // 공을 주우러 가는 길이다. 여기서 멈춰 서면 재개가 걸린다
-      taker.effort = hurry ? 'SPRINT' : 'RUN'
+      /**
+       * 멀면 뛰어가서 줍는다.
+       *
+       * 공이 측면으로 더 자주 나가게 만들자 데드볼 비율이 15.2%까지
+       * 올라갔다(상한 15%). 늘어난 것은 정지 시간이 아니라 **공을 주우러
+       * 가는 거리**다. 실제 축구에서도 급하면 뛰어가서 줍는다.
+       */
+      taker.effort = hurry || dist(taker, r) > 7 ? 'SPRINT' : 'RUN'
       taker.settled = false
       moving.add(taker.id)
     }
@@ -2569,7 +2567,8 @@ export class VisualMatch {
       if (p.side !== holder.side || p.id === holder.id || p.pos === 'GK') continue
       // 짧은 패스가 기본이다. 매번 롱볼을 때리면 공이 계속 공중에 있다
       const d = dist(p, holder)
-      if (d < 5 || d > 46) continue
+      // 진짜 전환 패스는 대각으로 48미터쯤이다. 46에서 자르면 그것부터 죽는다
+      if (d < 5 || d > 54) continue
 
       // 앞으로 갈수록 좋고, 상대가 붙어 있으면 나쁘다
       const forward = (p.x - holder.x) * dir
@@ -2577,7 +2576,23 @@ export class VisualMatch {
         if (o.side === holder.side) return m
         return Math.min(m, dist(o, p))
       }, Infinity)
-      const score = forward * 0.9 + Math.min(marker, 18) * 1.4 - d * 0.25 + this.rng.next() * 6
+      /**
+       * **좌우로 벌리는 선택에 값을 준다.**
+       *
+       * 전에는 이 식에 세로 좌표가 아예 없었다. 앞으로 갈수록 좋고
+       * 상대가 멀수록 좋고 가까울수록 좋다 — 셋 다 세로와 무관하다.
+       * 그래서 옆으로 벌리는 패스가 **구조적으로 질 수밖에** 없었고,
+       * 실측으로 공이 터치라인 13.6미터 안에 있던 시간이 13.2%였다
+       * (그 띠가 경기장 폭의 40%다). 실제 축구는 절반이 측면에서 난다.
+       *
+       * 두 가지에 값을 준다 — 지금 공이 있는 쪽에서 **반대쪽으로 벌리는
+       * 것**(전환)과, 받는 선수가 **터치라인 가까이 있는 것**(폭 유지).
+       * 앞으로 가는 값보다 작게 두어 전진을 대체하지는 않는다.
+       */
+      const swing = Math.min(Math.abs(p.y - holder.y), 26) * 0.32
+      const wide = Math.max(0, Math.abs(p.y - PITCH_H / 2) - 12) * 0.28
+      const score =
+        forward * 0.9 + Math.min(marker, 18) * 1.4 - d * 0.25 + swing + wide + this.rng.next() * 6
       if (score > bestScore) {
         bestScore = score
         best = p
@@ -2998,7 +3013,16 @@ export class VisualMatch {
         // 공을 몰 때는 앞이 기본이되, 막힌 쪽을 피해 빈 길로 꺾는다.
         // 무작정 직진하면 수비수 무리 속으로 제 발로 파고든다
         let ex = dir * 1.1
-        let ey = (PITCH_H / 2 - p.y) * 0.015
+        /**
+         * 안으로 접는 힘은 **골대가 가까울 때만** 건다.
+         *
+         * 전에는 세로 중앙을 향하는 힘이 늘 걸려 있었다. 그래서 옆줄에서
+         * 공을 잡은 선수가 곧바로 가운데로 파고들었고, 측면 돌파라는
+         * 장면이 아예 없었다. 실제 축구의 윙어는 박스 근처까지 옆줄을
+         * 타고 가서 거기서 접는다.
+         */
+        const toGoal = Math.hypot(this.goalX(p.side) - p.x, GOAL_MID - p.y)
+        let ey = (GOAL_MID - p.y) * 0.015 * clamp((46 - toGoal) / 30, 0, 1)
         let boxed = 0
         for (const o of this.players) {
           if (o.side === p.side || o.pos === 'GK') continue
@@ -3078,7 +3102,16 @@ export class VisualMatch {
           if (d < 24 && p.pos !== 'DF' && p.order !== 'BACK_OFF') {
             // 가까우면 받을 각을 만든다 — 겹치지 않게 벌려 선다
             const away = p.y > holder.y ? 1 : -1
-            ty = clamp(holder.y + away * (8 + (p.pos === 'FW' ? 4 : 0)), 4, PITCH_H - 4)
+            /**
+             * 각을 만들되 **자기 줄의 좌우 자리를 버리지 않는다.**
+             *
+             * 전에는 여기서 대형 좌표를 통째로 버리고 `holder.y ± 8` 로
+             * 덮어썼다. 홀더는 대개 가운데 있으므로, 24미터 안의 비수비수
+             * 전원이 가운데로 모였다 — 실측으로 공이 세로 중앙 16미터 띠
+             * 안에 있던 시간이 54.1%였다(그 띠는 폭의 24%다).
+             */
+            const angle = clamp(holder.y + away * (8 + (p.pos === 'FW' ? 4 : 0)), 4, PITCH_H - 4)
+            ty = clamp(angle * 0.45 + ty * 0.55, 4, PITCH_H - 4)
             const short = clamp(holder.x + (p.pos === 'FW' ? 14 : 8) * dir, 4, PITCH_W - 4)
             /**
              * 받으러 내려오되 제 자리를 버리지는 않는다.
