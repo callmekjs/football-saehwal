@@ -77,6 +77,42 @@ const EASE_GAP = 3.4
 const RECOVER_GAP = 20
 
 /**
+ * 압박 레버가 화면에서 하는 일.
+ *
+ * 전에는 아무 일도 안 했다. `setTargets` 가 시뮬 상태를 인자로 받아놓고
+ * `void state` 로 버렸고, 공에 달려드는 인원은 압박과 무관하게 늘 셋이었다.
+ * 강하게 눌러도 약하게 물러서도 **화면이 똑같았다** — 홀더에서 가장 가까운
+ * 상대까지의 거리 중앙값이 5.02 / 5.15 / 5.24m 로 0.2m 안에 붙어 있었고,
+ * 그나마 방향도 거꾸로였다.
+ *
+ * 실제 축구에서 압박의 세기는 두 가지로 보인다. **몇 명이 붙느냐**와
+ * **얼마나 가까이 붙느냐**다. 낮은 압박은 달려들지 않고 지연시킨다 —
+ * 앞을 막아서서 옆으로 돌리게 만들지, 발을 뻗지 않는다.
+ */
+/** 공에 달려드는 인원 */
+const PRESS_CHASERS = [2, 3, 4] as const
+/**
+ * 가장 가까운 한 명이 공에서 이만큼 떨어져 선다.
+ *
+ * 낮은 압박은 달려들지 않고 지연시킨다. 값이 큰 이유가 있다 — 실측으로
+ * 쫓는 선수가 한 번의 소유 동안 홀더에게 가장 가까이 붙는 거리의 중앙값이
+ * 4.4미터다. 그보다 작은 간격을 두라고 하면 애초에 거기까지 못 가므로
+ * 지시가 아무 일도 하지 않는다.
+ */
+const PRESS_STANDOFF = [5.5, 2.2, 0] as const
+/** 두 번째·세 번째가 뒤를 받치는 거리 */
+const PRESS_BACKUP = [7, 4, 2.5] as const
+/**
+ * 공을 안 쫓는 나머지가 공 쪽으로 얼마나 따라 붙는가.
+ *
+ * 압박은 앞의 한두 명이 아니라 **블록 전체**로 하는 것이다. 높이 누르면
+ * 블록이 공 쪽으로 밀려 올라가 상대의 다음 선택지를 지우고, 낮게 서면
+ * 블록이 제자리를 지켜 앞을 막기만 한다. 앞의 몇 명만 바꾸면 화면에서
+ * 레버가 거의 안 보인다 — 실측으로 공 8미터 안 인원이 1.13 대 1.18명이었다.
+ */
+const PRESS_COMPACT = [-0.13, 0, 0.13] as const
+
+/**
  * 골키퍼는 자기 자리까지 남은 거리로 단계를 정한다.
  *
  * 문턱이 필드 선수보다 훨씬 촘촘하다. 골문이 7.32미터인데 2미터를 "다
@@ -2108,25 +2144,38 @@ export class VisualMatch {
       } else {
         // 수비 — 추격조 세 명은 공에 달려들고 나머지는 자리를 지킨다.
         // 공을 가진 선수가 몰고 가므로 지금 자리가 아니라 갈 자리를 노린다
-        const rank = this.chasersOf(p.side).indexOf(p.id)
+        const level = this.pressOf(p.side, state)
+        const rank = this.chasersOf(p.side, level).indexOf(p.id)
         // 주인 없이 굴러가는 공은 지금 자리로 가면 이미 지나가 있다
         const ahead = 0.45
         const px = holder ? holder.x + holder.vx * ahead : lead.x
         const py = holder ? holder.y + holder.vy * ahead : lead.y
+        const back = PRESS_BACKUP[level]
 
         if (rank === 0) {
-          p.tx = px
-          p.ty = py
-          // 가장 가까운 한 명만 공을 향해 전력으로 달려든다
+          /**
+           * 가장 가까운 한 명. 압박이 강하면 공까지 가고, 약하면 앞을
+           * 막아서기만 한다.
+           *
+           * 주인 없는 공에는 물러설 이유가 없다 — 그건 압박이 아니라
+           * 세컨드볼 경합이고, 안 주우면 상대가 줍는다.
+           */
+          const off = holder ? PRESS_STANDOFF[level] : 0
+          const gx = px - p.x
+          const gy = py - p.y
+          const gd = Math.hypot(gx, gy) || 1
+          const keep = Math.min(off, gd)
+          p.tx = px - (gx / gd) * keep
+          p.ty = py - (gy / gd) * keep
           p.effort = 'SPRINT'
         } else if (rank === 1) {
           // 두 번째는 뒤를 받친다 — 제쳐져도 바로 다음이 붙는다
-          p.tx = px - 4 * dir
-          p.ty = py + (p.y > py ? 5 : -5)
+          p.tx = px - back * dir
+          p.ty = py + (p.y > py ? back * 1.2 : -back * 1.2)
           p.effort = 'RUN'
         } else if (rank === 2) {
-          p.tx = px - 9 * dir
-          p.ty = py + (p.y > py ? 8 : -8)
+          p.tx = px - back * 2.2 * dir
+          p.ty = py + (p.y > py ? back * 2 : -back * 2)
           p.effort = 'RUN'
         } else {
           // 블록을 옮기는 여덟 명은 뛰지 않는다. 수비 대형은 걸어서 밀린다
@@ -2139,7 +2188,11 @@ export class VisualMatch {
           // 덜 따라가고 자기 골대 쪽에 더 붙는다 — 화면에서 그 한 명만
           // 뒤에 남아 있는 것이 보인다
           const back = p.order === 'BACK_OFF'
-          const compact = p.pos === 'DF' || back ? 0.42 : 0.72
+          const compact = clamp(
+            (p.pos === 'DF' || back ? 0.42 : 0.72) + PRESS_COMPACT[level],
+            0.2,
+            0.9,
+          )
           let tx = p.homeX + (this.ball.x - p.homeX) * compact
 
           // 수비할 때는 자기 골대 쪽에 머문다. 상대가 자기 진영에서 공을
@@ -2195,7 +2248,19 @@ export class VisualMatch {
       // 공을 향해 달려들던 선수까지 3미터 앞에서 걸어 압박이 죽는다
       if (gap < EASE_GAP) p.effort = lower(p.effort)
     }
-    void state
+  }
+
+  /**
+   * 이 팀이 지금 얼마나 세게 누르는가 (0·1·2).
+   *
+   * 우리 팀은 감독이 건 레버가 그대로 내려온다. 상대는 레버가 없으므로
+   * 성향에서 읽는다 — 다 걸고 나온 팀은 높이 누르고, 버스를 세운 팀은
+   * 물러서서 지연시킨다. 같은 성향이 이미 상대의 대형 위치도 정하고
+   * 있으므로(`mood`) 화면에서 두 가지가 같은 방향으로 보인다.
+   */
+  private pressOf(side: 'HOME' | 'AWAY', state: MatchState): 0 | 1 | 2 {
+    if (side === 'HOME') return state.tactics.press
+    return state.opponent === 'ALL_OUT' ? 2 : state.opponent === 'PARK_BUS' ? 0 : 1
   }
 
   /**
@@ -2205,7 +2270,7 @@ export class VisualMatch {
    * 역할이 뒤바뀌어 전원이 갈지자로 뛴다. 한 번 정한 추격조는 잠깐
    * 유지하고, 공 주인이 바뀔 때 새로 짠다.
    */
-  private chasersOf(side: 'HOME' | 'AWAY'): string[] {
+  private chasersOf(side: 'HOME' | 'AWAY', level: 0 | 1 | 2): string[] {
     if (this.clock - this.chaseAt[side] > 0.7) {
       this.chaseIds[side] = this.players
         // 골문 앞을 지키라고 했거나 물러서라고 한 선수는 공에 달려들지
@@ -2213,7 +2278,7 @@ export class VisualMatch {
         // 몰려가는데 한 명만 자기 자리를 지키고 서 있다
         .filter((p) => p.side === side && p.pos !== 'GK' && p.order !== 'HOLD' && p.order !== 'BACK_OFF')
         .sort((a, b) => dist(a, this.ball) - dist(b, this.ball))
-        .slice(0, 3)
+        .slice(0, PRESS_CHASERS[level])
         .map((p) => p.id)
       this.chaseAt[side] = this.clock
     }
