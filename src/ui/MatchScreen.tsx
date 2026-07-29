@@ -11,6 +11,7 @@ import { buildBriefing, type Briefing } from '../analysis/briefing'
 import { useVoice, type VoiceHandle } from './useVoice'
 import { applyCommand, parseCommand } from './voice'
 import { scoreboardScore } from './scoreboard'
+import { commentaryFor } from './commentary'
 import {
   BREAK_WARN_SECONDS,
   breakMessage,
@@ -328,17 +329,6 @@ function StatBars({ state }: { state: MatchState }) {
   )
 }
 
-const EVENT_TEXT: Record<string, string> = {
-  GOAL: '골! 우리가 넣었다',
-  CONCEDE: '실점. 상대가 넣었다',
-  CARD: '경고가 나왔다',
-  SEND_OFF: '퇴장. 한 명이 빠진다',
-  INJURY: '부상으로 교체가 강제된다',
-  PENALTY: '페널티킥',
-  FOUL: '파울',
-  SUB: '교체 투입',
-}
-
 function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
   const shown = state.log.filter((e) => e.kind !== 'FOUL').slice(-8).reverse()
   return (
@@ -361,8 +351,7 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
                       : 'var(--text)',
               }}
             >
-              {EVENT_TEXT[e.kind] ?? e.kind}
-              {e.target && <span style={{ color: 'var(--dim)' }}> · {getPlayer(e.target).num}번</span>}
+              {commentaryFor(e)}
             </span>
           </div>
         ))}
