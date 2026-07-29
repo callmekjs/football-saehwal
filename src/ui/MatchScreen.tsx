@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pitch } from './Pitch'
 import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
 import { BENCH, getPlayer } from '../sim/squad'
@@ -11,6 +11,14 @@ import { buildBriefing, type Briefing } from '../analysis/briefing'
 import { useVoice, type VoiceHandle } from './useVoice'
 import { applyCommand, parseCommand } from './voice'
 import { scoreboardScore } from './scoreboard'
+import {
+  BREAK_WARN_SECONDS,
+  breakMessage,
+  breakRatio,
+  breakTone,
+  formatBreak,
+  useBreakClock,
+} from './breakClock'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
@@ -55,6 +63,66 @@ export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
  * 오른쪽 열은 세로가 넉넉하지 않고, 열네 줄을 한꺼번에 펴면 벽처럼 보여
  * 한 줄도 안 읽힌다.
  */
+/**
+ * 급수 타임 머리줄 — 남은 시간이 여기 붙는다.
+ *
+ * 급수 타임에 끝이 없으면 그건 경기 안의 장면이 아니라 설정 메뉴다. 실제
+ * 쿨링브레이크는 주심이 끊는다.
+ *
+ * 다만 **1분을 강제로 기다리게 하지 않는다.** 처음 보는 사람이 이 화면에
+ * 쓰는 시간은 1~3분이고, 축구를 보기도 전에 대기 화면에서 나가면 아무것도
+ * 전달되지 않는다. 아래 재개 버튼은 언제나 살아 있고, 이 시계는 "안 누르면
+ * 알아서 시작한다"는 뜻이다.
+ *
+ * **시계를 따로 상자에 담지 않고 머리줄에 얹은 이유**가 있다. 오른쪽 열은
+ * 주장의 브리핑 열네 줄과 재개 버튼으로 이미 꽉 차 있어서, 상자 하나를
+ * 더 놓으면 그만큼 버튼이 화면 밖으로 밀려난다. 이미 있는 줄에 얹으면
+ * 세로가 거의 늘지 않는다.
+ *
+ * 남은 시간은 **숫자 · 막대 · 문장** 셋으로 함께 말한다. 마지막 15초에
+ * 색이 바뀌지만 색은 셋 중 하나일 뿐이다 — 문장이 같이 바뀌므로 색을
+ * 못 보아도 곧 시작한다는 것을 알 수 있다.
+ */
+function BreakHead({
+  title,
+  kickoff,
+  remaining,
+}: {
+  title: string
+  kickoff: number
+  remaining: number
+}) {
+  const tone = breakTone(remaining)
+  return (
+    <>
+      <h2 className="break-head">
+        <span className="break-head-word">
+          급수 타임 · {title}
+          <small>
+            {tone === 'CALM' ? `후반 ${kickoff}분 · 경기 시계 정지` : breakMessage(remaining)}
+          </small>
+        </span>
+        <span className="break-head-clock">
+          <b role="timer" aria-label={`경기 재개까지 ${remaining}초`}>
+            {formatBreak(remaining)}
+          </b>
+          <small>자동 재개까지</small>
+        </span>
+      </h2>
+      <div className="break-track" aria-hidden>
+        <i style={{ width: `${breakRatio(remaining) * 100}%` }} />
+      </div>
+      {/*
+        읽어주는 것은 경고가 켜지는 그 순간 한 번뿐이다. 남은 초를 매초
+        읽어주면 화면을 못 보는 사람은 브리핑을 한 줄도 못 듣는다.
+      */}
+      <span className="sr-only" role="status">
+        {tone === 'WARN' ? '곧 경기가 재개됩니다' : ''}
+      </span>
+    </>
+  )
+}
+
 function CaptainBrief({ briefing, voice }: { briefing: Briefing; voice: VoiceHandle }) {
   return (
     <div className="captain-brief">
@@ -468,6 +536,24 @@ export function MatchScreen({
    * **승패 판정은 어느 쪽도 쓰지 않는다.** 아래 `judge(state, ...)` 는
    * 시뮬의 점수를 그대로 읽는다.
    */
+  /**
+   * 경기 재개. **버튼과 자동 시작이 같은 문을 쓴다.**
+   *
+   * 시간이 다 되어 저절로 시작하는 길을 따로 만들면 한쪽에만 생기는 고장이
+   * 반드시 나온다 — 예컨대 자동으로 시작할 때만 탭이 전술로 안 넘어가서,
+   * 경기가 시작됐는데 화면에는 상대 배치가 떠 있는 식이다.
+   *
+   * `start()` 는 `phase !== 'READY'` 면 아무 일도 하지 않으므로, 버튼을
+   * 누른 직후에 시계가 0이 되어 두 번 불려도 안전하다.
+   */
+  const resume = useCallback(() => {
+    start()
+    setActiveTab('TACTICS')
+  }, [start])
+
+  /** 급수 타임 1분. 경기 시계(750틱)와는 무관한 화면 전용 시계다 */
+  const breakLeft = useBreakClock(phase === 'READY', resume)
+
   const [scene, setScene] = useState<[number, number]>(problem.score)
   useEffect(() => setScene(problem.score), [problem])
   const shown = scoreboardScore(phase === 'DONE', state.score, scene)
@@ -513,7 +599,22 @@ export function MatchScreen({
             현재 설정<b>{setup}</b>
           </span>
         </div>
-        <span className="match-subs">교체 {state.subsLeft}</span>
+        {/*
+          급수 타임 동안에는 이 자리에 남은 시간이 붙는다.
+
+          점수판은 화면 맨 위에 **붙박이로 따라다니는** 유일한 줄이다.
+          좁은 화면에서 급수 타임 상자는 페이지 아래쪽에 있어서, 여기에
+          없으면 전술을 고르다가 아무 예고 없이 휘슬을 듣게 된다.
+          교체 장수는 벤치 머리줄과 아래 요약에도 있으므로 이 1분 동안만
+          자리를 비켜준다.
+        */}
+        {phase === 'READY' ? (
+          <span className="match-break" data-tone={breakTone(breakLeft).toLowerCase()}>
+            급수 <b>{formatBreak(breakLeft)}</b>
+          </span>
+        ) : (
+          <span className="match-subs">교체 {state.subsLeft}</span>
+        )}
       </header>
 
       {/* 좁은 화면 전용 요약 줄 */}
@@ -597,30 +698,22 @@ export function MatchScreen({
             이 설정이 있어야 "왜 경기 전에 다 만질 수 있는가"가 설명된다.
           */}
           {phase === 'READY' && (
-            <section className="panel side-note">
+            <section className="panel side-note break-note" data-tone={breakTone(breakLeft).toLowerCase()}>
               {/*
                 국면 제목도 목표도 시작 시각도 이미 점수판과 국면 카드에
                 떠 있다. 같은 말을 여기 다시 적으면 그만큼 주장의 말과
                 경기 재개 버튼이 화면 밖으로 밀려난다. 머리줄 하나로 접었다.
               */}
-              <h2>
-                급수 타임 · {problem.title}
-                <span style={{ color: 'var(--dim)', fontWeight: 400 }}>
-                  {' '}
-                  · 후반 {kickoff}분 · 시계 정지
-                </span>
-              </h2>
+              <BreakHead title={problem.title} kickoff={kickoff} remaining={breakLeft} />
               <div className="side-note-body">
                 <CaptainBrief briefing={buildBriefing(problem, state)} voice={voice} />
                 <button
                   className="kickoff-button"
-                  onClick={() => {
-                    start()
-                    setActiveTab('TACTICS')
-                  }}
+                  data-hot={breakLeft <= BREAK_WARN_SECONDS ? 'on' : undefined}
+                  onClick={resume}
                 >
                   지시 끝 · 경기 재개
-                  <small>이후 시계는 멈추지 않습니다</small>
+                  <small>기다리지 않아도 됩니다 · 이후 시계는 멈추지 않습니다</small>
                 </button>
               </div>
             </section>

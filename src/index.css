@@ -573,6 +573,35 @@ button {
 .match-score strong { font-size: 23px; font-variant-numeric: tabular-nums; }
 .match-subs { justify-self: end; color: var(--muted); font-size: 12px; white-space: nowrap; }
 
+/* 급수 타임 동안만 붙박이 점수판에 뜨는 남은 시간 */
+.match-break {
+  justify-self: end;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--dim);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.match-break b {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-break[data-tone='warn'] {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+.match-break[data-tone='warn'] b { color: var(--warn); }
+
 /* 넓은 화면의 점수판에만 붙는 요약. 좁은 화면은 아래 .match-brief 가 맡는다 */
 .match-meta {
   display: none;
@@ -1282,6 +1311,103 @@ button {
   overflow-y: auto;
 }
 
+/*
+ * ── 급수 타임 시계 ────────────────────────────────────
+ *
+ * 급수 타임에도 끝이 있다. 없으면 경기 안의 장면이 아니라 설정 메뉴다.
+ *
+ * 시계는 **이미 있는 머리줄에 얹는다.** 상자를 하나 더 놓으면 그만큼
+ * 아래 재개 버튼이 화면 밖으로 밀린다. 오른쪽 열은 그럴 여유가 없다.
+ *
+ * 셋으로 동시에 말한다 — 큰 숫자, 줄어드는 막대, 한 줄 문장. 마지막
+ * 15초에 색이 노랑으로 바뀌지만 **색은 셋 중 하나일 뿐**이다. 문장이
+ * 같이 바뀌므로 색을 못 봐도 곧 시작한다는 것을 알 수 있다.
+ */
+.break-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* 시계가 붙어도 머리줄 높이가 크게 늘지 않도록 위아래를 조인다 */
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-bottom: 0;
+}
+
+.break-head-word {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.break-head-word small {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.break-head-clock {
+  display: grid;
+  justify-items: end;
+  gap: 0;
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.break-head-clock b {
+  color: var(--accent);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.05;
+  /* 숫자 폭이 흔들리면 1초마다 옆 글자가 밀린다 */
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.break-head-clock small {
+  color: var(--dim);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.break-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
+}
+
+.break-track i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  /* 0.2초마다 재므로 그 간격을 메워야 막대가 끊겨 보이지 않는다 */
+  transition: width 0.2s linear;
+}
+
+/* 마지막 15초 — 색·숫자·문장이 함께 바뀐다 */
+.break-note[data-tone='warn'] .break-head { background: color-mix(in srgb, var(--warn) 12%, var(--panel-2)); }
+.break-note[data-tone='warn'] .break-head-clock b { color: var(--warn); }
+.break-note[data-tone='warn'] .break-head-word small { color: var(--warn); }
+.break-note[data-tone='warn'] .break-track i { background: var(--warn); }
+
+.break-note[data-tone='over'] .break-head-clock b { color: var(--dim); }
+.break-note[data-tone='over'] .break-track i { background: var(--dim); }
+
+/* 화면에는 없고 읽어주기에만 있는 글 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .kickoff-button {
   /* 화면에서 가장 큰 표적이다. 44px 하한을 넉넉히 넘긴다 */
   min-height: 52px;
@@ -1297,6 +1423,13 @@ button {
 }
 
 .kickoff-button small { font-size: 10px; font-weight: 550; opacity: 0.72; }
+
+/* 마지막 15초. 지금 눌러야 하는 버튼이 어느 것인지 한 번 더 말한다 */
+.kickoff-button[data-hot='on'] {
+  background: var(--warn);
+  color: #2a2003;
+  box-shadow: 0 10px 26px rgba(243, 201, 95, 0.26);
+}
 
 /*
  * 감독 보고서는 열 안에 밀어 넣지 않고 아래에 통째로 편다.
