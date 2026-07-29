@@ -11,6 +11,7 @@ import { buildHalftime } from '../analysis/halftime'
 import { useVoice, type VoiceHandle } from './useVoice'
 import { applyCommand, parseCommand } from './voice'
 import { scoreboardScore } from './scoreboard'
+import { cheer, isMuted, setMuted, whistle } from './sound'
 import {
   addedTimeOf,
   breakLabel,
@@ -565,6 +566,62 @@ export function MatchScreen({
 
   const [scene, setScene] = useState<[number, number]>(problem.score)
   useEffect(() => setScene(problem.score), [problem])
+
+  /**
+   * 소리 — 전부 **덤**이다.
+   *
+   * 꺼도 아무 기능을 잃지 않는다. 휘슬이 울리는 사건은 화면에도 이미
+   * 표시된다(주심이 달려가고, 카드를 들고, 깃발이 오르고, 문구가 뜬다).
+   */
+  const [mutedNow, setMutedNow] = useState(isMuted)
+
+  /**
+   * 골과 실점의 함성.
+   *
+   * 점수판 숫자가 바뀌는 순간에 건다. 시뮬이 골을 정한 순간이 아니라
+   * **화면에 골 장면이 나온 순간**이라 소리와 그림이 어긋나지 않는다 —
+   * 그 둘을 맞추는 데 이미 한참 걸렸다.
+   */
+  const scenePrev = useRef<[number, number]>(scene)
+  useEffect(() => {
+    const [us, them] = scene
+    const [pu, pt] = scenePrev.current
+    if (us > pu) cheer(true)
+    else if (them > pt) cheer(false)
+    scenePrev.current = scene
+  }, [scene])
+
+  /**
+   * 주심의 휘슬 — 반칙·페널티킥·부상.
+   *
+   * 시뮬 기록에서 읽는다. 새로 생긴 항목만 본다.
+   */
+  const blownTo = useRef(0)
+  useEffect(() => {
+    const log = state.log
+    if (log.length <= blownTo.current) {
+      blownTo.current = log.length
+      return
+    }
+    let blow = false
+    for (let i = blownTo.current; i < log.length; i++) {
+      const kind = log[i].kind
+      // 반칙은 프리킥 선언이고, 페널티와 부상도 주심이 경기를 멈춘다
+      if (kind === 'FOUL' || kind === 'PENALTY' || kind === 'INJURY') blow = true
+    }
+    blownTo.current = log.length
+    if (blow) whistle(1)
+  }, [state.log])
+
+  /** 경기 시작과 끝. 종료는 실제 경기처럼 두 번 분다 */
+  const lastPhase = useRef(phase)
+  useEffect(() => {
+    if (lastPhase.current !== phase) {
+      if (phase === 'RUNNING') whistle(1)
+      else if (phase === 'DONE') whistle(2)
+      lastPhase.current = phase
+    }
+  }, [phase])
   const shown = scoreboardScore(phase === 'DONE', state.score, scene)
   // 휘슬이 울리면 마이크를 놓는다. 급수 타임 밖에서는 듣지 않는다
   const releaseVoice = voice.release
@@ -606,6 +663,25 @@ export function MatchScreen({
       <header className="match-scorebar">
         <button className="match-back" onClick={onExit} aria-label="국면 선택으로">
           ←
+        </button>
+        {/*
+          음소거는 **눈에 보여야 한다.** 갑자기 소리가 나면 끄는 방법을
+          찾다가 탭을 닫는 사람이 있다.
+        */}
+        <button
+          className="match-mute"
+          onClick={() => {
+            const next = !mutedNow
+            setMuted(next)
+            setMutedNow(next)
+            // 켠 순간 한 번 들려줘야 켜졌다는 것을 안다
+            if (!next) whistle(1, true)
+          }}
+          aria-pressed={mutedNow}
+          aria-label={mutedNow ? '소리 켜기' : '소리 끄기'}
+          title={mutedNow ? '소리 켜기' : '소리 끄기'}
+        >
+          {mutedNow ? '🔇' : '🔊'}
         </button>
         <div className="match-clock">
           <span>{clockOf(state.tick, half)}</span>

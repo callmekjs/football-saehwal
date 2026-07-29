@@ -1208,6 +1208,38 @@ button {
 .result-verdict { color: var(--accent); font-size: 22px; }
 .side-note.result.failed .result-verdict { color: var(--away); }
 
+/* ── 음소거 ─────────────────────────────────────────────── */
+
+/*
+ * 소리를 끄는 방법이 눈에 보여야 한다. 갑자기 소리가 나면 끄는 법을
+ * 찾다가 탭을 닫는 사람이 있다.
+ */
+.match-mute {
+  display: grid;
+  place-items: center;
+  /* 손가락 표적 */
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  opacity: 0.75;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.match-mute:hover,
+.match-mute:focus-visible {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* 꺼져 있으면 한눈에 보이게 흐린다 */
+.match-mute[aria-pressed='true'] { opacity: 0.42; }
+
 /* ── 국면 카드의 전반·후반 선택 ─────────────────────────── */
 
 .fx-halves {

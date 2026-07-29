@@ -671,7 +671,8 @@ export function drawPitch(
     ctx.font = `500 ${Math.round(h * 0.11)}px system-ui, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(c.side === 'HOME' ? '골!' : '실점', w / 2, h * 0.42)
+    // 사용자가 정한 말이다 — "득점, 실점 글자 나오게 하고"
+    ctx.fillText(c.side === 'HOME' ? '득점' : '실점', w / 2, h * 0.42)
     ctx.font = `400 ${Math.round(h * 0.045)}px system-ui, sans-serif`
     ctx.fillStyle = 'rgba(255,255,255,0.85)'
     ctx.fillText(c.side === 'HOME' ? '우리 팀이 넣었다' : '상대가 넣었다', w / 2, h * 0.56)

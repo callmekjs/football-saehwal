@@ -3,6 +3,7 @@ import { drawPitch } from '../render/pitch'
 import { VisualMatch } from '../render/visual'
 import { TOTAL_TICKS } from '../sim/constants'
 import { endLabel, type Half } from '../matchClock'
+import { whistle } from './sound'
 import type { MatchState } from '../sim/types'
 
 /** 시뮬 한 틱이 연출에서 차지하는 시간. 엔진은 100ms 마다 한 번 돈다 */
@@ -75,6 +76,14 @@ export function Pitch({
     let vmTime = 0
     /** 마지막으로 알린 점수. 바뀔 때만 알려야 매 프레임 다시 그리지 않는다 */
     let told = ''
+    /**
+     * 직전 프레임의 재개 종류. 공이 밖으로 나간 순간에 휘슬을 불려면
+     * **없다가 생긴 순간**을 잡아야 한다.
+     *
+     * 프리킥은 여기서 불지 않는다 — 반칙은 시뮬 기록에서 이미 불었고,
+     * 여기서 또 불면 한 번에 두 번 울린다.
+     */
+    let lastRestart: string | null = null
 
     const render = () => {
       const st = stateRef.current
@@ -111,6 +120,19 @@ export function Pitch({
         // 그래도 못 따라잡을 만큼 밀렸으면 포기하고 시각을 맞춘다.
         // 뒤처진 채로 두면 교체와 골 장면이 몇 십 초씩 늦게 나온다
         if (target - vmTime > MAX_LAG) vmTime = target - MAX_LAG
+      }
+
+      /**
+       * 공이 밖으로 나갔다 — 아웃 휘슬.
+       *
+       * 사용자가 요청했다. 실제 축구에서 스로인마다 휘슬이 울리지는
+       * 않지만 사용자가 넣으라고 정했다. 대신 **짧고 작게** 분다 —
+       * 아웃은 한 판에 수십 번이라 같은 세기로 울리면 금방 거슬린다.
+       */
+      const nowRestart = vm.restart ? vm.restart.kind : null
+      if (nowRestart !== lastRestart) {
+        if (nowRestart && nowRestart !== 'FREE_KICK') whistle(1, true)
+        lastRestart = nowRestart
       }
 
       // 골 장면이 나온 순간(그리고 종료 휘슬에서) 점수판이 따라 오른다
