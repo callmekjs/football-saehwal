@@ -92,7 +92,9 @@ export function useVoice(onFinal: (text: string) => string): VoiceHandle {
 
   const press = useCallback(() => {
     const Ctor = ctorOf()
-    if (!Ctor || activeRef.current) return
+    // 한 번 거절당하면 다시 묻지 않는다. 누를 때마다 권한 창이 뜨는 것이
+    // 거절한 사람에게는 고장으로 보인다
+    if (!Ctor || activeRef.current || deniedRef.current) return
 
     const rec = new Ctor()
     rec.lang = 'ko-KR'
@@ -153,8 +155,14 @@ export function useVoice(onFinal: (text: string) => string): VoiceHandle {
 
   const release = useCallback(() => {
     if (!activeRef.current) return
-    // stop() 은 마지막 결과를 마저 돌려준다. abort() 는 버린다
-    recRef.current?.stop()
+    try {
+      // stop() 은 마지막 결과를 마저 돌려준다. abort() 는 버린다
+      recRef.current?.stop()
+    } catch {
+      // 아직 시작하지도 않았는데 손을 뗀 경우. 접으면 그만이다
+      activeRef.current = false
+      recRef.current = null
+    }
     setListening(false)
   }, [])
 
