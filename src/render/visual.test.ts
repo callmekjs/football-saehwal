@@ -102,7 +102,15 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
  * 세 판으로 거리별로 나누면 한 칸에 두세 개가 남아 통계가 되지 않는다.
  * 여섯 판이면 슛만 서른 번 가까이 모인다.
  */
-const SEEDS = [0, 1, 2, 3, 4, 5].map((i) => P.seed + i)
+/**
+ * **여섯 판에서 열두 판으로 늘렸다.**
+ *
+ * 여기 걸린 지표 중 몇 개는 여섯 판에서 경계가 너무 얇았다. 예를 들어
+ * "공을 가지면 수비라인이 올라간다"의 실측 차이가 0.57미터였다 — 연출을
+ * 어느 방향으로 손대든 동전 던지기로 뒤집히는 폭이다. 그러면 검사가
+ * 축구 원칙을 지키는 것이 아니라 특정 시드의 지문을 지키게 된다.
+ */
+const SEEDS = Array.from({ length: 12 }, (_, i) => P.seed + i)
 const MULTI = SEEDS.map((seed) => watch({ ...P, seed }).frames)
 
 /**
@@ -112,7 +120,7 @@ const MULTI = SEEDS.map((seed) => watch({ ...P, seed }).frames)
  * 한 번의 차이로 판정이 뒤집혀, 밸런싱과 무관한 변경에도 테스트가 깨진다.
  * 이 서른여섯 판은 그런 사건에만 쓴다.
  */
-const WIDE = Array.from({ length: 36 }, (_, i) => watch({ ...P, seed: P.seed + 500 + i * 13 }).frames)
+const WIDE = Array.from({ length: 72 }, (_, i) => watch({ ...P, seed: P.seed + 500 + i * 13 }).frames)
 
 describe('공과 선수의 연결 — 출시 기준', () => {
   const { frames } = watch()
@@ -329,8 +337,11 @@ describe('선수 움직임 — 출시 기준', () => {
     // 발밑에서 뺏는 순간에는 공을 태클한 선수 발끝에 붙인다. 그 거리는
     // 태클이 닿는 거리 + 발끝 거리를 넘을 수 없다
     expect(worst, `여섯 판 최대 이동 ${worst.toFixed(1)}m`).toBeLessThan(7)
-    // 그런 순간조차 한 판에 두세 번을 넘으면 화면에서는 튀는 것으로 보인다
-    expect(big, `여섯 판 동안 3m 넘게 튄 횟수 ${big}`).toBeLessThan(20)
+    // 그런 순간조차 한 판에 두세 번을 넘으면 화면에서는 튀는 것으로 보인다.
+    // **판 수로 나눠서 잰다** — 절대 횟수로 두면 표본을 늘리는 것만으로
+    // 기준이 깨져, 검사를 더 튼튼하게 만들 수가 없다
+    const perMatch = big / MULTI.length
+    expect(perMatch, `판당 3m 넘게 튄 횟수 ${perMatch.toFixed(2)}`).toBeLessThan(3.34)
   })
 
   it('점수판이 올라가면 반드시 골 장면이 나온다', () => {
@@ -1868,15 +1879,16 @@ describe('개별 지시가 화면에서 보인다', () => {
   const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length
 
   /**
-   * 지시 효과는 **세 판을 합쳐서** 잰다.
+   * 지시 효과는 **여덟 판을 합쳐서** 잰다.
    *
    * 화면 연출은 서로 얽힌 스물두 명의 움직임이라, 한 명을 늦추면 그 판의
    * 전개 자체가 달라진다. 한 판만 재면 그 판이 어떻게 흘렀는지를 재는
    * 셈이 되어, 지시가 실제로 보이는지와 무관하게 값이 뒤집힌다. 실제로
    * "물러서라"는 한 판 기준으로 지시 전 47m·지시 후 49m 였지만, 열두 판
-   * 평균은 57.9m → 48.3m 였다.
+   * 평균은 57.9m → 48.3m 였다. 세 판도 모자랐다 — 지시와 무관한 연출
+   * 변경만으로 "나머지 평균 속도"가 9%씩 흔들렸다.
    */
-  const ORDER_SEEDS = [P.seed, P.seed + 1, P.seed + 2]
+  const ORDER_SEEDS = Array.from({ length: 8 }, (_, i) => P.seed + i)
   function trackAcross(orders: Array<[string, PlayerOrder]>, num: number) {
     const xs: number[] = []
     const vs: number[] = []

@@ -117,6 +117,21 @@ const FOUL_RATE = 0.11
  */
 const FOUL_MUTE = 1.5
 /**
+ * 상대의 반칙이 나오는 최소 x(우리 골문 0 → 상대 골문 105).
+ *
+ * 우리 진영 깊은 곳에서는 상대가 우리를 반칙하지 않는다. 실제 축구에서
+ * 그 자리의 반칙은 **막는 쪽**이 범하는 것이고, 그건 우리 반칙이라 시뮬이
+ * 이미 세고 있다.
+ */
+const FOUL_ZONE = 38
+/**
+ * 빗나간 패스가 마크하던 수비수에게서 이만큼 **앞에** 떨어진다(미터).
+ *
+ * 발밑에 꽂으면 실수가 아니라 상대에게 건넨 패스로 보인다. 수비수가
+ * 앞으로 나와 끊는 거리를 남긴다.
+ */
+const MISS_CUT_GAP = 3.4
+/**
  * 반칙한 상대 선수가 경고를 받는 비율.
  *
  * 실제 축구에서 반칙 열 번에 경고 한두 번이다. **상대에게 퇴장은 주지
@@ -2626,8 +2641,24 @@ export class VisualMatch {
         return !m || dist(o, to) < dist(m, to) ? o : m
       }, null)
       if (toMarker && marker) {
-        tx = clamp(marker.x + Math.cos(ang) * 1.2, -6, PITCH_W + 6)
-        ty = clamp(marker.y + Math.sin(ang) * 1.2, -6, PITCH_H + 6)
+        /**
+         * **수비수 발밑에 꽂지 않는다.**
+         *
+         * 사용자가 지적했다 — *"간혹 다른 편인데 패스를 하는경우도 있어."*
+         * 패스 목표를 고르는 모든 경로는 같은 편만 고르므로 의도한 오패스는
+         * 없다. 사용자가 본 것은 **빗나간 패스**다. 전에는 빗나간 패스의
+         * 72%가 마크하던 수비수의 1.2미터 안으로 날아갔다. 초속 20미터로
+         * 날아간 공이 가만히 선 상대의 발에 정확히 닿으면 그건 실수가
+         * 아니라 상대에게 건넨 패스로 보인다. 실측 판당 4.5회였다.
+         *
+         * 이제 수비수와 찬 선수 **사이**에 떨어진다. 수비수가 앞으로 나와
+         * 끊어야 잡는 자리다 — 그것이 실제 축구의 인터셉트다.
+         */
+        const bx = marker.x - holder.x
+        const by = marker.y - holder.y
+        const bd = Math.hypot(bx, by) || 1
+        tx = clamp(marker.x - (bx / bd) * MISS_CUT_GAP + Math.cos(ang) * 1.2, -6, PITCH_W + 6)
+        ty = clamp(marker.y - (by / bd) * MISS_CUT_GAP + Math.sin(ang) * 1.2, -6, PITCH_H + 6)
       } else {
         tx = clamp(tx + Math.cos(ang) * off, -6, PITCH_W + 6)
         ty = clamp(ty + Math.sin(ang) * off, -6, PITCH_H + 6)
@@ -2656,8 +2687,14 @@ export class VisualMatch {
   private shotWant(p: VPlayer, nearest: number): number {
     const gx = this.goalX(p.side)
     const gd = Math.hypot(gx - p.x, GOAL_MID - p.y)
-    // 각이 닫혀 있으면 못 쏜다. 골라인 옆 코너에서 때리는 것은 축구가 아니다
-    if (Math.abs(p.y - GOAL_MID) > 7 + gd * 0.7) return 0
+    /**
+     * 각이 닫혀 있으면 못 쏜다. 골라인 옆 코너에서 때리는 것은 축구가
+     * 아니다. 다만 **골대 가까이에서는 좁은 각도 쏜다** — 실제 축구에서
+     * 페널티 지역 안이면 옆으로 치우쳐도 때린다. 전에는 이 선이 너무
+     * 좁아, 박스 안 판단 스물둘 중 여섯이 "각이 없어 패스"로 빠졌다
+     * (박스 안 슛 비율 0.73, 기준 0.75).
+     */
+    if (Math.abs(p.y - GOAL_MID) > 9 + gd * 0.8) return 0
     let want = gd <= 16.5
       ? clamp(1.04 - gd * 0.005, 0.94, 0.98)
       : clamp(0.94 - (gd - 16.5) * 0.1, 0, 0.94)
@@ -2720,6 +2757,21 @@ export class VisualMatch {
         if (this.readyToScore(q.side, q.willScore)) {
           this.pending.shift()
           this.shoot(holder, q.willScore)
+          return
+        }
+        /**
+         * 전개가 덜 찼는데 **이미 박스 안**이면 공을 지킨다.
+         *
+         * 여기서 평범한 판단으로 내려가면 골대 앞에서 옆으로 내주게 된다.
+         * 실측으로 박스 안 판단 스물둘 중 여섯이 그런 패스였다(슛 비율
+         * 0.73, 기준 0.75). 실제 축구의 공격수는 그 자리에서 뒤로 빼지
+         * 않고 등지고 버티며 동료가 올라오기를 기다린다. 몇 프레임 뒤에
+         * 전개가 차면 그대로 때린다 — 압박을 받으면 그동안 뺏길 수 있고,
+         * 그것도 축구다.
+         */
+        const back: 'HOME' | 'AWAY' = holder.side === 'HOME' ? 'AWAY' : 'HOME'
+        if (this.inBoxOf(back, holder.x)) {
+          this.decideIn = 0.25
           return
         }
       } else {
@@ -2800,6 +2852,8 @@ export class VisualMatch {
     if (
       holder.side === 'HOME' &&
       taker &&
+      // 상대 수비수는 자기 공격 진영에서 우리를 붙잡지 않는다
+      holder.x > FOUL_ZONE &&
       nearest < FOUL_RANGE &&
       this.rng.next() < dt * FOUL_RATE &&
       this.tackleFoul(taker, holder)
