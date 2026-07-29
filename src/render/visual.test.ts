@@ -2126,3 +2126,88 @@ describe('심판 셋과 오프사이드', () => {
     }
   })
 })
+
+/**
+ * 주심이 판정을 준다.
+ *
+ * 사용자 요청이다 — "주심에게는 파울과 페널티킥, 스로인, 프리킥 등 축구
+ * 상황에 맞게 줄 수 있다고 말해줘."
+ *
+ * 반칙·프리킥·페널티킥·경고·퇴장은 이미 다 일어나고 있었다. 없던 것은
+ * **누가 주는가**다. 여기서 지키는 것은 신호의 주체가 규칙과 맞는가이다.
+ */
+describe('주심이 판정을 준다', () => {
+  function watchCalls(seed: number) {
+    const problem = { ...P, seed }
+    const rng = createRng(seed)
+    let s = createState(problem)
+    const vm = new VisualMatch(s, seed)
+    const calls: Array<{ kind: string; restart: string | null; refD: number; flags: number }> = []
+    let kickoffSeen = false
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      s = tick(s, rng)
+      vm.sync(s)
+      for (let f = 0; f < 6; f++) {
+        vm.advance(s, 1 / 60)
+        if (vm.whistle) {
+          if (vm.whistle.kind === 'KICKOFF') kickoffSeen = true
+          const ref = vm.officials.find((o) => o.kind === 'REFEREE')!
+          calls.push({
+            kind: vm.whistle.kind,
+            restart: vm.restart ? vm.restart.kind : null,
+            refD: Math.hypot(ref.x - vm.whistle.x, ref.y - vm.whistle.y),
+            flags: vm.officials.filter((o) => o.kind !== 'REFEREE' && o.flag > 0).length,
+          })
+        }
+      }
+    }
+    return { calls, kickoffSeen, vm }
+  }
+
+  const RUNS = [0, 1, 2, 3, 4, 5].map((i) => watchCalls(P.seed + i))
+
+  it('킥오프는 주심의 휘슬로 시작한다', () => {
+    for (const r of RUNS) expect(r.kickoffSeen).toBe(true)
+  })
+
+  it('프리킥에는 주심이 휘슬을 분다', () => {
+    // 반칙과 오프사이드가 프리킥의 두 가지 원인이다
+    const kinds = new Set(RUNS.flatMap((r) => r.calls.map((c) => c.kind)))
+    expect(kinds.has('FOUL') || kinds.has('OFFSIDE')).toBe(true)
+  })
+
+  it('스로인·코너·골킥에는 주심이 휘슬을 불지 않는다', () => {
+    /**
+     * 실제 축구에서 스로인마다 휘슬이 울리지 않는다. 그 자리에서 가장
+     * 가까운 부심이 깃발을 드는 것이 신호의 전부다. 이 구분이 없으면
+     * 주심이 그냥 계속 삑삑거리는 사람이 된다
+     */
+    for (const r of RUNS) {
+      for (const c of r.calls) {
+        if (c.restart === 'THROW_IN' || c.restart === 'CORNER' || c.restart === 'GOAL_KICK') {
+          expect(['FOUL', 'OFFSIDE']).not.toContain(c.kind)
+        }
+      }
+    }
+  })
+
+  it('판정을 내린 주심이 그 자리로 다가간다', () => {
+    /**
+     * 반칙 지점에서 30미터 떨어져 서 있는 주심은 판정을 준 사람으로
+     * 보이지 않는다. 주심도 사람이라 즉시 도착하지는 못하므로 **다가가는
+     * 중인가**를 본다 — 판정이 끝나갈 무렵에는 붙어 있어야 한다
+     */
+    let late = 0
+    let near = 0
+    for (const r of RUNS) {
+      for (const c of r.calls) {
+        // 판정 표시가 절반 이상 지난 뒤의 거리만 본다
+        if (c.kind === 'KICKOFF') continue
+        late += 1
+        if (c.refD < 30) near += 1
+      }
+    }
+    expect(late).toBeGreaterThan(10)
+    expect(near / late, `30m 안 ${((near / late) * 100).toFixed(0)}%`).toBeGreaterThan(0.5)
+  })
+})

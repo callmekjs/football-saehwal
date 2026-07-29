@@ -6,6 +6,7 @@ import {
   type Downed,
   type Leaving,
   type Official,
+  type Whistle,
   type VisualMatch,
   type VPlayer,
 } from './visual'
@@ -437,6 +438,7 @@ function drawOfficial(
   r: number,
   X: (v: number) => number,
   Y: (v: number) => number,
+  whistle: Whistle | null,
 ) {
   const cx = X(o.x)
   const cy = Y(o.y)
@@ -453,7 +455,34 @@ function drawOfficial(
   ctx.stroke()
   ctx.restore()
 
-  if (o.kind === 'REFEREE') return
+  if (o.kind === 'REFEREE') {
+    // 판정 중인 주심은 팔을 든다. 카드면 손에 카드가 들려 있다
+    if (whistle) {
+      ctx.save()
+      const k = Math.min(1, whistle.life / 1.2)
+      ctx.globalAlpha = k
+      // 든 팔
+      ctx.strokeStyle = COLORS.officialTrim
+      ctx.lineWidth = Math.max(1.2, rr * 0.3)
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(cx + rr * 1.1, cy - rr * 1.9)
+      ctx.stroke()
+      if (whistle.kind === 'CARD') {
+        drawCard(ctx, cx + rr * 1.3, cy - rr * 2.6, rr * 1.7, whistle.red)
+      } else {
+        // 휘슬이 울린 표시 — 주심에서 퍼지는 고리
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 2
+        ctx.globalAlpha = k * 0.75
+        ctx.beginPath()
+        ctx.arc(cx, cy, rr * (1.8 + (1 - k) * 3), 0, Math.PI * 2)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+    return
+  }
 
   // 깃발 — 위쪽 부심은 위로, 아래쪽 부심은 아래로 든다.
   // 각자 자기 터치라인 바깥쪽이라 경기장 안을 가리지 않는다
@@ -516,7 +545,7 @@ export function drawPitch(
   // 심판을 선수보다 먼저 그린다. 겹치면 선수가 위로 지나가야 한다 —
   // 심판이 선수를 가리면 그 순간 화면의 주인공이 바뀐다
   for (const o of vm.officials) {
-    drawOfficial(ctx, o, r, X, Y)
+    drawOfficial(ctx, o, r, X, Y, vm.whistle)
   }
 
   // 쓰러진 선수와 나가는 선수를 먼저 그린다. 뛰는 선수가 그 위를 지나간다

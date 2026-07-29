@@ -295,6 +295,16 @@ const OFFSIDE_MUTE = 1.4
 /** 깃발을 들고 있는 시간(초) */
 const FLAG_LIFT = 1.8
 
+/**
+ * 판정 표시가 화면에 남는 시간(초).
+ *
+ * 이 화면은 15분을 75초로 압축하므로 실제 축구의 몇 초가 여기서는
+ * 0.5초 안쪽이다. 너무 짧으면 눈에 안 들어오고, 길면 다음 판정과 겹친다.
+ */
+const WHISTLE_SHOW = 1.2
+/** 카드는 조금 더 오래 든다. 주심이 선수 앞까지 가서 들어 올린다 */
+const CARD_SHOW = 2.2
+
 /** 페널티 지역 깊이(미터). 골라인에서 16.5m 가 규격이다 */
 const PENALTY_DEPTH = 16.5
 
@@ -528,6 +538,31 @@ export interface Official {
  * 않는다. 경기 결과를 바꾸는 판정이 아니라 **공이 다시 놓이는 자리**를
  * 정할 뿐이다.
  */
+/**
+ * 주심이 방금 내린 판정.
+ *
+ * 사용자 요청이다 — *"주심에게는 파울과 페널티킥, 스로인, 프리킥 등 축구
+ * 상황에 맞게 줄 수 있다고 말해줘."*
+ *
+ * 반칙·프리킥·페널티킥·경고·퇴장은 **이미 다 일어나고 있었다.** 없던 것은
+ * 그것을 **누가 주는가**였다. 공이 저절로 놓이고 카드가 저절로 붙으면
+ * 심판은 화면에 서 있는 장식이다. 이제 주심이 판정 지점으로 달려가고
+ * 카드는 주심이 손에 들어 올린다.
+ *
+ * **누가 신호하는지는 규칙이 정한다.** 주심이 휘슬을 부는 것은 반칙·
+ * 페널티킥·오프사이드·킥오프다. 스로인·코너킥·골킥은 휘슬 없이 **부심이
+ * 깃발로 방향을 가리킨다** — 실제 축구에서 스로인마다 휘슬이 울리지
+ * 않는다. 이 구분이 없으면 심판이 그냥 계속 삑삑거리는 사람이 된다.
+ */
+export interface Whistle {
+  kind: 'FOUL' | 'PENALTY' | 'OFFSIDE' | 'CARD' | 'KICKOFF'
+  x: number
+  y: number
+  /** 카드 판정일 때 빨간 카드인가 */
+  red: boolean
+  life: number
+}
+
 export interface OffsideCall {
   x: number
   y: number
@@ -598,6 +633,8 @@ export class VisualMatch {
   ]
   /** 방금 분 오프사이드. 없으면 null */
   offside: OffsideCall | null = null
+  /** 주심이 방금 내린 판정. 이 동안 주심이 그 자리로 간다 */
+  whistle: Whistle | null = null
   /** 부상·퇴장으로 빠졌지만 아직 화면에 쓰러져 있는 선수 */
   downed: Downed[] = []
   /** 교체로 걸어 나가는 중인 선수 */
@@ -874,6 +911,15 @@ export class VisualMatch {
     this.lastLineup = this.lineupOf(state).join(',')
   }
 
+  /** 시뮬 선수 id 로 화면 선수를 찾는다. 명단에 없으면 undefined */
+  private numOf(simId: string): VPlayer | undefined {
+    try {
+      return this.byId(`H${getPlayer(simId).num}`)
+    } catch {
+      return undefined
+    }
+  }
+
   private byId(id: string | null): VPlayer | undefined {
     return id ? this.players.find((p) => p.id === id) : undefined
   }
@@ -1138,6 +1184,23 @@ export class VisualMatch {
       if (e.kind === 'SUB' && e.detail) {
         this.beginSub(e.detail, e.target)
         continue
+      }
+      /**
+       * 카드는 주심이 든다.
+       *
+       * 전에는 경고가 선수 원 옆에 배지로 **저절로** 붙었다. 배지는
+       * "이 선수는 경고를 안고 있다"는 상태 표시로 계속 필요하지만,
+       * 카드가 나오는 **그 순간**에 아무도 그것을 주지 않으면 심판이
+       * 판정하는 사람으로 안 보인다. 주심이 그 자리로 가서 손에 든다.
+       */
+      if (e.kind === 'CARD' || e.kind === 'SEND_OFF') {
+        const who = e.target ? this.numOf(e.target) : undefined
+        if (who) this.blowWhistle('CARD', who.x, who.y, e.kind === 'SEND_OFF')
+      }
+      // 페널티킥도 주심이 준다. 지점을 가리키는 것이 판정 그 자체다
+      if (e.kind === 'PENALTY') {
+        const spot = this.ownGoalX('HOME')
+        this.blowWhistle('PENALTY', spot + (spot === 0 ? 11 : -11), GOAL_MID)
       }
       if ((e.kind !== 'INJURY' && e.kind !== 'SEND_OFF') || !e.target) continue
       let v: VPlayer | undefined
@@ -1581,6 +1644,8 @@ export class VisualMatch {
     // 킥오프 직후 첫 패스에는 깃발이 올라가지 않는다. 전원이 자기 진영에
     // 있어 애초에 성립하지 않지만, 배후로 찔러 넣는 첫 공에는 걸릴 수 있다
     this.offsideMute = OFFSIDE_MUTE
+    // 킥오프는 주심의 휘슬로 시작한다
+    this.blowWhistle('KICKOFF', PITCH_W / 2, PITCH_H / 2)
     for (const p of this.players) {
       p.x = p.homeX
       p.y = p.homeY
@@ -1698,6 +1763,18 @@ export class VisualMatch {
     this.restart = { kind, side, x: px, y: py, wait: 0.35, takerId: taker?.id ?? null, age: 0 }
     // 재개에서 직접 받는 공은 오프사이드가 아니다. 규칙이다
     this.offsideMute = OFFSIDE_MUTE
+    /**
+     * 누가 신호하는가.
+     *
+     * 프리킥은 주심의 휘슬이고, 스로인·코너·골킥은 부심의 깃발이다.
+     * 오프사이드 프리킥은 `settleFlag` 가 이미 자기 휘슬을 불었으므로
+     * 여기서 반칙으로 덮어쓰지 않는다.
+     */
+    if (kind === 'FREE_KICK') {
+      if (this.whistle?.kind !== 'OFFSIDE') this.blowWhistle('FOUL', px, py)
+    } else {
+      this.flagRestart(px)
+    }
   }
 
   /**
@@ -1942,9 +2019,26 @@ export class VisualMatch {
          * 쪽을 지킨다.
          */
         const mid = PITCH_H / 2
-        const away = b.y < mid - REF_SWITCH ? 1 : b.y > mid + REF_SWITCH ? -1 : o.y >= mid ? 1 : -1
-        tx = clamp(b.x - REF_TRAIL, 5, PITCH_W - 5)
-        ty = clamp(b.y + away * REF_STANDOFF, 5, PITCH_H - 5)
+        const w = this.whistle
+        if (w) {
+          /**
+           * 판정을 내렸으면 **그 자리로 간다.**
+           *
+           * 반칙 지점에서 30미터 떨어져 서 있는 주심은 판정을 준 사람으로
+           * 보이지 않는다. 카드는 선수 코앞까지 가서 들고, 나머지는 몇
+           * 걸음 떨어져 벽과 거리를 관리한다.
+           */
+          const near = w.kind === 'CARD' ? 2.4 : 7
+          const dx = o.x - w.x
+          const dy = o.y - w.y
+          const d = Math.hypot(dx, dy) || 1
+          tx = clamp(w.x + (dx / d) * near, 3, PITCH_W - 3)
+          ty = clamp(w.y + (dy / d) * near, 3, PITCH_H - 3)
+        } else {
+          const away = b.y < mid - REF_SWITCH ? 1 : b.y > mid + REF_SWITCH ? -1 : o.y >= mid ? 1 : -1
+          tx = clamp(b.x - REF_TRAIL, 5, PITCH_W - 5)
+          ty = clamp(b.y + away * REF_STANDOFF, 5, PITCH_H - 5)
+        }
         top = REF_SPEED
       } else {
         // 부심은 자기 절반의 터치라인 밖에서 옆걸음만 한다.
@@ -1969,6 +2063,10 @@ export class VisualMatch {
     if (this.offside) {
       this.offside.life -= step
       if (this.offside.life <= 0) this.offside = null
+    }
+    if (this.whistle) {
+      this.whistle.life -= step
+      if (this.whistle.life <= 0) this.whistle = null
     }
     if (this.offsideMute > 0) this.offsideMute -= step
   }
@@ -2018,6 +2116,34 @@ export class VisualMatch {
   }
 
   /**
+   * 주심이 휘슬을 분다.
+   *
+   * 화면에 표시만 하는 것이 아니라 **주심을 그 자리로 보낸다.** 반칙이
+   * 난 곳에서 30미터 떨어져 서 있는 주심은 판정을 준 사람으로 안 보인다.
+   */
+  private blowWhistle(kind: Whistle['kind'], x: number, y: number, red = false) {
+    this.whistle = {
+      kind,
+      x: clamp(x, 2, PITCH_W - 2),
+      y: clamp(y, 2, PITCH_H - 2),
+      red,
+      life: kind === 'CARD' ? CARD_SHOW : WHISTLE_SHOW,
+    }
+  }
+
+  /**
+   * 부심이 깃발로 방향을 가리킨다.
+   *
+   * 스로인·코너킥·골킥은 주심이 휘슬을 불지 않는다. 그 자리에서 가장
+   * 가까운 부심이 깃발을 드는 것이 신호의 전부다. 실제 축구가 그렇다.
+   */
+  private flagRestart(x: number) {
+    const by: Official['kind'] = x <= PITCH_W / 2 ? 'AR_TOP' : 'AR_BOTTOM'
+    const ar = this.officials.find((o) => o.kind === by)
+    if (ar) ar.flag = FLAG_LIFT
+  }
+
+  /**
    * 깃발을 든다. 아직 휘슬은 불지 않는다.
    *
    * 이 순간 경기는 계속 흐른다. 부심의 깃발이 올라가 있고 공은 오프사이드
@@ -2054,6 +2180,7 @@ export class VisualMatch {
     const py = clamp(this.ball.y, 3, PITCH_H - 3)
     this.offside = { x: px, y: py, by: f.by, life: FLAG_LIFT }
     this.offsideCount += 1
+    this.blowWhistle('OFFSIDE', px, py)
     const defending: 'HOME' | 'AWAY' = f.against === 'HOME' ? 'AWAY' : 'HOME'
     this.beginRestart('FREE_KICK', defending, px, py)
     this.offsideMute = OFFSIDE_MUTE
