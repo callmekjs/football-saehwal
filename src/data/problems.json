@@ -4,8 +4,6 @@
     "title": "길이 막혔다",
     "summary": "0-1로 지고 있다. 상대는 골문 앞에 사람을 모았다",
     "order": 2,
-    "half": 1,
-    "kickoff": 32,
     "score": [
       0,
       1
@@ -78,8 +76,6 @@
     "title": "잠긴 문",
     "summary": "1-0으로 이기고 있다. 앞 감독이 전부 잠가놓았다",
     "order": 1,
-    "half": 2,
-    "kickoff": 76,
     "score": [
       1,
       0
@@ -155,8 +151,6 @@
     "title": "경고가 쌓였다",
     "summary": "1-0으로 앞서지만 경고를 안고 강압박 중이다",
     "order": 3,
-    "half": 2,
-    "kickoff": 78,
     "score": [
       1,
       0
@@ -234,8 +228,6 @@
     "title": "한 명이 없다",
     "summary": "1-0으로 이기는데 한 명이 퇴장당했다",
     "order": 4,
-    "half": 2,
-    "kickoff": 80,
     "score": [
       1,
       0
@@ -314,8 +306,6 @@
     "title": "한 명이 많다",
     "summary": "0-1로 지고 있는데 상대가 한 명 퇴장당했다",
     "order": 5,
-    "half": 1,
-    "kickoff": 34,
     "score": [
       0,
       1

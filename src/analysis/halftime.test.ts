@@ -9,7 +9,11 @@ import { toProblem } from '../sim/problems'
 import type { MatchState, Problem } from '../sim/types'
 
 const PROBLEMS = raw.map(toProblem).sort((a, b) => a.order - b.order)
-const FIRST_HALF = PROBLEMS.filter((p) => p.half === 1)
+/**
+ * 모든 국면이 전반판을 갖는다. 플레이어가 반을 고르므로 국면 데이터에
+ * 반이 적혀 있지 않다 — 전부 전반으로 뛸 수 있다.
+ */
+const FIRST_HALF = PROBLEMS
 
 /** 한 국면을 끝까지 돌려 하프타임 상태를 만든다 */
 function playOut(problem: Problem): MatchState {
@@ -61,7 +65,12 @@ describe('하프타임 주장 정리', () => {
         expect(shots.text).toContain(`상대 ${s.stats.awayShot}`)
       }
       const sp = h.lines.find((l) => l.id === 'setpiece')
-      if (sp) expect(sp.text).toContain(String(s.stats.setPiece))
+      if (sp) {
+        expect(sp.text).toContain(String(s.stats.setPiece))
+        // 실제 코너킥 수가 아니므로 "번"이라고 세지 않는다.
+        // 22분에 29가 나오는 값이라 "29번 내줬습니다"는 축구가 아니다
+        expect(sp.text).not.toContain('번')
+      }
       const subs = h.lines.find((l) => l.id === 'subs')
       expect(subs).toBeDefined()
       if (s.subsLeft > 0) expect(subs!.text).toContain(String(s.subsLeft))

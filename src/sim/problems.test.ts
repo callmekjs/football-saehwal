@@ -21,42 +21,18 @@ describe('국면 데이터의 계약', () => {
   it('국면마다 화면이 필요로 하는 값이 데이터 안에 다 있다', () => {
     for (const p of PROBLEMS) {
       expect(p.summary, `${p.id} 의 한 줄 요약`).toBeTruthy()
-      expect(typeof p.kickoff, `${p.id} 의 시작 분`).toBe('number')
     }
   })
 
-  it('국면마다 전반인지 후반인지 적혀 있다', () => {
+  it('시작 분과 반은 국면 데이터에 없다', () => {
+    /**
+     * 모든 국면이 전반판과 후반판을 함께 가지고 플레이어가 고른다.
+     * 같은 국면이 두 개의 시작 분을 가지므로 데이터에 적을 수 없다 —
+     * 시각은 `src/matchClock.ts` 가 고른 반으로 정한다
+     */
     for (const p of PROBLEMS) {
-      expect([1, 2], `${p.id} 의 반`).toContain(p.half)
-    }
-  })
-
-  it('전반도 후반도 있다', () => {
-    // 급수 타임은 전반에도 후반에도 있다. 한쪽만 있으면 반을 나눈 의미가 없다
-    const halves = new Set(PROBLEMS.map((p) => p.half))
-    expect(halves.has(1), '전반 국면').toBe(true)
-    expect(halves.has(2), '후반 국면').toBe(true)
-  })
-
-  it('각 반은 정규 시간을 채우고 추가시간까지 뛰고 끝난다', () => {
-    for (const p of PROBLEMS) {
-      // 15분 구간이므로 끝나는 시각은 kickoff + 15 다.
-      const ends = p.kickoff! + 15
-      // 전반은 45분, 후반은 90분이 정규 시간이다
-      const regulation = p.half === 1 ? 45 : 90
-      const added = ends - regulation
-      // 정규 시간 전에 끝나는 반은 없다. 추가시간 0분도 없다
-      expect(added, `${p.id} 의 추가시간`).toBeGreaterThanOrEqual(1)
-      // 주심이 주는 추가시간의 현실적 상한. 이보다 길면 잘못 적은 것이다
-      expect(added, `${p.id} 의 추가시간`).toBeLessThanOrEqual(5)
-    }
-  })
-
-  it('전반 국면이 후반 시각으로 새지 않는다', () => {
-    // 전반 국면인데 시작 분이 60분대면 데이터를 잘못 적은 것이다
-    for (const p of PROBLEMS) {
-      if (p.half === 1) expect(p.kickoff!, `${p.id} 전반 시작 분`).toBeLessThan(45)
-      else expect(p.kickoff!, `${p.id} 후반 시작 분`).toBeGreaterThanOrEqual(45)
+      expect(p, `${p.id}`).not.toHaveProperty('kickoff')
+      expect(p, `${p.id}`).not.toHaveProperty('half')
     }
   })
 

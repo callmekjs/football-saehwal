@@ -13,13 +13,14 @@ import { applyCommand, parseCommand } from './voice'
 import { scoreboardScore } from './scoreboard'
 import {
   addedTimeOf,
+  breakLabel,
   clockOf,
   endLabel,
   inAddedTime,
-  kickoffLabel,
+  kickoffMinute,
   minuteAt,
   type Half,
-} from './matchClock'
+} from '../matchClock'
 import { commentaryFor } from './commentary'
 import {
   BREAK_WARN_SECONDS,
@@ -30,9 +31,6 @@ import {
   useBreakClock,
 } from './breakClock'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
-
-// 국면 카드가 쓰던 자리라 그대로 재수출한다
-export { addedTimeOf } from './matchClock'
 
 const LEVER_LABELS = {
   LINE: ['낮음', '보통', '높음'],
@@ -75,17 +73,7 @@ const LEVER_LABELS = {
  * 색이 바뀌지만 색은 셋 중 하나일 뿐이다 — 문장이 같이 바뀌므로 색을
  * 못 보아도 곧 시작한다는 것을 알 수 있다.
  */
-function BreakHead({
-  title,
-  kickoff,
-  half,
-  remaining,
-}: {
-  title: string
-  kickoff: number
-  half: Half
-  remaining: number
-}) {
+function BreakHead({ title, half, remaining }: { title: string; half: Half; remaining: number }) {
   const tone = breakTone(remaining)
   return (
     <>
@@ -94,7 +82,7 @@ function BreakHead({
           급수 타임 · {title}
           <small>
             {tone === 'CALM'
-              ? `${kickoffLabel(kickoff, half)} · 경기 시계 정지`
+              ? `${breakLabel(half)} · 경기 시계 정지`
               : breakMessage(remaining)}
           </small>
         </span>
@@ -328,7 +316,7 @@ function StatBars({ state }: { state: MatchState }) {
   )
 }
 
-function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
+function Log({ state, half }: { state: MatchState; half: Half }) {
   const shown = state.log.filter((e) => e.kind !== 'FOUL').slice(-8).reverse()
   return (
     <section className="panel log-panel">
@@ -338,7 +326,7 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
         {shown.map((e, i) => (
           <div key={`${e.tick}-${i}`} className="log-row">
             <span className="log-min">
-              {Math.floor(minuteAt(e.tick, kickoff))}'
+              {Math.floor(minuteAt(e.tick, half))}'
             </span>
             <span
               style={{
@@ -473,12 +461,13 @@ const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
 
 export function MatchScreen({
   problem,
-  kickoff,
+  half,
   onExit,
   onRetry,
 }: {
   problem: Problem
-  kickoff: number
+  /** 플레이어가 고른 반. 시계·종료 문구·하프타임 정리가 여기서 갈린다 */
+  half: Half
   onExit: () => void
   /**
    * 다시 도전. 없으면 **같은 시작 조건으로** 처음부터 다시 한다.
@@ -489,11 +478,8 @@ export function MatchScreen({
    */
   onRetry?: () => void
 }) {
-  /**
-   * 전반 급수 타임이냐 후반이냐. 시계 기준선·추가시간·종료 문구가
-   * 여기서 갈린다. 국면 데이터에 적혀 있으므로 화면에는 표가 없다.
-   */
-  const half: Half = problem.half ?? 2
+  // 감독 보고서가 쓰는 시각 기준. 고른 반이 정한다
+  const kickoff = kickoffMinute(half)
   const {
     state,
     phase,
@@ -591,9 +577,9 @@ export function MatchScreen({
           ←
         </button>
         <div className="match-clock">
-          <span>{clockOf(state.tick, kickoff)}</span>
-          {inAddedTime(state.tick, kickoff, half) && (
-            <b title={`추가시간 ${addedTimeOf(kickoff, half)}분`}>+{addedTimeOf(kickoff, half)}</b>
+          <span>{clockOf(state.tick, half)}</span>
+          {inAddedTime(state.tick, half) && (
+            <b title={`추가시간 ${addedTimeOf(half)}분`}>+{addedTimeOf(half)}</b>
           )}
         </div>
         <div className="match-score">
@@ -688,7 +674,7 @@ export function MatchScreen({
         <div className="match-col center">
           <div className="pane center-info" data-pane="INFO">
             <StatBars state={state} />
-            <Log state={state} kickoff={kickoff} />
+            <Log state={state} half={half} />
           </div>
 
           <div className="panel pitch-card">
@@ -724,12 +710,7 @@ export function MatchScreen({
                 떠 있다. 같은 말을 여기 다시 적으면 그만큼 주장의 말과
                 경기 재개 버튼이 화면 밖으로 밀려난다. 머리줄 하나로 접었다.
               */}
-              <BreakHead
-                title={problem.title}
-                kickoff={kickoff}
-                half={half}
-                remaining={breakLeft}
-              />
+              <BreakHead title={problem.title} half={half} remaining={breakLeft} />
               <div className="side-note-body">
                 <CaptainBrief briefing={buildBriefing(problem, state)} voice={voice} />
                 <button

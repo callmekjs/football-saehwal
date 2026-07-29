@@ -1205,6 +1205,46 @@ button {
 .result-verdict { color: var(--accent); font-size: 22px; }
 .side-note.result.failed .result-verdict { color: var(--away); }
 
+/* ── 국면 카드의 전반·후반 선택 ─────────────────────────── */
+
+.fx-halves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.fx-half {
+  display: grid;
+  gap: 2px;
+  /* 손가락 표적 최소 44px */
+  min-height: 44px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.fx-half:hover,
+.fx-half:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+}
+
+.fx-half > b { font-size: 13px; }
+.fx-half > small { color: var(--dim); font-size: 10.5px; }
+
+/* 전반은 아직 45분이 남았고 후반은 그것으로 끝이다. 테두리로 구분한다 */
+.fx-half.first { border-left: 3px solid var(--home); }
+.fx-half.second { border-left: 3px solid var(--accent); }
+
+/* 카드가 버튼이 아니라 상자가 됐다 — 안의 버튼 둘이 조작 대상이다 */
+.fixture { cursor: default; }
+
 /* ── 하프타임 — 라커룸에서 주장이 전반을 정리한다 ────────── */
 
 .halftime-talk {

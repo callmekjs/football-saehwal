@@ -3,16 +3,36 @@ import raw from './data/problems.json' with { type: 'json' }
 import { toProblem } from './sim/problems'
 import { Backdrop } from './ui/Backdrop'
 import { MatchScreen } from './ui/MatchScreen'
-import { addedTimeOf, kickoffLabel, type Half } from './ui/matchClock'
+import { addedTimeOf, breakStart, halfLabel, segmentEnd, type Half } from './matchClock'
 import type { Problem } from './sim/types'
 
 /** 국면 카드에 띄울 정보. 국면 데이터에서 파생한다 */
 interface Entry {
   problem: Problem
-  kickoff: number
-  /** 전반 급수 타임이냐 후반이냐 */
-  half: Half
   summary: string
+}
+
+/**
+ * 반을 고르는 버튼 하나.
+ *
+ * **모든 국면이 전반판과 후반판을 함께 갖는다.** 사용자가 정했다 —
+ * *"전후반전 그건 플레이어가 고를 수 있어."* 같은 상황을 전반 급수
+ * 타임에서 만나느냐 후반에서 만나느냐가 다른 경기다. 전반이면 아직
+ * 45분이 남아 있고, 후반이면 그것으로 끝이다.
+ */
+function HalfButton({ half, onPick }: { half: Half; onPick: () => void }) {
+  return (
+    <button
+      className={`fx-half ${half === 1 ? 'first' : 'second'}`}
+      onClick={onPick}
+      title={`${breakStart(half)}분 급수 타임에서 시작해 ${segmentEnd(half)}분에 끝납니다`}
+    >
+      <b>{halfLabel(half)}</b>
+      <small>
+        {breakStart(half)}분 급수 · +{addedTimeOf(half)}
+      </small>
+    </button>
+  )
 }
 
 function FixtureCard({
@@ -22,17 +42,15 @@ function FixtureCard({
 }: {
   entry: Entry
   n: number
-  onPick: () => void
+  onPick: (half: Half) => void
 }) {
-  const { problem, kickoff, half, summary } = entry
+  const { problem, summary } = entry
   const survive = problem.objective.type === 'SURVIVE'
   return (
-    <button className="fixture" onClick={onPick}>
+    <div className="fixture">
       <span className="fx-band">
         <b>제{n}국면</b>
-        <span>
-          {kickoffLabel(kickoff, half)} · 추가시간 {addedTimeOf(kickoff, half)}분
-        </span>
+        <span>전반 · 후반 중 고르기</span>
       </span>
       <span className="fx-main">
         <span className="fx-score">
@@ -50,10 +68,11 @@ function FixtureCard({
         {problem.unavailable.length > 0 && <span className="tagchip warn">우리 10명</span>}
         {problem.booked.length > 0 && <span className="tagchip warn">경고 보유</span>}
       </span>
-      <span className="fx-cta">
-        도전 <i aria-hidden>›</i>
+      <span className="fx-halves">
+        <HalfButton half={1} onPick={() => onPick(1)} />
+        <HalfButton half={2} onPick={() => onPick(2)} />
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -72,14 +91,13 @@ export function App() {
         // 표를 두면 국면을 하나 넣을 때마다 이 파일을 고쳐야 한다
         .map((problem) => ({
           problem,
-          kickoff: problem.kickoff ?? 70,
-          half: problem.half ?? 2,
           summary: problem.summary ?? '',
         })),
     [],
   )
 
-  const [picked, setPicked] = useState<Entry | null>(null)
+  /** 고른 국면과 고른 반. 둘이 함께 한 판을 정한다 */
+  const [picked, setPicked] = useState<{ entry: Entry; half: Half } | null>(null)
   /**
    * 몇 번째 도전인가.
    *
@@ -94,12 +112,12 @@ export function App() {
   const [attempt, setAttempt] = useState(0)
 
   if (picked) {
-    const problem = { ...picked.problem, seed: picked.problem.seed + attempt * 7919 }
+    const problem = { ...picked.entry.problem, seed: picked.entry.problem.seed + attempt * 7919 }
     return (
       <MatchScreen
-        key={`${picked.problem.id}#${attempt}`}
+        key={`${picked.entry.problem.id}#${picked.half}#${attempt}`}
         problem={problem}
-        kickoff={picked.kickoff}
+        half={picked.half}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
       />
@@ -138,11 +156,13 @@ export function App() {
             <button
               className="cta"
               onClick={() => {
-                setPicked(entries[0])
+                // 바로 킥오프는 후반이다. 시간이 없어야 첫 판이 절박하다
+                setPicked({ entry: entries[0], half: 2 })
                 setAttempt((n) => n + 1)
               }}
             >
               바로 킥오프
+              <small>제1국면 · 후반</small>
             </button>
             <a className="cta ghost" href="#fixtures">
               국면 고르기
@@ -154,16 +174,23 @@ export function App() {
       <section id="fixtures" className="board">
         <div className="board-head">
           <h2>국면 선택</h2>
-          <span>전술 상황 훈련 — 판마다 더 나은 선택이 다르다</span>
+          <span>
+            전술 상황 훈련 — 판마다 더 나은 선택이 다르다 · <b>전반과 후반 중 고른다</b>
+          </span>
         </div>
         <div className="fixtures">
           {entries.map((e, i) => (
-            <FixtureCard key={e.problem.id} entry={e} n={i + 1} onPick={() => {
-                setPicked(e)
+            <FixtureCard
+              key={e.problem.id}
+              entry={e}
+              n={i + 1}
+              onPick={(half) => {
+                setPicked({ entry: e, half })
                 // 들어갈 때마다 새 판이다. 나갔다 다시 들어와서 똑같은
                 // 경기가 나오면 흔들어둔 의미가 없다
                 setAttempt((n) => n + 1)
-              }} />
+              }}
+            />
           ))}
         </div>
       </section>

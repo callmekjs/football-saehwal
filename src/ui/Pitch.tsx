@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { drawPitch } from '../render/pitch'
 import { VisualMatch } from '../render/visual'
 import { TOTAL_TICKS } from '../sim/constants'
-import { endLabel, type Half } from './matchClock'
+import { endLabel, type Half } from '../matchClock'
 import type { MatchState } from '../sim/types'
 
 /** 시뮬 한 틱이 연출에서 차지하는 시간. 엔진은 100ms 마다 한 번 돈다 */

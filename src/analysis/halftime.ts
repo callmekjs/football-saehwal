@@ -17,13 +17,30 @@ import type { MatchState, Problem } from '../sim/types'
  * 원칙이고, 같은 이유다: 없는 사실을 말하는 순간 이 화면 전체를
  * 믿을 수 없게 된다.
  *
- * ★ **명령하지 않는다.** "라인을 올리세요"가 아니라 "세트피스를 여덟 번
- * 내줬습니다"까지다. 판단은 감독이 한다. 다음에 뭘 하라는 처방은 경기가
+ * ★ **명령하지 않는다.** "라인을 올리세요"가 아니라 "세트피스 허용이
+ * 29입니다"까지다. 판단은 감독이 한다. 다음에 뭘 하라는 처방은 경기가
  * 완전히 끝난 뒤 `coach.ts` 의 감독 보고서가 맡는다.
  *
  * ★ **순수 함수다.** 시계도 난수도 브라우저도 모른다. 경기 결과와 확률에
  * 닿지 않는다.
  */
+
+/**
+ * 나쁜 소식으로 표시하는 기준.
+ *
+ * 국면 다섯 개 × 시드 30개로 실측한 값이다.
+ *
+ * | | 세트피스 허용 | 등 뒤 |
+ * |---|---|---|
+ * | 지키는 판 | 평균 20~23 (12~31) | 0~3 |
+ * | 쫓는 판 | 평균 3~4 (0~11) | 0~5 |
+ *
+ * 처음에는 세트피스 6으로 잡았는데, 그러면 **지키는 판은 거의 언제나
+ * 나쁨**으로 뜬다. 늘 빨간 줄이면 아무 뜻도 전달하지 못한다. 지키는 판의
+ * 평균보다 확실히 위인 25로 올렸다.
+ */
+const SET_PIECE_HEAVY = 25
+const BEHIND_HEAVY = 3
 
 export type HalftimeTone = 'GOOD' | 'BAD' | 'FACT'
 
@@ -99,17 +116,26 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
 
   // ── 우리가 내준 것. 어디가 뚫렸나 ──
   if (state.stats.setPiece > 0) {
+    /**
+     * **"몇 번"이라고 말하지 않는다.**
+     *
+     * 이 값은 실제 코너킥·프리킥 수가 아니라 시뮬이 매 틱 세트피스 상황을
+     * 뽑은 누적 횟수다. 22분에 29가 나온다 — 그걸 "29번 내줬습니다"라고
+     * 말하면 축구가 아니다. 화면 「경기 기록」 칸이 쓰는 것과 **똑같은
+     * 말과 똑같은 숫자**를 쓴다. 그래야 감독이 두 곳을 맞춰볼 수 있다.
+     */
     say(
       'setpiece',
-      `세트피스를 ${state.stats.setPiece}번 내줬습니다.`,
-      state.stats.setPiece >= 6 ? 'BAD' : 'FACT',
+      `세트피스 허용이 ${state.stats.setPiece}입니다.`,
+      state.stats.setPiece >= SET_PIECE_HEAVY ? 'BAD' : 'FACT',
     )
   }
   if (state.stats.behind > 0) {
+    // 배후는 판당 0~5라 실제로 셀 수 있는 사건이다. "번"을 써도 된다
     say(
       'behind',
       `등 뒤 공간을 ${state.stats.behind}번 내줬습니다.`,
-      state.stats.behind >= 3 ? 'BAD' : 'FACT',
+      state.stats.behind >= BEHIND_HEAVY ? 'BAD' : 'FACT',
     )
   }
 

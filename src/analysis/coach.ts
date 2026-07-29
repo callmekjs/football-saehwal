@@ -1,3 +1,4 @@
+import { SEGMENT_MINUTES } from '../matchClock'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
 import type {
@@ -75,7 +76,7 @@ const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`
 const point = (rate: number) => `${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(1)}%p`
 
 function clockOf(tick: number, kickoff: number): string {
-  const totalSeconds = Math.round((kickoff + (tick / TOTAL_TICKS) * 15) * 60)
+  const totalSeconds = Math.round((kickoff + (tick / TOTAL_TICKS) * SEGMENT_MINUTES) * 60)
   const minute = Math.floor(totalSeconds / 60)
   const second = totalSeconds % 60
   return `${minute}:${String(second).padStart(2, '0')}`
