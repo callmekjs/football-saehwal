@@ -198,3 +198,89 @@ describe('주심이 판정할 때 화면에 나타난다', () => {
     expect(count(red, COLORS.cardRed)).toBeGreaterThan(count(yellow, COLORS.cardRed))
   })
 })
+
+/**
+ * 오프사이드 라인이 실제로 그려진다.
+ *
+ * 부심 깃발이 화면 밖에 그려져 안 보이던 일을 겪은 뒤로, 그리기는
+ * **그렸는지 · 어디에 그렸는지**를 직접 확인한다.
+ */
+describe('오프사이드 라인', () => {
+  /** 세로로 길게 그은 선 하나를 찾는다 */
+  const verticals = (ops: Op[]) =>
+    ops.filter(
+      (o): o is Extract<Op, { op: 'stroke' }> =>
+        o.op === 'stroke' &&
+        o.pts.length === 2 &&
+        Math.abs(o.pts[0][0] - o.pts[1][0]) < 0.5 &&
+        Math.abs(o.pts[0][1] - o.pts[1][1]) > H * 0.8,
+    )
+
+  it('수비하는 팀 색으로 세로 실선을 긋는다', () => {
+    const ops = render(() => {})
+    const side = (() => {
+      const s = createState(P)
+      const vm = new VisualMatch(s, P.seed)
+      return vm.defendingSide()
+    })()
+    const want = side === 'HOME' ? COLORS.home : COLORS.away
+    expect(verticals(ops).some((o) => o.style === want)).toBe(true)
+  })
+
+  it('선이 뒤에서 두 번째 수비수 자리에 있다', () => {
+    const s = createState(P)
+    const vm = new VisualMatch(s, P.seed)
+    const side = vm.defendingSide()
+    const expectedX = (vm.offsideLine(side) / 105) * W
+    const { ctx, ops } = recorder()
+    drawPitch(ctx, vm, s, W, H)
+    const want = side === 'HOME' ? COLORS.home : COLORS.away
+    const line = verticals(ops).find((o) => o.style === want)
+    expect(line).toBeDefined()
+    expect(line!.pts[0][0]).toBeCloseTo(expectedX, 1)
+  })
+
+  it('그 선이 캔버스 안에 있다', () => {
+    const ops = render(() => {})
+    for (const o of verticals(ops)) {
+      for (const [x, y] of o.pts) {
+        expect(x).toBeGreaterThanOrEqual(0)
+        expect(x).toBeLessThanOrEqual(W)
+        expect(y).toBeGreaterThanOrEqual(0)
+        expect(y).toBeLessThanOrEqual(H)
+      }
+    }
+  })
+
+  it('수비라인 점선과 색이 겹치지 않는다', () => {
+    /**
+     * 하늘색 점선은 감독이 **설정한** 수비라인이고, 이 실선은 선수가
+     * **실제로 서 있는** 자리다. 둘 다 세로선이므로 색까지 같으면 화면이
+     * 서로 다른 두 가지를 같은 것으로 말하게 된다.
+     *
+     * 점선 쪽도 세로선이라 목록에는 함께 잡힌다. 봐야 할 것은 **둘이
+     * 서로 다른 선으로 그려졌는가**다.
+     */
+    const ops = render(() => {})
+    const v = verticals(ops)
+    const s = createState(P)
+    const vm = new VisualMatch(s, P.seed)
+    const side = vm.defendingSide()
+    const teamColour = side === 'HOME' ? COLORS.home : COLORS.away
+    // 팀 색 선과 하늘색 점선이 둘 다 있고, 색이 서로 다르다
+    expect(v.some((o) => o.style === teamColour)).toBe(true)
+    expect(v.some((o) => o.style === COLORS.lineMarker)).toBe(true)
+    expect(teamColour).not.toBe(COLORS.lineMarker)
+  })
+
+  it('골 세리머니 중에는 그리지 않는다', () => {
+    // 전원이 킥오프 자리로 돌아가는 동안에는 선이 의미 없이 튄다
+    const ops = render((vm) => {
+      vm.celebration = { side: 'HOME', life: 1.2, x: 100, y: 34 }
+    })
+    const teamColours = verticals(ops).filter(
+      (o) => o.style === COLORS.home || o.style === COLORS.away,
+    )
+    expect(teamColours).toHaveLength(0)
+  })
+})

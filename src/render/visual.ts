@@ -1990,6 +1990,23 @@ export class VisualMatch {
   }
 
   /**
+   * 지금 **수비하는** 팀.
+   *
+   * 오프사이드 라인은 언제나 수비하는 팀의 것이다. 공을 가진 팀의
+   * 공격수가 넘으면 안 되는 선이므로, 화면에 그릴 선도 이 팀 것 하나다.
+   * 둘 다 그리면 선이 넷(하프라인·수비라인 표시까지)이 되어 어느 것이
+   * 무슨 뜻인지 읽을 수 없다.
+   *
+   * 공이 주인 없이 굴러가는 동안에는 **마지막으로 찬 팀**을 공격 팀으로
+   * 본다. 그 순간마다 선이 반대편으로 튀면 눈이 따라가지 못한다.
+   */
+  defendingSide(): 'HOME' | 'AWAY' {
+    const holder = this.byId(this.ball.holder)
+    const attacking = holder?.side ?? this.ball.lastTouch
+    return attacking === 'HOME' ? 'AWAY' : 'HOME'
+  }
+
+  /**
    * 부심이 서야 할 x.
    *
    * 뒤에서 두 번째 수비수와 나란히 서되, **공이 그보다 골라인에 가까우면

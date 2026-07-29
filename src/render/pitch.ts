@@ -517,6 +517,60 @@ function drawOfficial(
   ctx.restore()
 }
 
+/**
+ * 오프사이드 라인 — 뒤에서 두 번째 수비수를 지나는 실선.
+ *
+ * 중계 화면의 그 선이다. 부심이 이미 이 선 위에 서 있으므로, 선을 그으면
+ * **부심이 왜 거기 서 있는지가 저절로 설명된다.** 둘은 같은 것을 가리키는
+ * 두 표시다.
+ *
+ * **수비하는 팀 것 하나만 그린다.** 양쪽을 다 그리면 하프라인·수비라인
+ * 표시까지 세로선이 넷이 되어 어느 것이 무슨 뜻인지 못 읽는다.
+ *
+ * **실선이다.** 수비라인 표시(하늘색)는 점선이고 그건 감독이 **설정한**
+ * 값이다. 이 선은 선수들이 **실제로 서 있는** 자리다. 둘은 다른 것이므로
+ * 모양으로 갈라놓는다 — 이 프로젝트에서 색이 두 가지 뜻을 가졌다가 아무도
+ * 화면을 못 읽게 된 적이 있다.
+ *
+ * 색은 **수비하는 팀의 색**이다. 초록 선이면 우리가 지키는 중이고, 붉은
+ * 선이면 상대가 지키는 중이다. 팀 색은 이미 그 팀을 뜻하므로 새 뜻을
+ * 만들지 않는다.
+ */
+function drawOffsideLine(
+  ctx: CanvasRenderingContext2D,
+  vm: VisualMatch,
+  X: (v: number) => number,
+  Y: (v: number) => number,
+  sx: number,
+) {
+  // 골 세리머니 중에는 전원이 킥오프 자리로 돌아가 선이 의미 없이 튄다
+  if (vm.celebration) return
+  const side = vm.defendingSide()
+  const x = vm.offsideLine(side)
+  // 골라인에 딱 붙으면 골대 선과 겹쳐 읽히지 않는다
+  if (x < 1.5 || x > PITCH_W - 1.5) return
+
+  ctx.save()
+  ctx.strokeStyle = side === 'HOME' ? COLORS.home : COLORS.away
+  ctx.globalAlpha = 0.62
+  ctx.lineWidth = Math.max(1.6, sx * 0.34)
+  ctx.beginPath()
+  ctx.moveTo(X(x), Y(1))
+  ctx.lineTo(X(x), Y(PITCH_H - 1))
+  ctx.stroke()
+
+  // 양 끝의 짧은 가로 눈금. 중계 그래픽처럼 "이건 그어놓은 선"으로 읽힌다
+  ctx.globalAlpha = 0.85
+  const tick = 2.2
+  for (const y of [1, PITCH_H - 1]) {
+    ctx.beginPath()
+    ctx.moveTo(X(x - tick), Y(y))
+    ctx.lineTo(X(x + tick), Y(y))
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
 export function drawPitch(
   ctx: CanvasRenderingContext2D,
   vm: VisualMatch,
@@ -547,6 +601,10 @@ export function drawPitch(
     ctx.stroke()
     ctx.restore()
   }
+
+  // 오프사이드 라인은 잔디 바로 위, 선수 밑이다. 선이 선수를 가리면
+  // 누가 앞서 있는지가 오히려 안 보인다
+  drawOffsideLine(ctx, vm, X, Y, sx)
 
   // 심판을 선수보다 먼저 그린다. 겹치면 선수가 위로 지나가야 한다 —
   // 심판이 선수를 가리면 그 순간 화면의 주인공이 바뀐다
