@@ -226,5 +226,80 @@
         ]
       }
     }
+  },
+  {
+    "id": "p05",
+    "title": "한 명이 많다",
+    "summary": "0-1로 지고 있는데 상대가 한 명 퇴장당했다",
+    "order": 5,
+    "kickoff": 81,
+    "score": [
+      0,
+      1
+    ],
+    "initialTactics": {
+      "line": 2,
+      "press": 2,
+      "width": 0
+    },
+    "initialFormation": "4-4-2D",
+    "recommendation": {
+      "formation": "3-4-3",
+      "tactics": {
+        "line": 2,
+        "press": 1,
+        "width": 2
+      },
+      "explanation": "한 명이 빠진 상대는 골문 앞에 더 촘촘히 섭니다. 가운데로 모을수록 자리가 없어지니 좌우로 벌립니다. 라인은 올린 채로 둬도 됩니다 — 상대가 안 나오니 뒷공간을 쓸 사람이 없습니다. 압박만 중으로 낮춰 다리를 아낍니다."
+    },
+    "objective": {
+      "type": "EQUALIZE",
+      "bonusOnWin": true
+    },
+    "seed": 72609,
+    "subsLeft": 2,
+    "staminaOverrides": {
+      "DF04": 58,
+      "DF05": 61,
+      "MF06": 47,
+      "MF08": 54,
+      "MF10": 52,
+      "FW09": 50
+    },
+    "booked": [],
+    "unavailable": [],
+    "awayCount": 10,
+    "variation": {
+      "staminaSpread": 8,
+      "staminaRange": [
+        30,
+        90
+      ],
+      "booked": [
+        1,
+        2
+      ],
+      "orders": [
+        0,
+        2
+      ],
+      "orderKinds": [
+        "DROP_BACK",
+        "CONSERVE",
+        "BACK_OFF"
+      ],
+      "tactics": {
+        "line": [
+          2
+        ],
+        "press": [
+          1,
+          2
+        ],
+        "width": [
+          0
+        ]
+      }
+    }
   }
 ]
