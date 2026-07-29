@@ -810,8 +810,67 @@ button {
   inset: 26px 24px;
 }
 
+/*
+ * ── 끌어다 놓기 ──────────────────────────────────────
+ *
+ * 위아래 구역은 **끌기 시작할 때만** 나타난다. 늘 떠 있으면 판을 읽는
+ * 데 방해가 되고, 급소는 판이 아니라 카드다.
+ *
+ * 높이는 CSS 가 아니라 인라인으로 온다. `squadDrag.ts` 의 `ZONE_RATIO`
+ * 하나에서 나오므로, 판정하는 비율과 그리는 비율이 어긋날 수 없다.
+ * 좌우 -24px · 위아래 -26px 은 `.squad-field` 의 여백을 되돌려 잔디
+ * 끝까지 덮는 값이다. 눈에 보이는 데까지가 놓을 수 있는 데다.
+ */
+.squad-zone {
+  position: absolute;
+  left: -24px;
+  right: -24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  /*
+   * 카드를 가리지도 가로채지도 않는다.
+   *
+   * 위쪽 구역 안에는 공격수 카드가 이미 서 있다. 구역이 그 위를 덮으면
+   * 누구와 자리를 바꾸려는지 보이지 않는다. 카드보다 아래에 깐다.
+   */
+  pointer-events: none;
+  z-index: 1;
+}
+
+.squad-zone.up { top: -26px; }
+.squad-zone.down { bottom: -26px; }
+
+.squad-zone[data-on='on'] {
+  border-style: solid;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
+.squad-zone[data-on='bad'] {
+  border-style: solid;
+  border-color: var(--away);
+  background: color-mix(in srgb, var(--away) 18%, transparent);
+  color: var(--away);
+}
+
+/* 끄는 동안 글자가 잡혀 파랗게 칠해지지 않게 한다 */
+.squad-shape[data-dragging='on'] {
+  user-select: none;
+  cursor: grabbing;
+}
+
 .squad-card {
   position: absolute;
+  /* 끌 때 나타나는 지시 구역보다 위에 있어야 등번호가 보인다 */
+  z-index: 2;
   width: 44px;
   height: 44px;
   transform: translate(-50%, -50%);
@@ -845,6 +904,40 @@ button {
 
 .squad-card:disabled { cursor: default; opacity: 0.72; }
 .squad-card.away { border-color: color-mix(in srgb, var(--away) 45%, var(--border)); }
+
+/*
+ * 끌 수 있다는 것이 보여야 한다.
+ *
+ * 손 모양이 열린 손이면 잡을 수 있다는 뜻이고, 잡으면 쥔 손이 된다.
+ * 마우스가 없는 환경에서는 아무 일도 일어나지 않으므로 잃는 것이 없다.
+ */
+.squad-card:not(:disabled) { cursor: grab; }
+
+/* 드는 동안 카드가 판에서 떠오른다. 그림자가 커지면 손에 들린 것으로 읽힌다 */
+.squad-card[data-drag] {
+  z-index: 6;
+  cursor: grabbing;
+  /* 자리로 돌아가는 애니메이션이 손을 따라오는 것을 방해한다 */
+  transition: none;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+}
+
+.squad-card[data-drag='on'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 26%, var(--panel));
+}
+
+/* 놓아도 안 되는 자리 위에 있다. 놓기 전에 손 안에서 붉어진다 */
+.squad-card[data-drag='bad'] {
+  border-color: var(--away);
+  background: color-mix(in srgb, var(--away) 24%, var(--panel));
+}
+
+/* 자리를 바꿀 상대. 어디로 가는지 놓기 전에 보인다 */
+.squad-card[data-drop='on'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(100, 212, 155, 0.4);
+}
 
 .squad-num { font-size: 15px; font-weight: 700; line-height: 1.05; }
 
@@ -930,6 +1023,14 @@ button {
 
 .squad-orders-head { color: var(--muted); font-size: 11.5px; }
 .squad-orders-head b { color: var(--accent); }
+
+/* 끌고 있는 동안 이 줄이 결과를 미리 말한다 */
+.squad-orders-head.drag {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.squad-orders-head.drag[data-bad='on'] { color: var(--away); }
 
 .squad-order-grid {
   display: grid;

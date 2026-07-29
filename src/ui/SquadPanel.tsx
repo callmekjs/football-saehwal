@@ -8,7 +8,16 @@ import {
   type Slot,
 } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
-import { MAX_ORDERS } from '../sim/engine'
+import { MAX_ORDERS, checkOrder } from '../sim/engine'
+import {
+  DRAG_START,
+  ZONE_RATIO,
+  dropHint,
+  resolveDrop,
+  swapSeats,
+  type CardPoint,
+  type DropTarget,
+} from './squadDrag'
 import type { Level, MatchState, PlayerOrder, PlayerState, Position } from '../sim/types'
 
 /**
@@ -105,6 +114,36 @@ function assign(
   return { placed, next }
 }
 
+/** 드래그가 진행 중인 동안만 존재하는 화면 상태 */
+interface DragView {
+  id: string
+  /** 카드가 원래 자리에서 옮겨진 만큼(px) */
+  dx: number
+  dy: number
+  target: DropTarget
+  /** 놓아도 안 되는 이유. 놓기 **전에** 보여준다 */
+  blocked: string | null
+}
+
+/** 마우스를 누르고 있는 동안 유지하는 것. 화면을 다시 그리지 않는다 */
+interface Press {
+  id: string
+  pointerId: number
+  startX: number
+  startY: number
+  /** 손 떨림을 넘어 실제로 끌었는가 */
+  moved: boolean
+  /**
+   * `Esc` 로 물렀는가.
+   *
+   * 물렀다고 `Press` 를 통째로 버리지 않는다. 사람은 아직 버튼을 누르고
+   * 있고, 손을 떼면 클릭이 따라온다. 그 클릭을 삼키려면 놓는 순간까지
+   * 이 누름을 기억하고 있어야 한다.
+   */
+  cancelled: boolean
+  drop: { target: DropTarget; blocked: string | null } | null
+}
+
 /**
  * 옆에 세우는 우리 전술판 — **보는 곳이 아니라 누르는 곳이다.**
  *
@@ -112,9 +151,21 @@ function assign(
  * 카드가 새 자리로 옮겨가므로, 그동안 화면에서 잘 읽히지 않던 "4-4-2 를
  * 3-4-3 으로 바꿨다"가 눈으로 보인다.
  *
- * 문법은 하나다 — **선수 카드 1탭 → 행동 1탭.** 카드를 끌어다 놓는 방식은
- * 쓰지 않는다. 판은 그대로 남고 아래 줄만 바뀌므로, 지시하는 2초 동안
- * 가운데 경기장이 통째로 시야에 남는다.
+ * 조작은 **두 가지 길**이고 둘 다 같은 곳에 도착한다.
+ *
+ * - **선수 카드 1탭 → 행동 1탭.** 어디서나 되는 길이다. 마우스가 없어도,
+ *   손가락이어도, 키보드만 있어도 된다.
+ * - **카드를 끌어다 놓기.** 마우스가 있을 때의 빠른 길이다. 위로 끌면
+ *   올라가라, 아래로 끌면 내려서라 — 판이 세로로 서 있고 아래가 우리
+ *   골문이라 방향을 설명할 필요가 없다.
+ *
+ * 드래그는 **마우스일 때만** 잡는다. 손가락에도 열어두려면 카드 위에서
+ * 페이지 스크롤을 막아야 하는데, 카드 열한 장이 판을 덮고 있어서 좁은
+ * 화면에서 페이지가 안 내려가게 된다. 되던 조작을 망가뜨리면서 얻는
+ * 빠른 길은 손해다.
+ *
+ * **경기장 캔버스 위의 선수 원은 여전히 끌 수 없다.** 반지름이 7픽셀이라
+ * 마우스로 겨냥할 수 있는 표적이 아니다. 카드는 44px 이라 잡힌다.
  */
 export function SquadPanel({
   state,
@@ -131,6 +182,14 @@ export function SquadPanel({
   const [picked, setPicked] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const seats = useRef<{ key: string; map: Map<string, number> }>({ key: '', map: new Map() })
+  /** 자리를 바꿨다고 화면에 알리는 신호. `seats` 는 ref 라 저 혼자로는 안 그려진다 */
+  const [, bumpSeats] = useState(0)
+
+  const fieldRef = useRef<HTMLDivElement>(null)
+  const pressRef = useRef<Press | null>(null)
+  /** 끌고 난 뒤에 따라오는 click 을 한 번 삼킨다. 안 그러면 지시창이 같이 열린다 */
+  const clickGuard = useRef(false)
+  const [drag, setDrag] = useState<DragView | null>(null)
 
   useEffect(() => {
     if (!note) return
@@ -146,8 +205,34 @@ export function SquadPanel({
   }, [picked])
 
   useEffect(() => {
-    if (locked) setPicked(null)
+    if (!locked) return
+    setPicked(null)
+    pressRef.current = null
+    setDrag(null)
   }, [locked])
+
+  /**
+   * `Esc` 로 취소.
+   *
+   * 끌다 보면 "아니다" 싶은 순간이 온다. 그때 손을 뗄 데를 찾아 헤매게
+   * 하지 않는다. 아무 데나 놓아도 되돌아가지만, 손이 이미 키보드 쪽에
+   * 있는 사람에게는 이쪽이 빠르다.
+   */
+  const dragging = drag !== null
+  useEffect(() => {
+    if (!dragging) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const pr = pressRef.current
+      if (pr) {
+        pr.cancelled = true
+        pr.drop = null
+      }
+      setDrag(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dragging])
 
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
   const tenMen = state.homeCount < 11
@@ -164,6 +249,159 @@ export function SquadPanel({
   const cur = picked ? onPitch.find((s) => s.id === picked) : null
   const orders = Object.keys(ORDER_LABELS) as Array<Exclude<PlayerOrder, 'NONE'>>
   const shape = shapeOf(state.formation)
+
+  /**
+   * 카드 중심의 실제 픽셀 좌표.
+   *
+   * 카드 열한 장을 DOM 에서 재지 않고 자리 좌표에서 바로 계산한다. 화면에
+   * 그릴 때 쓰는 것과 **같은 식**이라 둘이 어긋날 수 없다.
+   *
+   * **골키퍼는 뺀다.** 지시를 받을 수도 자리를 바꿀 수도 없으므로 표적이
+   * 아니다. 빼두면 골키퍼 쪽으로 끌었을 때 "골키퍼는 안 됩니다"가 아니라
+   * 아래 수비 구역으로 읽힌다 — 그게 사람이 뜻한 바다.
+   */
+  const pointsOf = (box: DOMRect): CardPoint[] =>
+    placed
+      .filter(({ slot }) => slot.pos !== 'GK')
+      .map(({ s, slot }) => ({
+        id: s.id,
+        x: (slotLeft(slot.y) / 100) * box.width,
+        y: (slotTop(slot.x) / 100) * box.height,
+        depth: slot.x,
+        line: slot.pos,
+      }))
+
+  const numOf = (id: string) => getPlayer(id).num
+
+  /**
+   * 놓아도 되는가. **엔진의 `checkOrder` 를 그대로 쓴다.**
+   *
+   * 검증을 여기 따로 적으면 드래그로 되는 것과 탭으로 되는 것이 조용히
+   * 갈린다. "뒤에 수비가 셋은 남아야 한다" 같은 사유 문자열도 같은 곳에서
+   * 나오므로 두 길이 같은 말을 한다.
+   */
+  const blockedFor = (id: string, target: DropTarget): string | null => {
+    if (target.kind !== 'ORDER') return null
+    const mine = onPitch.find((s) => s.id === id)
+    if (mine?.order === target.order) {
+      return `${numOf(id)}번은 이미 ${ORDER_LABELS[target.order].name} 입니다`
+    }
+    return checkOrder(state, id, target.order)
+  }
+
+  const applyDrop = (id: string, target: DropTarget) => {
+    if (target.kind === 'SWAP') {
+      seats.current = {
+        key: seats.current.key,
+        map: swapSeats(seats.current.map, id, target.id),
+      }
+      bumpSeats((v) => v + 1)
+      setNote(`${numOf(id)}번 ↔ ${numOf(target.id)}번 자리 바꿈 · 배치만 바뀝니다`)
+      return
+    }
+    if (target.kind === 'ORDER') {
+      const err = onOrder(id, target.order)
+      setNote(err ?? `${numOf(id)}번 — ${ORDER_LABELS[target.order].name}`)
+    }
+  }
+
+  /**
+   * 끌고 난 뒤에 따라오는 클릭을 **한 번만** 삼킨다.
+   *
+   * 브라우저는 마우스를 떼면 `pointerup` 바로 뒤에 `click` 을 보낸다.
+   * 그걸 그냥 두면 카드를 끌어다 놓은 순간 지시창까지 같이 열린다.
+   *
+   * **다음 차례에 빗장을 반드시 푼다.** 켜둔 채로 두면 그 다음에 오는
+   * 진짜 클릭이 먹힌다. 특히 키보드로 `Enter` 를 누르는 사람은 `click`
+   * 만 보내고 `pointerdown` 을 보내지 않으므로, 빗장이 남아 있으면
+   * 카드를 아예 누를 수 없게 된다.
+   */
+  const guardNextClick = () => {
+    clickGuard.current = true
+    window.setTimeout(() => {
+      clickGuard.current = false
+    }, 0)
+  }
+
+  const startPress = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
+    // 손가락은 지금 그대로 탭 두 단계를 쓴다. 카드 위에서 페이지가 안
+    // 내려가면 좁은 화면에서 되던 것이 안 되게 된다
+    if (e.pointerType !== 'mouse' || e.button !== 0 || locked) return
+    clickGuard.current = false
+    pressRef.current = {
+      id,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+      cancelled: false,
+      drop: null,
+    }
+    // 판 밖으로 끌고 나가도 놓는 순간을 놓치지 않는다.
+    // 붙잡기를 못 하는 환경이 있어도 드래그 자체는 그대로 돌아간다
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* 붙잡을 수 없으면 붙잡지 않는다 */
+    }
+  }
+
+  const movePress = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const pr = pressRef.current
+    if (!pr || pr.pointerId !== e.pointerId || pr.cancelled) return
+    const field = fieldRef.current
+    if (!field) return
+
+    const dx = e.clientX - pr.startX
+    const dy = e.clientY - pr.startY
+    if (!pr.moved && Math.hypot(dx, dy) < DRAG_START) return
+    pr.moved = true
+
+    const box = field.getBoundingClientRect()
+    const points = pointsOf(box)
+    const from = points.find((p) => p.id === pr.id)
+    if (!from) return
+
+    const target = resolveDrop(
+      from,
+      { x: e.clientX - box.left, y: e.clientY - box.top },
+      box.height,
+      points,
+    )
+    const blocked = blockedFor(pr.id, target)
+    pr.drop = { target, blocked }
+    setDrag({ id: pr.id, dx, dy, target, blocked })
+  }
+
+  const endPress = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const pr = pressRef.current
+    if (!pr || pr.pointerId !== e.pointerId) return
+    pressRef.current = null
+    setDrag(null)
+    // 끌지 않았으면 그냥 탭이다. 아래 onClick 이 그대로 받는다
+    if (!pr.moved) return
+    guardNextClick()
+    if (pr.cancelled || !pr.drop) return
+    if (pr.drop.blocked) {
+      setNote(pr.drop.blocked)
+      return
+    }
+    applyDrop(pr.id, pr.drop.target)
+  }
+
+  const cancelPress = () => {
+    pressRef.current = null
+    setDrag(null)
+  }
+
+  /** 드래그 중에는 지시 줄이 지금 무슨 일이 일어날지 말한다 */
+  const liveHint = drag ? dropHint(drag.target, drag.blocked, numOf, numOf(drag.id)) : null
+
+  /** 위아래 구역이 지금 켜져 있는가 */
+  const zoneState = (order: 'PUSH_UP' | 'DROP_BACK') => {
+    if (!drag || drag.target.kind !== 'ORDER' || drag.target.order !== order) return undefined
+    return drag.blocked ? 'bad' : 'on'
+  }
 
   return (
     <section className="panel squad-panel" aria-label="우리 포메이션과 선수 지시">
@@ -197,13 +435,43 @@ export function SquadPanel({
         {shape.FW} · 위쪽이 상대 골문
       </p>
 
-      <div className="squad-shape">
-        <div className="squad-field">
+      <div className="squad-shape" data-dragging={drag ? 'on' : undefined}>
+        <div className="squad-field" ref={fieldRef}>
+          {/*
+            놓을 수 있는 자리는 **끌기 시작할 때 보인다.** 어디까지 가면
+            되는지 모른 채 끌면 아무 데나 놓고 아무 일도 일어나지 않는다.
+
+            구역은 판 좌표 그대로다. `resolveDrop` 이 세는 것과 화면에
+            그리는 것이 같은 비율이라 "저기 놓았는데 안 걸렸다"가 없다.
+          */}
+          {drag && (
+            <>
+              <div
+                className="squad-zone up"
+                data-on={zoneState('PUSH_UP')}
+                style={{ height: `${ZONE_RATIO * 100}%` }}
+                aria-hidden
+              >
+                <span>↑ 올라가라 · 공격으로</span>
+              </div>
+              <div
+                className="squad-zone down"
+                data-on={zoneState('DROP_BACK')}
+                style={{ height: `${ZONE_RATIO * 100}%` }}
+                aria-hidden
+              >
+                <span>↓ 내려서라 · 수비로</span>
+              </div>
+            </>
+          )}
+
           {placed.map(({ s, slot }) => {
             const p = getPlayer(s.id)
             const warn = alertOf(s, state.tactics.press)
             const tag = s.order !== 'NONE' ? ORDER_TAG[s.order] : (warn?.tag ?? p.pos)
             const stamina = Math.max(0, Math.min(100, s.stamina))
+            const held = drag?.id === s.id
+            const isSwapTarget = drag?.target.kind === 'SWAP' && drag.target.id === s.id
             const detail =
               `${p.num}번 ${p.pos} · 체력 ${Math.round(s.stamina)} · 속도 ${p.speed}` +
               (warn ? ` · ${warn.why}` : '') +
@@ -215,11 +483,36 @@ export function SquadPanel({
                 className="squad-card"
                 data-order={s.order !== 'NONE' ? 'on' : undefined}
                 data-warn={warn ? 'on' : undefined}
+                data-drag={held ? (drag.blocked ? 'bad' : 'on') : undefined}
+                data-drop={isSwapTarget ? 'on' : undefined}
                 aria-pressed={picked === s.id}
                 disabled={locked || p.pos === 'GK'}
-                title={p.pos === 'GK' ? `${detail} · 골키퍼에게는 지시할 수 없다` : detail}
-                style={{ top: `${slotTop(slot.x)}%`, left: `${slotLeft(slot.y)}%` }}
-                onClick={() => setPicked(picked === s.id ? null : s.id)}
+                title={
+                  p.pos === 'GK'
+                    ? `${detail} · 골키퍼에게는 지시할 수 없다`
+                    : `${detail} · 눌러서 지시하거나 위아래로 끌어 옮긴다`
+                }
+                style={{
+                  top: `${slotTop(slot.x)}%`,
+                  left: `${slotLeft(slot.y)}%`,
+                  ...(held
+                    ? {
+                        transform: `translate(-50%, -50%) translate(${drag.dx}px, ${drag.dy}px) scale(1.1)`,
+                      }
+                    : null),
+                }}
+                onPointerDown={(e) => startPress(e, s.id)}
+                onPointerMove={movePress}
+                onPointerUp={endPress}
+                onPointerCancel={cancelPress}
+                onClick={() => {
+                  // 방금 끌어서 놓은 것이면 지시창까지 같이 열지 않는다
+                  if (clickGuard.current) {
+                    clickGuard.current = false
+                    return
+                  }
+                  setPicked(picked === s.id ? null : s.id)
+                }}
               >
                 <span className="squad-num">{p.num}</span>
                 <span className="squad-tag">{tag}</span>
@@ -233,7 +526,16 @@ export function SquadPanel({
       </div>
 
       <div className="squad-orders">
-        {cur ? (
+        {/*
+          끌고 있는 동안에는 이 줄이 **놓기 전에** 결과를 말한다.
+          놓은 다음에 "안 됩니다"라고 하면 사람은 이미 손을 뗀 뒤라
+          무엇을 다시 해야 하는지 알 수 없다.
+        */}
+        {liveHint ? (
+          <span className="squad-orders-head drag" data-bad={drag?.blocked ? 'on' : undefined}>
+            {liveHint}
+          </span>
+        ) : cur ? (
           <>
             <span className="squad-orders-head">
               <b>{getPlayer(cur.id).num}번</b>에게 무엇을 시킬까
@@ -267,7 +569,9 @@ export function SquadPanel({
         ) : (
           <>
             <span className="squad-orders-head">
-              {locked ? '경기가 끝났습니다' : '선수를 누르면 지시할 수 있습니다'}
+              {locked
+                ? '경기가 끝났습니다'
+                : '선수를 누르면 지시합니다 · 마우스로 위아래로 끌어도 됩니다'}
             </span>
             <div className="squad-order-list">
               {active.length === 0 ? (
