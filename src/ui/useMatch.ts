@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRng, type Rng } from '../sim/rng'
-import { createState, tick, checkSub, checkOrder, checkPosition } from '../sim/engine'
+import { applySub, createState, tick, checkSub, checkOrder, checkPosition } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
 import type {
@@ -270,11 +270,31 @@ export function useMatch(problem: Problem) {
       const reason = checkSub(cur, out, inId)
       if (reason) return reason
       record({ type: 'SUB', out, in: inId } as Omit<Decision, 'tick'>)
-      const next: MatchState = {
-        ...cur,
-        subsLeft: cur.subsLeft - 1,
-        pendingSubs: [...cur.pendingSubs, { out, in: inId, atTick: cur.tick + 60 }],
-      }
+      /**
+       * **급수 타임 교체는 즉시 끝난다.**
+       *
+       * 사용자가 정했다 — *"바로 선수교체가 가능하게 해줘. 5초 기다렸다
+       * 할 필요 없고."* 공이 이미 죽어 있고 시계가 멈춰 있는 시간이다.
+       * 실제 축구도 하프타임 교체는 후반 휘슬에 이미 끝나 있다.
+       *
+       * 6초 지연은 경기가 흐르는 중에만 걸린다 — 그때는 선수가 실제로
+       * 걸어 나오고 들어가는 시간이라 맞다.
+       *
+       * 기준(0틱)은 `applyDecision` 과 **같아야 한다.** 다르면 사용자가
+       * 본 선발과 150판 비교가 쓰는 선발이 갈린다.
+       */
+      const next: MatchState =
+        cur.tick === 0
+          ? {
+              ...cur,
+              subsLeft: cur.subsLeft - 1,
+              players: applySub(cur.players, out, inId),
+            }
+          : {
+              ...cur,
+              subsLeft: cur.subsLeft - 1,
+              pendingSubs: [...cur.pendingSubs, { out, in: inId, atTick: cur.tick + 60 }],
+            }
       stateRef.current = next
       setState(next)
       return null

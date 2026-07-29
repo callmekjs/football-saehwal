@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { simulate, createState, tick, checkOrder, checkPosition, carryToNextHalf, simulateHalves } from './engine'
 import { createRng } from './rng'
-import { BASE, FREE_POSITION, TOTAL_TICKS } from './constants'
+import { BASE, EVENTS, FREE_POSITION, TOTAL_TICKS } from './constants'
 import { HOME_XI, BENCH } from './squad'
 import { applyOrders, applyPositions, resolveCoefficients } from './tactics'
 import raw from '../data/problems.json' with { type: 'json' }
@@ -571,5 +571,50 @@ describe('전반에서 후반으로 이어진다', () => {
     const b = simulateHalves(P, [], [])
     expect(a.final.score).toEqual(b.final.score)
     expect(a.passed).toBe(b.passed)
+  })
+})
+
+/**
+ * 급수 타임 교체는 즉시 끝난다.
+ *
+ * 사용자가 정했다 — "전반전에서 후반전으로 넘어갈 때 바로 선수교체가
+ * 가능하게 해줘. 5초 기다렸다 할 필요 없고."
+ */
+describe('급수 타임 교체는 기다리지 않는다', () => {
+  const P = PROBLEMS[0]
+  const bench = BENCH[0]
+  const starter = HOME_XI.find((p) => p.pos === bench.pos)!
+
+  it('0틱 교체는 대기 없이 바로 선발이 바뀐다', () => {
+    // 급수 타임에 내린 지시는 전부 0틱에 기록된다
+    const before = simulate(P, [])
+    expect(before.final.players.find((p) => p.id === bench.id)!.onPitch).toBe(false)
+
+    const after = simulate(P, [{ tick: 0, type: 'SUB', out: starter.id, in: bench.id }])
+    expect(after.final.players.find((p) => p.id === bench.id)!.onPitch).toBe(true)
+    expect(after.final.players.find((p) => p.id === starter.id)!.onPitch).toBe(false)
+    // 카드는 그대로 한 장 쓴다
+    expect(after.final.subsLeft).toBe(P.subsLeft - 1)
+  })
+
+  it('0틱 교체는 대기 명단에 남지 않는다', () => {
+    /**
+     * 6초를 기다리면 그동안 우리는 열 명으로 뛴다. 급수 타임은 공이 이미
+     * 죽어 있는 시간이라 그럴 이유가 없다
+     */
+    const after = simulate(P, [{ tick: 0, type: 'SUB', out: starter.id, in: bench.id }])
+    expect(after.final.pendingSubs).toHaveLength(0)
+    // 대기를 거쳤다면 SUB 로그가 60틱에 찍힌다. 즉시 교체는 그 로그가 없다
+    const subLog = after.final.log.find((e) => e.kind === 'SUB' && e.target === bench.id)
+    expect(subLog).toBeUndefined()
+  })
+
+  it('경기 중 교체는 여전히 6초를 기다린다', () => {
+    // 흐르는 경기에서는 선수가 실제로 걸어 나오고 들어가야 한다
+    const mid = 300
+    const after = simulate(P, [{ tick: mid, type: 'SUB', out: starter.id, in: bench.id }])
+    const subLog = after.final.log.find((e) => e.kind === 'SUB' && e.target === bench.id)
+    expect(subLog).toBeDefined()
+    expect(subLog!.tick).toBeGreaterThanOrEqual(mid + EVENTS.subDelayTicks)
   })
 })

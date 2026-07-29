@@ -94,7 +94,7 @@ export function checkSub(state: MatchState, out: string, inId: string): string |
   return null
 }
 
-function applySub(players: PlayerState[], out: string, inId: string): PlayerState[] {
+export function applySub(players: PlayerState[], out: string, inId: string): PlayerState[] {
   return players.map((s) => {
     // 나간 선수의 지시는 함께 걷힌다. 들어온 선수는 지시 없이 시작한다 —
     // 안 그러면 벤치에 앉아 있던 선수에게 유령 지시가 붙어 들어온다
@@ -523,8 +523,30 @@ export const secondHalfSeed = (seed: number): number => (seed ^ 0x9e3779b9) >>> 
  */
 function applyDecision(state: MatchState, d: Decision, atTick: number): MatchState {
   if (d.type === 'SUB') {
-    // 교체는 즉시 반영되지 않는다. 늦게 쓰면 늦게 듣는다
     if (checkSub(state, d.out, d.in) !== null) return state
+    /**
+     * **급수 타임 교체는 즉시 끝난다.**
+     *
+     * 사용자가 정했다 — *"전반전에서 후반전으로 넘어갈 때 바로 선수교체가
+     * 가능하게 해줘. 5초 기다렸다 할 필요 없고."*
+     *
+     * 6초 지연은 **경기가 흐르는 중**에 교체를 지시했을 때의 값이다.
+     * 선수가 실제로 걸어 나오고 들어가는 시간이라 그때는 맞다. 하지만
+     * 급수 타임과 하프타임은 이미 공이 죽어 있고 시계가 멈춰 있다 —
+     * 실제 축구에서도 하프타임 교체는 후반 시작 휘슬에 이미 끝나 있다.
+     *
+     * 기준은 **0틱**이다. 급수 타임에 내린 지시는 전부 0틱에 기록되므로
+     * 화면과 재현이 같은 규칙을 쓴다. 이게 어긋나면 사용자가 본 선발과
+     * 150판 비교가 쓰는 선발이 달라져 판단 평가가 통째로 틀린다.
+     */
+    if (atTick === 0) {
+      return {
+        ...state,
+        subsLeft: state.subsLeft - 1,
+        players: applySub(state.players, d.out, d.in),
+      }
+    }
+    // 경기 중 교체는 늦게 쓰면 늦게 듣는다
     return {
       ...state,
       subsLeft: state.subsLeft - 1,
