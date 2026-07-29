@@ -183,11 +183,26 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 파일도 함께 추가한다. 역할·범위·금지선·검증 기준을 두 실행 파일에 복사하지
 않는다. 그래야 한쪽만 수정되어 서로 다른 에이전트가 되는 일을 막을 수 있다.
 
+**네 에이전트 모두 이 구조를 따른다.** `game-agent` 와 `qa-agent` 는 이
+규칙보다 먼저 만들어져 한동안 Claude Code 전용이었고, 지침이 실행 파일
+안에 직접 들어 있었다. 2026-07-29에 공통 원본으로 옮기고 Codex 실행
+파일을 추가해 맞췄다.
+
+| 에이전트 | 공통 원본 | Claude Code | Codex |
+|---|---|---|---|
+| 게임 | `docs/agents/game-agent.md` | `game-agent` | `game_agent` |
+| UX/UI | `docs/agents/uxui-agent.md` | `uxui-agent` | `uxui_agent` |
+| Coach | `docs/agents/coach-agent.md` | `coach-agent` | `coach_agent` |
+| QA | `docs/agents/qa-agent.md` | `qa-agent` | `qa_agent` |
+
 ---
 
 ## 4.5 게임 전문가 에이전트
 
-축구 룰과 게임 시스템은 **`game-agent`** 가 관리한다 (`.claude/agents/game-agent.md`).
+축구 룰과 게임 시스템은 게임 전문 에이전트가 관리한다. Codex에서는
+**`game_agent`** (`.codex/agents/game-agent.toml`), Claude Code에서는
+**`game-agent`** (`.claude/agents/game-agent.md`)를 쓴다. 두 실행 파일은
+공통 원본 `docs/agents/game-agent.md`를 반드시 읽는다.
 
 이 에이전트에게 맡기는 일:
 - **경기 규칙·사실성 검토** — "이거 축구 맞아?"
@@ -197,7 +212,19 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 
 맡기지 않는 일: UI 레이아웃, 배포, 문서.
 
-정의 파일에는 **축구 룰 체크리스트**와 **이 프로젝트에서 확립된 사실성 기준**(패스 성공률, 압박 게이지, 선수 속도 등)이 들어 있다. 관전 품질을 손볼 때는 그 문서를 기준으로 삼는다.
+공통 원본에는 **축구 룰 체크리스트**와 **이 프로젝트에서 확립된 사실성 기준**(패스 성공률, 압박 게이지, 선수 속도 등)이 들어 있다. 관전 품질을 손볼 때는 그 문서를 기준으로 삼는다.
+
+## 4.5.1 QA 검사관 에이전트
+
+브라우저에서 경기를 끝까지 지켜보고 축구가 아닌 지점을 숫자로 짚는 일은
+QA 에이전트가 맡는다. Codex에서는 **`qa_agent`**
+(`.codex/agents/qa-agent.toml`), Claude Code에서는 **`qa-agent`**
+(`.claude/agents/qa-agent.md`)를 쓴다. 두 실행 파일은 공통 원본
+`docs/agents/qa-agent.md`를 반드시 읽는다.
+
+**이 에이전트는 코드를 절대 고치지 않는다.** 찾아서 보고만 한다. 고치는
+일은 `game-agent` 소관이다. 그래서 다른 에이전트가 작업 중일 때도 안전하게
+동시에 돌릴 수 있다.
 
 ## 4.6 UX/UI 전문가 에이전트
 

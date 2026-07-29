@@ -213,22 +213,28 @@ QA 결과 단순 버그가 아니라 **요구를 잘못 정의한 것**으로 �
 - 1280px 가로 넘침 0, 깨끗한 새 탭 오류·경고 0
 - 상세 기록은 `docs/qa-log.md`의 `QA-06`
 
-## 에이전트 역할
+## 에이전트 역할 — 넷 다 Codex·Claude Code 양쪽에서 쓴다
 
 | 에이전트 | 역할 | 코드를 고치나 |
 |---|---|---|
-| `.claude/agents/game-agent.md` | 축구 규칙·엔진·관전 연출·밸런스 | 고친다 |
-| `.claude/agents/qa-agent.md` | 브라우저로 끝까지 검사하고 숫자로 보고 | 절대 안 고친다 |
-| `.claude/agents/uxui-agent.md` | 웹 정보 구조·조작·반응형 | UI만 고친다 |
-| `.claude/agents/coach-agent.md` | 경기 종료 원인 분석과 처방 | 분석 영역만 고친다 |
+| 게임 | 축구 규칙·엔진·관전 연출·밸런스 | 고친다 |
+| QA | 브라우저로 끝까지 검사하고 숫자로 보고 | **절대 안 고친다** |
+| UX/UI | 웹 정보 구조·조작·반응형 | UI만 고친다 |
+| Coach | 경기 종료 원인 분석과 처방 | 분석 영역만 고친다 |
 
-UX/UI와 Coach는 Codex에서도 같은 기준을 쓴다.
+**지침의 단일 원본은 `docs/agents/<이름>.md` 하나다.** 플랫폼별 실행
+파일은 그 원본을 읽으라고만 적혀 있는 얇은 파일이다.
 
-- 공통 UX/UI 원본: `docs/agents/uxui-agent.md`
-- 공통 Coach 원본: `docs/agents/coach-agent.md`
-- Codex 실행 파일: `.codex/agents/`
+| | Claude Code | Codex |
+|---|---|---|
+| 실행 파일 | `.claude/agents/<이름>.md` | `.codex/agents/<이름>.toml` |
+| 부르는 이름 | `game-agent` 처럼 하이픈 | `game_agent` 처럼 밑줄 |
 
-역할을 바꿀 때 플랫폼별 파일에 지침을 복사하지 말고 공통 원본을 수정한다.
+**역할을 바꿀 때는 `docs/agents/` 의 공통 원본만 고친다.** 실행 파일에
+내용을 복사하면 한쪽만 수정되어 서로 다른 에이전트가 된다.
+
+동시에 여러 개를 돌릴 때 주의: **QA 는 코드를 안 고치므로 언제나 안전**
+하지만, 게임과 UX/UI 는 둘 다 화면을 만질 수 있어 같이 돌리면 충돌한다.
 
 ## 절대 바꾸면 안 되는 불변식
 
