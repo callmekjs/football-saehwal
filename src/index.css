@@ -1044,7 +1044,7 @@ button {
 
 .side-note-body {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   padding: 10px;
 }
 
@@ -1107,7 +1107,7 @@ button {
  */
 .captain-brief {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   padding: 8px;
   border-radius: 8px;
   border-left: 3px solid var(--accent);
@@ -1138,6 +1138,67 @@ button {
   font-size: 12px;
   font-weight: 800;
 }
+
+/*
+ * 눌러서 말하기.
+ *
+ * 주장 줄 오른쪽 끝에 붙는다. 따로 한 줄을 쓰면 그만큼 경기 재개 버튼이
+ * 아래로 밀린다. 세로 44px 은 지키되 주장 줄이 그만큼만 높아진다.
+ *
+ * **누르고 있는 동안만 듣는다.** 항상 켜두면 혼잣말이 지시가 된다.
+ */
+.captain-mic {
+  margin-left: auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  touch-action: none;
+  user-select: none;
+}
+
+.captain-mic span { color: var(--dim); font-size: 9px; }
+
+/* 듣는 중은 색만이 아니라 글자도 바뀐다 — "듣는 중" ↔ "눌러서 말하기" */
+.captain-mic[aria-pressed='true'] {
+  border-color: var(--away);
+  background: color-mix(in srgb, var(--away) 18%, var(--panel));
+  color: var(--text);
+}
+
+.captain-mic[aria-pressed='true'] span {
+  color: var(--away);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/*
+ * 들은 말과 한 일.
+ *
+ * 음성의 진짜 문제는 안 들리는 것이 아니라 잘못 들리는 것이다. 무엇으로
+ * 들렸는지가 화면에 없으면 엉뚱한 지시가 걸려도 왜 그랬는지 알 수 없다.
+ * 높이를 늘 잡아 두어 글자가 뜰 때 아래 버튼이 밀리지 않는다.
+ */
+.captain-voice {
+  margin: 0;
+  min-height: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.captain-heard { color: var(--dim); }
+.captain-did { color: var(--accent); font-weight: 650; }
+.captain-voice-off { color: var(--dim); }
 
 .captain-lines {
   display: grid;
@@ -1222,7 +1283,8 @@ button {
 }
 
 .kickoff-button {
-  min-height: 56px;
+  /* 화면에서 가장 큰 표적이다. 44px 하한을 넉넉히 넘긴다 */
+  min-height: 52px;
   display: grid;
   place-items: center;
   gap: 1px;

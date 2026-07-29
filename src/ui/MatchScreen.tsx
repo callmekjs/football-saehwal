@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pitch } from './Pitch'
 import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
 import { BENCH, getPlayer } from '../sim/squad'
@@ -8,6 +8,8 @@ import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
 import { PRESETS, presetOf } from '../analysis/presets'
 import { buildBriefing, type Briefing } from '../analysis/briefing'
+import { useVoice, type VoiceHandle } from './useVoice'
+import { applyCommand, parseCommand } from './voice'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
@@ -52,7 +54,7 @@ export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
  * 오른쪽 열은 세로가 넉넉하지 않고, 열네 줄을 한꺼번에 펴면 벽처럼 보여
  * 한 줄도 안 읽힌다.
  */
-function CaptainBrief({ briefing }: { briefing: Briefing }) {
+function CaptainBrief({ briefing, voice }: { briefing: Briefing; voice: VoiceHandle }) {
   return (
     <div className="captain-brief">
       <p className="captain-who">
@@ -62,6 +64,34 @@ function CaptainBrief({ briefing }: { briefing: Briefing }) {
         <span>
           <b>{briefing.speaker}번</b> 주장이 상황을 전합니다
         </span>
+
+        {/*
+          마이크는 주장 줄 오른쪽 끝에 붙는다. 따로 한 줄을 쓰면 그만큼
+          경기 재개 버튼이 아래로 밀린다.
+
+          **지원하지 않는 브라우저에서는 아예 없다.** 파이어폭스에서
+          회색 버튼이 하나 놓여 있는 것보다 없는 편이 낫다 — 탭으로 하던
+          길은 그대로 살아 있으므로 잃는 기능이 없다.
+        */}
+        {voice.supported && !voice.denied && (
+          <button
+            type="button"
+            className="captain-mic"
+            aria-pressed={voice.listening}
+            aria-label="누르고 있는 동안 음성으로 지시"
+            title="누르고 있는 동안 듣습니다 — 예: 4번 내려 · 역습 · 4-4-2"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              voice.press()
+            }}
+            onPointerUp={voice.release}
+            onPointerLeave={voice.release}
+            onPointerCancel={voice.release}
+          >
+            <span aria-hidden>●</span>
+            {voice.listening ? '듣는 중' : '눌러서 말하기'}
+          </button>
+        )}
       </p>
 
       <ul className="captain-lines">
@@ -85,6 +115,34 @@ function CaptainBrief({ briefing }: { briefing: Briefing }) {
             ))}
           </ul>
         </details>
+      )}
+
+      {/*
+        들은 말과 한 일을 **둘 다** 보여준다.
+
+        음성의 진짜 문제는 안 들리는 것이 아니라 **잘못 들리는 것**이다.
+        무엇으로 들렸는지가 화면에 없으면, 엉뚱한 지시가 걸려도 왜 그랬는지
+        알 수 없다. 자리를 늘 비워 두어 글자가 뜰 때 아래가 밀리지 않는다.
+
+        아직 말하기 전에는 그 자리에 **무슨 말을 받는지**를 적는다. 정해진
+        몇 마디만 알아듣는데 그게 무엇인지 화면에 없으면, 되는 기능도 없는
+        기능이 된다. 어차피 비워 둘 자리라 높이가 늘지 않는다.
+      */}
+      {voice.supported && (
+        <p className="captain-voice" role="status">
+          {voice.denied ? (
+            <span className="captain-voice-off">
+              마이크를 쓸 수 없습니다 — 탭으로 하시면 됩니다
+            </span>
+          ) : voice.heard || voice.note ? (
+            <>
+              <span className="captain-heard">{voice.heard && `들은 말: ${voice.heard}`}</span>
+              <span className="captain-did">{voice.note}</span>
+            </>
+          ) : (
+            <span className="captain-voice-off">예) 6번 내려 · 역습 · 사사이</span>
+          )}
+        </p>
       )}
     </div>
   )
@@ -369,6 +427,24 @@ export function MatchScreen({
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
   /**
+   * 말로 내리는 지시. **급수 타임에서만 쓴다.**
+   *
+   * 경기 중에는 쓰지 않는다. 75초 중 몇 초를 말하는 데 쓰는 것도 문제지만,
+   * 잘못 알아들었을 때 되돌릴 방법이 없다는 것이 더 크다. 시계가 멈춰 있는
+   * 동안이라면 잘못 걸려도 탭으로 고칠 시간이 있다.
+   *
+   * 되는 일은 탭으로 되는 일과 **정확히 같다.** 검증도 같은 `checkOrder`
+   * 를 쓰므로 안 되는 이유도 같은 문장으로 나온다.
+   */
+  const stateRef = useRef(state)
+  stateRef.current = state
+  const voice = useVoice((text) => {
+    const command = parseCommand(text)
+    if (!command) return '다시 말씀해 주세요'
+    return applyCommand(command, stateRef.current, { setOrder, setLever, setFormation })
+  })
+
+  /**
    * 점수판에 띄우는 점수.
    *
    * 시뮬은 확률로 득점을 정하는데, 그 순간의 경기 상황이 골을 그릴 수
@@ -380,6 +456,11 @@ export function MatchScreen({
    */
   const [shown, setShown] = useState<[number, number]>(problem.score)
   useEffect(() => setShown(problem.score), [problem])
+  // 휘슬이 울리면 마이크를 놓는다. 급수 타임 밖에서는 듣지 않는다
+  const releaseVoice = voice.release
+  useEffect(() => {
+    if (phase !== 'READY') releaseVoice()
+  }, [phase, releaseVoice])
   useEffect(() => {
     if (phase === 'DONE') setActiveTab('INFO')
   }, [phase])
@@ -502,20 +583,20 @@ export function MatchScreen({
           */}
           {phase === 'READY' && (
             <section className="panel side-note">
+              {/*
+                국면 제목도 목표도 시작 시각도 이미 점수판과 국면 카드에
+                떠 있다. 같은 말을 여기 다시 적으면 그만큼 주장의 말과
+                경기 재개 버튼이 화면 밖으로 밀려난다. 머리줄 하나로 접었다.
+              */}
               <h2>
-                급수 타임
+                급수 타임 · {problem.title}
                 <span style={{ color: 'var(--dim)', fontWeight: 400 }}>
                   {' '}
                   · 후반 {kickoff}분 · 시계 정지
                 </span>
               </h2>
-              {/*
-                목표도 시작 시각도 이미 점수판에 떠 있다. 같은 말을 여기
-                다시 적으면 그만큼 주장의 말이 화면 밖으로 밀려난다.
-              */}
               <div className="side-note-body">
-                <strong>{problem.title}</strong>
-                <CaptainBrief briefing={buildBriefing(problem, state)} />
+                <CaptainBrief briefing={buildBriefing(problem, state)} voice={voice} />
                 <button
                   className="kickoff-button"
                   onClick={() => {
