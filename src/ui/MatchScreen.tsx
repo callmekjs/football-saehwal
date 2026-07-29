@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pitch } from './Pitch'
 import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
 import { BENCH, getPlayer } from '../sim/squad'
-import { judge } from '../sim/engine'
+import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
 import { PRESETS, presetOf } from '../analysis/presets'
@@ -30,7 +30,7 @@ import {
   formatBreak,
   useBreakClock,
 } from './breakClock'
-import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
+import type { Decision, Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
   LINE: ['낮음', '보통', '높음'],
@@ -461,13 +461,18 @@ const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
 
 export function MatchScreen({
   problem,
-  half,
+  startHalf,
   onExit,
   onRetry,
 }: {
   problem: Problem
-  /** 플레이어가 고른 반. 시계·종료 문구·하프타임 정리가 여기서 갈린다 */
-  half: Half
+  /**
+   * 플레이어가 **어느 반부터** 시작할지 고른 값.
+   *
+   * 전반을 고르면 전반을 뛰고 하프타임을 거쳐 후반까지 이어진다. 후반을
+   * 고르면 후반 하나만 뛴다.
+   */
+  startHalf: Half
   onExit: () => void
   /**
    * 다시 도전. 없으면 **같은 시작 조건으로** 처음부터 다시 한다.
@@ -478,7 +483,18 @@ export function MatchScreen({
    */
   onRetry?: () => void
 }) {
-  // 감독 보고서가 쓰는 시각 기준. 고른 반이 정한다
+  /**
+   * 지금 뛰고 있는 반.
+   *
+   * 전반에서 시작하면 하프타임을 지나 2가 된다. 사용자가 지적했다 —
+   * *"전반전이 끝나면 후반전으로 넘어가야지 계속 전반전에만 있어."*
+   */
+  const [half, setHalf] = useState<Half>(startHalf)
+  /** 전반을 마친 기록. 종료 보고서에서 두 반을 합치는 데 쓴다 */
+  const [firstHalf, setFirstHalf] = useState<{ state: MatchState; decisions: Decision[] } | null>(
+    null,
+  )
+  // 감독 보고서가 쓰는 시각 기준. 지금 뛰는 반이 정한다
   const kickoff = kickoffMinute(half)
   const {
     state,
@@ -490,6 +506,7 @@ export function MatchScreen({
     substitute,
     setOrder,
     setPosition,
+    startNextHalf,
     decisions,
   } = useMatch(problem)
   const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
@@ -563,12 +580,26 @@ export function MatchScreen({
   const setup = `${state.formation} · ${activePreset?.name ?? '직접 맞춤'}`
   const orderCount = state.players.filter((s) => s.onPitch && !s.out && s.order !== 'NONE').length
   /**
-   * 하프타임 주장 정리. **전반 국면이 끝났을 때만** 만든다.
+   * 하프타임 주장 정리. **전반이 끝났을 때만** 만든다.
    *
-   * 후반 국면이 끝난 것은 경기가 끝난 것이라 정리할 "다음 반"이 없다.
-   * 그때는 감독 보고서가 전체를 분석한다.
+   * 후반이 끝난 것은 경기가 끝난 것이라 정리할 "다음 반"이 없다. 그때는
+   * 감독 보고서가 전체를 분석한다.
    */
   const halftime = phase === 'DONE' && half === 1 ? buildHalftime(problem, state) : null
+
+  /**
+   * 후반으로 넘어간다.
+   *
+   * 점수·체력·경고·교체 카드를 그대로 물려받은 상태로 후반 급수 타임에
+   * 들어간다. 전반 기록은 따로 챙겨둬야 종료 보고서에서 두 반을 합칠 수
+   * 있다.
+   */
+  const goSecondHalf = useCallback(() => {
+    setFirstHalf({ state, decisions: [...decisions.current] })
+    setHalf(2)
+    setActiveTab('TACTICS')
+    startNextHalf(carryToNextHalf(state), secondHalfSeed(problem.seed))
+  }, [state, decisions, startNextHalf, problem.seed])
 
   return (
     <div className="match-screen">
@@ -759,7 +790,39 @@ export function MatchScreen({
             </section>
           )}
 
-          {phase === 'DONE' && (
+          {phase === 'DONE' && half === 1 && halftime && (
+            /**
+             * 하프타임 — 아직 경기가 끝나지 않았다.
+             *
+             * 여기서 승패를 선고하면 안 된다. 후반 45분이 통째로 남아
+             * 있고, 0-1로 지고 있어도 뒤집을 시간이 있다. 주장이 전반을
+             * 정리해주고 감독은 후반 지시를 걸러 간다.
+             */
+            <section className="panel side-note halftime">
+              <h2>{endLabel(half)}</h2>
+              <div className="side-note-body">
+                <div className="halftime-talk">
+                  <strong>
+                    <i className="ht-num">{halftime.speaker}</i>
+                    {halftime.headline}
+                  </strong>
+                  <ul>
+                    {halftime.lines.map((l) => (
+                      <li key={l.id} className={`ht-${l.tone.toLowerCase()}`}>
+                        {l.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button className="kickoff-button" onClick={goSecondHalf}>
+                  후반 시작
+                  <small>급수 타임에서 지시를 다시 겁니다 · 경기는 이어집니다</small>
+                </button>
+              </div>
+            </section>
+          )}
+
+          {phase === 'DONE' && half === 2 && (
             <section className={`panel side-note result ${passed ? 'passed' : 'failed'}`}>
               <h2>{endLabel(half)}</h2>
               <div className="side-note-body">
@@ -775,29 +838,6 @@ export function MatchScreen({
                 <span>
                   {problem.title} · {objective}
                 </span>
-                {half === 1 && halftime && (
-                  /**
-                   * 하프타임 — 라커룸에서 주장이 전반을 정리한다.
-                   *
-                   * 전반 국면은 경기가 끝난 것이 아니라 **반이 끝난** 것이다.
-                   * 후반 45분이 통째로 남아 있으므로, 결과를 선고하기 전에
-                   * 방금 무슨 일이 있었는지부터 말해준다.
-                   */
-                  <div className="halftime-talk">
-                    <strong>
-                      <i className="ht-num">{halftime.speaker}</i>
-                      {halftime.headline}
-                    </strong>
-                    <ul>
-                      {halftime.lines.map((l) => (
-                        <li key={l.id} className={`ht-${l.tone.toLowerCase()}`}>
-                          {l.text}
-                        </li>
-                      ))}
-                    </ul>
-                    <small>후반 시작 전, 주장이 전한 전반 요약입니다.</small>
-                  </div>
-                )}
                 <small>아래 감독 보고서에서 무엇이 결과를 갈랐는지 볼 수 있습니다.</small>
                 <button
                   className="kickoff-button"
@@ -817,9 +857,19 @@ export function MatchScreen({
       </div>
 
       {/* 감독 보고서는 길다. 열 안에 밀어 넣지 않고 아래에 통째로 편다 */}
-      {phase === 'DONE' && (
+      {/*
+        경기가 **완전히** 끝났을 때만 편다. 전반이 끝난 것은 경기가 끝난
+        것이 아니라 아직 45분이 남은 것이라, 여기서 판단 평가를 내면
+        뒤집을 시간이 남았는데 결론을 선고하는 셈이다.
+      */}
+      {phase === 'DONE' && half === 2 && (
         <div className="match-report">
-          <AnalysisPanel problem={problem} decisions={decisions.current} kickoff={kickoff} />
+          <AnalysisPanel
+            problem={problem}
+            decisions={decisions.current}
+            kickoff={kickoff}
+            firstHalf={firstHalf ? firstHalf.decisions : null}
+          />
         </div>
       )}
     </div>

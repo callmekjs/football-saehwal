@@ -1200,6 +1200,9 @@ button {
 .side-note-body > span { color: var(--accent); font-size: 13px; }
 .side-note-body > small { color: var(--dim); font-size: 10.5px; line-height: 1.55; }
 
+/* 하프타임은 결과가 아니다. 승패 색을 쓰지 않는다 */
+.side-note.halftime { border-left: 4px solid var(--home); }
+
 .side-note.result { border-left: 4px solid var(--accent); }
 .side-note.result.failed { border-left-color: var(--away); }
 .result-verdict { color: var(--accent); font-size: 22px; }

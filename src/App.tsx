@@ -117,7 +117,7 @@ export function App() {
       <MatchScreen
         key={`${picked.entry.problem.id}#${picked.half}#${attempt}`}
         problem={problem}
-        half={picked.half}
+        startHalf={picked.half}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
       />

@@ -152,6 +152,26 @@ export function useMatch(problem: Problem) {
 
   useEffect(() => reset(), [reset])
 
+  /**
+   * 이어지는 반을 시작한다.
+   *
+   * `reset` 과 다르다 — 저건 국면을 처음부터 다시 하는 것이고 이건
+   * **경기가 계속되는** 것이다. 점수·체력·경고·교체 카드를 그대로 물려받은
+   * 상태로 급수 타임(`READY`)에 들어가므로, 감독은 후반 지시를 새로 걸고
+   * 휘슬을 분다.
+   *
+   * 결정 이력은 반마다 새로 시작한다. 호출하는 쪽이 전반 것을 따로 챙겨야
+   * 종료 보고서에서 두 반을 합칠 수 있다.
+   */
+  const startNextHalf = useCallback((initial: MatchState, seed: number) => {
+    clearInterval(timerRef.current)
+    rngRef.current = createRng(seed)
+    decisionsRef.current = []
+    stateRef.current = initial
+    setState(initial)
+    setPhase('READY')
+  }, [])
+
   const start = useCallback(() => {
     if (phase !== 'READY') return
     startedAtRef.current = performance.now()
@@ -306,6 +326,7 @@ export function useMatch(problem: Problem) {
     substitute,
     setOrder,
     setPosition,
+    startNextHalf,
     decisions: decisionsRef,
   }
 }

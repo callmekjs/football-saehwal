@@ -1,4 +1,4 @@
-import { simulate } from '../sim/engine'
+import { simulate, simulateHalves } from '../sim/engine'
 import type { Decision, MatchState, Problem, Recommendation } from '../sim/types'
 import {
   buildCoachReport,
@@ -47,7 +47,25 @@ interface MeasureResult {
   firstFinal: MatchState
 }
 
-function measure(problem: Problem, decisions: Decision[], runs: number): MeasureResult {
+/**
+ * 사용자가 전반부터 뛰었으면 비교도 두 반으로 돌린다.
+ *
+ * **이걸 안 맞추면 판단 평가가 통째로 틀린다.** 사용자는 1,500틱을 겪었는데
+ * 무개입 기준선을 750틱으로 재면, 노출 시간이 절반이라 무개입 통과율이
+ * 실제보다 훨씬 높게 나온다. 그러면 "당신의 판단이 무개입보다 못했다"는
+ * 거짓 결론이 나온다.
+ */
+function runOnce(problem: Problem, second: Decision[], first: Decision[] | null) {
+  return first === null ? simulate(problem, second) : simulateHalves(problem, first, second)
+}
+
+function measure(
+  problem: Problem,
+  decisions: Decision[],
+  runs: number,
+  /** 전반 결정. 있으면 두 반을 이어 돌린다 */
+  firstHalf: Decision[] | null = null,
+): MeasureResult {
   // 같은 반복 경기의 최종 상태를 함께 모아, 별도 시뮬레이션 없이 채널별 평균을 만든다.
   let passed = 0
   const totals: OutcomeProfile = {
@@ -66,7 +84,7 @@ function measure(problem: Problem, decisions: Decision[], runs: number): Measure
 
   for (let i = 0; i < runs; i++) {
     const replay = { ...problem, seed: problem.seed + i }
-    const result = simulate(replay, decisions)
+    const result = runOnce(replay, decisions, firstHalf)
     if (i === 0) firstFinal = result.final
     if (result.passed) passed += 1
     totals.goalsFor += result.final.score[0] - problem.score[0]
@@ -109,13 +127,25 @@ export function compareDecisions(
   userDecisions: Decision[],
   runs = ANALYSIS_RUNS,
   kickoff = 70,
+  /**
+   * 전반에 내린 결정. 전반부터 뛴 경기에서만 있다.
+   *
+   * 있으면 무개입·나의 판단·권장 전술을 전부 **두 반**으로 돌린다.
+   */
+  firstHalf: Decision[] | null = null,
 ): MatchAnalysis {
   if (!Number.isInteger(runs) || runs <= 0) throw new Error('분석 횟수는 양의 정수여야 한다')
   if (!problem.recommendation) throw new Error(`${problem.id}: 권장 전술이 없다`)
 
-  const noop = measure(problem, [], runs)
-  const user = measure(problem, userDecisions, runs)
-  const recommendation = measure(problem, planOf(problem.recommendation), runs)
+  // 무개입과 권장 전술도 사용자와 **같은 반 수**로 돌려야 비교가 성립한다
+  const noop = measure(problem, [], runs, firstHalf && [])
+  const user = measure(problem, userDecisions, runs, firstHalf)
+  const recommendation = measure(
+    problem,
+    planOf(problem.recommendation),
+    runs,
+    firstHalf && planOf(problem.recommendation),
+  )
 
   const rows = [
     row('noop', '무개입', noop, runs),

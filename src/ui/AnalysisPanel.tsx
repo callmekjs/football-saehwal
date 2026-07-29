@@ -51,10 +51,13 @@ export function AnalysisPanel({
   problem,
   decisions,
   kickoff,
+  firstHalf = null,
 }: {
   problem: Problem
   decisions: Decision[]
   kickoff: number
+  /** 전반에 내린 결정. 전반부터 뛴 경기에서만 있다 */
+  firstHalf?: Decision[] | null
 }) {
   const snapshot = useMemo(() => decisions.map((decision) => ({ ...decision })), [decisions])
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null)
@@ -68,7 +71,7 @@ export function AnalysisPanel({
     // 종료 결과를 먼저 그린 뒤 계산한다. 폰에서도 버튼이 멈춘 것처럼 보이지 않는다.
     const timer = window.setTimeout(() => {
       try {
-        const next = compareDecisions(problem, snapshot, ANALYSIS_RUNS, kickoff)
+        const next = compareDecisions(problem, snapshot, ANALYSIS_RUNS, kickoff, firstHalf)
         if (!cancelled) setAnalysis(next)
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
@@ -79,7 +82,7 @@ export function AnalysisPanel({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [kickoff, problem, snapshot])
+  }, [firstHalf, kickoff, problem, snapshot])
 
   return (
     <section className="panel analysis">

@@ -411,6 +411,176 @@ export function judge(state: MatchState, objective: Problem['objective']): boole
   return objective.type === 'SURVIVE' ? home > away : home >= away
 }
 
+/**
+ * 전반이 끝난 상태를 후반의 시작 상태로 넘긴다.
+ *
+ * 사용자가 지적했다 — *"전반전이 끝나면 후반전으로 넘어가야지 계속
+ * 전반전에만 있어."* 전반을 고르면 전반만 뛰고 끝나 있었다.
+ *
+ * **경기는 이어진다.** 점수·체력·경고·퇴장·남은 교체 카드·포메이션·전술·
+ * 걸어둔 지시가 그대로 후반으로 넘어간다. 하프타임에 회복되는 것은 없다 —
+ * 실제 축구도 15분 쉰다고 체력이 돌아오지 않는다.
+ *
+ * **초기화하는 것:** 시계(0틱), 그 반의 통계, 사건 기록, 그리고 대기 중이던
+ * 교체다. 통계와 기록을 이어붙이면 후반 화면이 전반 숫자까지 합쳐 보여줘
+ * "이 반에 무슨 일이 있었나"를 읽을 수 없게 된다. 전반 기록은 화면 쪽이
+ * 따로 들고 있다가 종료 보고서에서 합친다.
+ *
+ * 대기 중이던 교체는 **하프타임에 이뤄진 것으로 본다.** 버리면 감독이
+ * 카드를 쓰고도 선수를 못 받고, 그대로 두면 후반 6초 뒤에 갑자기 바뀐다.
+ * 실제로도 하프타임은 교체하는 자리다.
+ *
+ * **순수 함수다.** 난수를 쓰지 않으므로 매 틱 18개의 수열과 무관하다.
+ */
+export function carryToNextHalf(state: MatchState): MatchState {
+  // 대기 중이던 교체를 먼저 성사시킨다
+  let players = state.players
+  for (const p of state.pendingSubs) {
+    players = players.map((s) =>
+      s.id === p.out
+        ? { ...s, onPitch: false }
+        : s.id === p.in
+          ? { ...s, onPitch: true }
+          : s,
+    )
+  }
+
+  return {
+    ...state,
+    tick: 0,
+    players,
+    pendingSubs: [],
+    log: [],
+    stats: {
+      homeAttempt: 0,
+      awayAttempt: 0,
+      homeShot: 0,
+      awayShot: 0,
+      setPiece: 0,
+      behind: 0,
+    },
+    // 후반은 킥오프로 다시 시작한다. 전반이 끝난 순간의 공 위치를 물려주면
+    // 그 자리에서 경기가 이어지는 것처럼 보인다
+    ball: { x: 0.5, y: 0.5, owner: 'AWAY', tilt: 0 },
+  }
+}
+
+/**
+ * 후반이 쓸 난수 시드.
+ *
+ * 전반과 같은 시드를 쓰면 같은 수열이 다시 흘러 두 반이 똑같이 전개된다.
+ * 국면 시드에서 결정적으로 파생시켜 같은 경기는 언제나 같은 후반을 낸다.
+ */
+export const secondHalfSeed = (seed: number): number => (seed ^ 0x9e3779b9) >>> 0
+
+/**
+ * 두 반을 이어서 돌린다.
+ *
+ * 사용자가 전반부터 뛰면 경기는 1,500틱이다. 판정은 **후반이 끝난 뒤
+ * 한 번만** 한다 — 전반 종료 시점에 승패를 매기면 뒤집을 45분이 남았는데
+ * 결과를 선고하는 셈이다.
+ *
+ * 종료 뒤 150판 비교도 반드시 이 함수를 써야 한다. 사용자는 두 반을
+ * 뛰었는데 비교는 한 반만 돌리면, 무개입 통과율이 실제로 겪은 것보다
+ * 높게 나와 판단 평가가 통째로 틀린다.
+ */
+/**
+ * 결정 하나를 상태에 적용한다.
+ *
+ * `simulate` 안에 인라인으로 있던 것을 뺐다. 두 반을 이어 돌리려면 후반
+ * 루프도 **똑같은 규칙**으로 결정을 적용해야 하는데, 복사해두면 한쪽만
+ * 고쳐져 전반과 후반이 다른 게임이 된다.
+ *
+ * `atTick` 은 교체 반영 시각을 계산하는 데만 쓴다.
+ */
+function applyDecision(state: MatchState, d: Decision, atTick: number): MatchState {
+  if (d.type === 'SUB') {
+    // 교체는 즉시 반영되지 않는다. 늦게 쓰면 늦게 듣는다
+    if (checkSub(state, d.out, d.in) !== null) return state
+    return {
+      ...state,
+      subsLeft: state.subsLeft - 1,
+      pendingSubs: [
+        ...state.pendingSubs,
+        { out: d.out, in: d.in, atTick: atTick + EVENTS.subDelayTicks },
+      ],
+    }
+  }
+  if (d.type === 'FORMATION') {
+    // 새 포메이션은 전체 재배치다. 전에 손으로 옮긴 좌표를 남겨두면
+    // 새 자리와 겹치고, 배치판과 중앙 경기장이 서로 다른 모양이 된다.
+    return {
+      ...state,
+      formation: d.value,
+      players: state.players.map((s) => (s.position === null ? s : { ...s, position: null })),
+    }
+  }
+  if (d.type === 'ORDER') {
+    // 재현에서도 상한을 지킨다. 통과한 지시만 걸려야 화면과 결과가 같아진다
+    if (checkOrder(state, d.target, d.order)) return state
+    return {
+      ...state,
+      players: state.players.map((s) =>
+        s.id === d.target
+          ? {
+              ...s,
+              order: d.order,
+              // 앞뒤 줄 지시는 포메이션 기준에서 다시 시작한다. 자유 좌표와
+              // 동시에 남겨 어느 것이 우선인지 모호하게 만들지 않는다
+              position: movesLine(d.order) ? null : s.position,
+            }
+          : s,
+      ),
+    }
+  }
+  if (d.type === 'POSITION') {
+    if (checkPosition(state, d.target, d.position)) return state
+    return {
+      ...state,
+      players: state.players.map((s) =>
+        s.id === d.target
+          ? {
+              ...s,
+              position: d.position ? { ...d.position } : null,
+              // 직접 놓은 자리가 마지막 위치 지시다. 행동 지시는 보존하되
+              // 앞뒤 줄을 옮기던 지시는 풀어 충돌을 막는다
+              order: movesLine(s.order) ? 'NONE' : s.order,
+            }
+          : s,
+      ),
+    }
+  }
+  // 레버는 승수라 순서가 없다. 마지막 값이 이긴다
+  const tactics = { ...state.tactics }
+  if (d.type === 'LINE') tactics.line = d.value
+  else if (d.type === 'PRESS') tactics.press = d.value
+  else tactics.width = d.value
+  return { ...state, tactics }
+}
+
+export function simulateHalves(
+  problem: Problem,
+  first: Decision[],
+  second: Decision[],
+): { final: MatchState; passed: boolean; halftime: MatchState } {
+  const firstRun = simulate(problem, first)
+  const carried = carryToNextHalf(firstRun.final)
+
+  const rng = createRng(secondHalfSeed(problem.seed))
+  let state = carried
+  const byTick = new Map<number, Decision[]>()
+  for (const d of second) {
+    const list = byTick.get(d.tick) ?? []
+    list.push(d)
+    byTick.set(d.tick, list)
+  }
+  for (let i = 0; i < TOTAL_TICKS; i++) {
+    for (const d of byTick.get(i) ?? []) state = applyDecision(state, d, i)
+    state = tick(state, rng)
+  }
+  return { final: state, passed: judge(state, problem.objective), halftime: firstRun.final }
+}
+
 export function simulate(
   problem: Problem,
   decisions: Decision[],
@@ -426,69 +596,7 @@ export function simulate(
   }
 
   for (let i = 0; i < TOTAL_TICKS; i++) {
-    for (const d of byTick.get(i) ?? []) {
-      if (d.type === 'SUB') {
-        // 교체는 즉시 반영되지 않는다. 늦게 쓰면 늦게 듣는다
-        if (checkSub(state, d.out, d.in) === null) {
-          state = {
-            ...state,
-            subsLeft: state.subsLeft - 1,
-            pendingSubs: [
-              ...state.pendingSubs,
-              { out: d.out, in: d.in, atTick: i + EVENTS.subDelayTicks },
-            ],
-          }
-        }
-      } else if (d.type === 'FORMATION') {
-        // 새 포메이션은 전체 재배치다. 전에 손으로 옮긴 좌표를 남겨두면
-        // 새 자리와 겹치고, 배치판과 중앙 경기장이 서로 다른 모양이 된다.
-        state = {
-          ...state,
-          formation: d.value,
-          players: state.players.map((s) =>
-            s.position === null ? s : { ...s, position: null },
-          ),
-        }
-      } else if (d.type === 'ORDER') {
-        // 재현에서도 상한을 지킨다. 통과한 지시만 걸려야 화면과 결과가 같아진다
-        if (!checkOrder(state, d.target, d.order)) {
-          state = {
-            ...state,
-            players: state.players.map((s) =>
-              s.id === d.target
-                ? {
-                    ...s,
-                    order: d.order,
-                    // 앞뒤 줄 지시는 포메이션 기준에서 다시 시작한다.
-                    // 자유 좌표와 동시에 남겨 어느 것이 우선인지 모호하게
-                    // 만들지 않고, 마지막 위치 지시가 이긴다.
-                    position: movesLine(d.order) ? null : s.position,
-                  }
-                : s,
-            ),
-          }
-        }
-      } else if (d.type === 'POSITION') {
-        if (!checkPosition(state, d.target, d.position)) {
-          state = {
-            ...state,
-            players: state.players.map((s) =>
-              s.id === d.target
-                ? {
-                    ...s,
-                    position: d.position ? { ...d.position } : null,
-                    // 직접 놓은 자리가 마지막 위치 지시다. 행동 지시는
-                    // 보존하되 앞뒤 줄을 옮기던 지시는 풀어 충돌을 막는다.
-                    order: movesLine(s.order) ? 'NONE' : s.order,
-                  }
-                : s,
-            ),
-          }
-        }
-      } else if (d.type === 'LINE') state.tactics.line = d.value
-      else if (d.type === 'PRESS') state.tactics.press = d.value
-      else state.tactics.width = d.value
-    }
+    for (const d of byTick.get(i) ?? []) state = applyDecision(state, d, i)
     state = tick(state, rng)
   }
 

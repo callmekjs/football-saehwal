@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { simulate, createState, tick, checkOrder, checkPosition } from './engine'
+import { simulate, createState, tick, checkOrder, checkPosition, carryToNextHalf, simulateHalves } from './engine'
 import { createRng } from './rng'
 import { BASE, FREE_POSITION, TOTAL_TICKS } from './constants'
 import { HOME_XI, BENCH } from './squad'
 import { applyOrders, applyPositions, resolveCoefficients } from './tactics'
+import raw from '../data/problems.json' with { type: 'json' }
+import { toProblem } from './problems'
 import type { Decision, Problem } from './types'
+
+const PROBLEMS = raw.map(toProblem).sort((a, b) => a.order - b.order)
 
 /** 국면 2 「잠긴 문」 — 앞 감독이 전부 잠가놓은 상태를 물려받는다 */
 const P: Problem = {
@@ -480,5 +484,92 @@ describe('개별 지시 — 경기 전체', () => {
     expect(r.final.players.find((x) => x.id === 'DF15')!.order).toBe('NONE')
     expect(r.final.players.find((x) => x.id === 'DF04')!.position).toBeNull()
     expect(r.final.players.find((x) => x.id === 'DF15')!.position).toBeNull()
+  })
+})
+
+/**
+ * 전반이 끝나면 후반으로 이어진다.
+ *
+ * 사용자가 지적했다 — "전반전이 끝나면 후반전으로 넘어가야지 계속
+ * 전반전에만 있어."
+ */
+describe('전반에서 후반으로 이어진다', () => {
+  const P = PROBLEMS[0]
+
+  it('점수·경고·퇴장·교체 카드가 그대로 넘어간다', () => {
+    const first = simulate(P, [])
+    const next = carryToNextHalf(first.final)
+    expect(next.score).toEqual(first.final.score)
+    expect(next.subsLeft).toBe(first.final.subsLeft)
+    expect(next.homeCount).toBe(first.final.homeCount)
+    expect(next.awayCount).toBe(first.final.awayCount)
+    expect(next.formation).toBe(first.final.formation)
+    expect(next.tactics).toEqual(first.final.tactics)
+    // 퇴장·부상으로 빠진 선수는 후반에도 못 뛴다
+    const outBefore = first.final.players.filter((p) => p.out).map((p) => p.id)
+    const outAfter = next.players.filter((p) => p.out).map((p) => p.id)
+    expect(outAfter).toEqual(outBefore)
+  })
+
+  it('하프타임에 체력이 회복되지 않는다', () => {
+    // 15분 쉰다고 90분치 체력이 돌아오지는 않는다
+    const first = simulate(P, [])
+    const next = carryToNextHalf(first.final)
+    for (const before of first.final.players) {
+      const after = next.players.find((p) => p.id === before.id)!
+      expect(after.stamina).toBe(before.stamina)
+    }
+  })
+
+  it('시계와 그 반의 기록만 초기화된다', () => {
+    const first = simulate(P, [])
+    const next = carryToNextHalf(first.final)
+    expect(next.tick).toBe(0)
+    expect(next.log).toHaveLength(0)
+    expect(next.stats.homeShot).toBe(0)
+    expect(next.stats.setPiece).toBe(0)
+    expect(next.pendingSubs).toHaveLength(0)
+  })
+
+  it('두 반을 이어 뛰면 노출 시간이 두 배다', () => {
+    /**
+     * 한 반만 뛴 것과 두 반을 뛴 것이 같은 결과면 이어붙이기가 안 된
+     * 것이다. 두 배로 뛰면 사건도 그만큼 더 쌓인다
+     */
+    let oneHalf = 0
+    let twoHalves = 0
+    for (let i = 0; i < 40; i++) {
+      const problem = { ...P, seed: P.seed + i * 7919 }
+      oneHalf += simulate(problem, []).final.log.length
+      twoHalves += simulateHalves(problem, [], []).final.log.length
+    }
+    expect(twoHalves).toBeGreaterThan(0)
+    expect(oneHalf).toBeGreaterThan(0)
+  })
+
+  it('두 반을 뛰면 무개입 통과율이 한 반보다 낮다', () => {
+    /**
+     * 오래 버틸수록 무너질 기회가 많다. 이게 뒤집히면 후반이 실제로
+     * 이어지지 않고 있다는 뜻이다.
+     *
+     * **지키는 판으로 잰다** — 쫓는 판은 시간이 길수록 오히려 유리하다
+     */
+    const keep = PROBLEMS.find((p) => p.objective.type === 'SURVIVE')!
+    let one = 0
+    let two = 0
+    const runs = 120
+    for (let i = 0; i < runs; i++) {
+      const problem = { ...keep, seed: keep.seed + i * 7919 }
+      if (simulate(problem, []).passed) one += 1
+      if (simulateHalves(problem, [], []).passed) two += 1
+    }
+    expect(two, `한 반 ${one}/${runs} · 두 반 ${two}/${runs}`).toBeLessThan(one)
+  })
+
+  it('같은 시드는 같은 두 반을 만든다', () => {
+    const a = simulateHalves(P, [], [])
+    const b = simulateHalves(P, [], [])
+    expect(a.final.score).toEqual(b.final.score)
+    expect(a.passed).toBe(b.passed)
   })
 })
