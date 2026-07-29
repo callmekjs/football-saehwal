@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createState } from './engine'
 import { PROBLEMS } from './problems'
-import { benchHasFasterDefender, BENCH_SPEED_EDGE } from './setup'
-import { getPlayer, HOME_SQUAD } from './squad'
+import {
+  applyCaptainEffect,
+  benchHasFasterDefender,
+  BENCH_SPEED_EDGE,
+  CAPTAIN_EFFECT_IDS,
+} from './setup'
+import { effectivePos, getPlayer, HOME_SQUAD, initialPlayers } from './squad'
 import { MAX_ORDERS } from './engine'
 import { PRESETS } from '../analysis/presets'
 import type { Problem } from './types'
@@ -21,6 +26,7 @@ describe('시작 조건 — 판마다 다르다', () => {
       const b = createState(p)
       expect(JSON.stringify(a.players), p.title).toEqual(JSON.stringify(b.players))
       expect(a.tactics, p.title).toEqual(b.tactics)
+      expect(a.captainEffect, p.title).toBe(b.captainEffect)
     }
   })
 
@@ -38,6 +44,67 @@ describe('시작 조건 — 판마다 다르다', () => {
       // 열두 판이 전부 같으면 흔들리지 않는 것이다
       expect(new Set(shapes).size, `${p.title} 의 서로 다른 시작 조건 수`).toBeGreaterThan(8)
     }
+  })
+
+  it('주장 보고 여섯 종류가 판마다 실제로 바뀐다', () => {
+    for (const p of PROBLEMS) {
+      const effects = new Set(seeds(p, 120).map((state) => state.captainEffect))
+      expect(effects, p.title).toEqual(new Set(CAPTAIN_EFFECT_IDS))
+    }
+  })
+
+  it('주장이 말한 대상의 실제 체력만 같은 방향으로 움직인다', () => {
+    const baseProblem = PROBLEMS[0]
+    const problem: Problem = { ...baseProblem }
+    const base = initialPlayers(problem)
+    const allUp = applyCaptainEffect(base, 'TEAM_RECOVERED')
+    const allDown = applyCaptainEffect(base, 'TEAM_FATIGUED')
+    const backUp = applyCaptainEffect(base, 'BACK_LINE_RECOVERED')
+    const frontDown = applyCaptainEffect(base, 'FRONT_LINE_FATIGUED')
+
+    for (const state of base) {
+      const up = allUp.find((x) => x.id === state.id)!
+      const down = allDown.find((x) => x.id === state.id)!
+      if (state.onPitch && !state.out) {
+        expect(up.stamina, state.id).toBeGreaterThan(state.stamina)
+        expect(down.stamina, state.id).toBeLessThan(state.stamina)
+      } else {
+        expect(up.stamina, state.id).toBe(state.stamina)
+        expect(down.stamina, state.id).toBe(state.stamina)
+      }
+
+      const pos = effectivePos(state)
+      const back = backUp.find((x) => x.id === state.id)!
+      const front = frontDown.find((x) => x.id === state.id)!
+      if (state.onPitch && !state.out && pos === 'DF') {
+        expect(back.stamina, state.id).toBeGreaterThan(state.stamina)
+      } else {
+        expect(back.stamina, state.id).toBe(state.stamina)
+      }
+      if (state.onPitch && !state.out && (pos === 'MF' || pos === 'FW')) {
+        expect(front.stamina, state.id).toBeLessThan(state.stamina)
+      } else {
+        expect(front.stamina, state.id).toBe(state.stamina)
+      }
+    }
+
+    const defender = base.find((x) => x.onPitch && getPlayer(x.id).pos === 'DF')!
+    const midfielder = base.find((x) => x.onPitch && getPlayer(x.id).pos === 'MF')!
+    const moved = base.map((state) => {
+      if (state.id === defender.id) return { ...state, order: 'PUSH_UP' as const }
+      if (state.id === midfielder.id) return { ...state, order: 'DROP_BACK' as const }
+      return state
+    })
+    const movedBackUp = applyCaptainEffect(moved, 'BACK_LINE_RECOVERED')
+    const movedFrontUp = applyCaptainEffect(moved, 'FRONT_LINE_RECOVERED')
+    expect(movedBackUp.find((x) => x.id === defender.id)!.stamina)
+      .toBe(defender.stamina)
+    expect(movedFrontUp.find((x) => x.id === defender.id)!.stamina)
+      .toBeGreaterThan(defender.stamina)
+    expect(movedBackUp.find((x) => x.id === midfielder.id)!.stamina)
+      .toBeGreaterThan(midfielder.stamina)
+    expect(movedFrontUp.find((x) => x.id === midfielder.id)!.stamina)
+      .toBe(midfielder.stamina)
   })
 
   it('흔들어도 국면의 정체성은 고정이다', () => {
@@ -88,14 +155,12 @@ describe('시작 조건 — 판마다 다르다', () => {
     }
   })
 
-  it('체력은 국면이 정한 범위를 벗어나지 않는다', () => {
+  it('주장 효과가 더해져도 체력은 0~100을 벗어나지 않는다', () => {
     for (const p of PROBLEMS) {
-      const range = p.variation?.staminaRange
-      if (!range) continue
       for (const s of seeds(p, 20)) {
         for (const x of s.players) {
-          expect(x.stamina, `${p.title} ${x.id}`).toBeGreaterThanOrEqual(range[0])
-          expect(x.stamina, `${p.title} ${x.id}`).toBeLessThanOrEqual(range[1])
+          expect(x.stamina, `${p.title} ${x.id}`).toBeGreaterThanOrEqual(0)
+          expect(x.stamina, `${p.title} ${x.id}`).toBeLessThanOrEqual(100)
         }
       }
     }

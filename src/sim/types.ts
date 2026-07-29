@@ -91,6 +91,19 @@ export interface Objective {
 }
 
 /**
+ * 급수 타임에 주장이 전하는 팀 컨디션.
+ *
+ * 같은 값이 브리핑 문장과 선수들의 실제 시작 체력을 함께 정한다.
+ */
+export type CaptainEffect =
+  | 'TEAM_RECOVERED'
+  | 'TEAM_FATIGUED'
+  | 'BACK_LINE_RECOVERED'
+  | 'BACK_LINE_FATIGUED'
+  | 'FRONT_LINE_RECOVERED'
+  | 'FRONT_LINE_FATIGUED'
+
+/**
  * 국면을 여러 번 재현해 찾은 권장 전술.
  *
  * 확률 상수가 아니라 국면 데이터다. 새 국면은 이 값을 JSON에 함께 적기만
@@ -115,6 +128,8 @@ export interface MatchState {
   /** [우리, 상대] */
   score: [number, number]
   tactics: Tactics
+  /** 주장이 전한 팀 컨디션. 선수 시작 체력에도 이미 반영돼 있다 */
+  captainEffect: CaptainEffect
   /** 우리 팀 포메이션. 바꾸면 확률이 즉시 바뀐다 */
   formation: FormationId
   /**

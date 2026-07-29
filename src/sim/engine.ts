@@ -51,6 +51,7 @@ export function createState(problem: Problem): MatchState {
     score: [...problem.score] as [number, number],
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: rolled.tactics,
+    captainEffect: rolled.captainEffect,
     formation: problem.initialFormation,
     ball: { x: 0.5, y: 0.5, owner: 'HOME', tilt: 0 },
     stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },

@@ -2,7 +2,13 @@ import { EVENTS, LINE } from '../sim/constants'
 import { getFormation } from '../sim/formations'
 import { AWAY_XI, BENCH, effectivePos, getPlayer } from '../sim/squad'
 import { LEVEL_WORD, presetOf } from './presets'
-import type { MatchState, Player, PlayerState, Problem } from '../sim/types'
+import type {
+  CaptainEffect,
+  MatchState,
+  Player,
+  PlayerState,
+  Problem,
+} from '../sim/types'
 
 /**
  * 급수 타임에 주장이 감독에게 상황을 전한다.
@@ -35,7 +41,7 @@ import type { MatchState, Player, PlayerState, Problem } from '../sim/types'
 export type BriefingTone = 'FACT' | 'ALERT'
 
 /** 한 줄이 무엇에 대한 말인지. 접힌 목록에서 눈이 먼저 잡는 표식이다 */
-export type BriefingTopic = '상황' | '인원' | '위험' | '상대' | '자원'
+export type BriefingTopic = '상황' | '인원' | '팀' | '위험' | '상대' | '자원'
 
 export interface BriefingLine {
   id: string
@@ -75,6 +81,33 @@ interface Candidate {
   /** 작을수록 먼저 말한다. 잘려서 접히는 것은 뒤쪽이다 */
   priority: number
   line: BriefingLine
+}
+
+const CAPTAIN_REPORT: Record<CaptainEffect, { text: string; tone: BriefingTone }> = {
+  TEAM_RECOVERED: {
+    text: '다들 몸이 가벼워졌습니다. 전반적으로 체력이 올라왔습니다.',
+    tone: 'FACT',
+  },
+  TEAM_FATIGUED: {
+    text: '다들 숨이 차고 다리가 무겁습니다. 전반적으로 체력이 떨어졌습니다.',
+    tone: 'ALERT',
+  },
+  BACK_LINE_RECOVERED: {
+    text: '수비진은 호흡을 되찾았습니다. 뒤쪽 선수들의 체력이 올라왔습니다.',
+    tone: 'FACT',
+  },
+  BACK_LINE_FATIGUED: {
+    text: '수비진의 다리가 무겁습니다. 뒤쪽 선수들의 체력이 떨어졌습니다.',
+    tone: 'ALERT',
+  },
+  FRONT_LINE_RECOVERED: {
+    text: '중원과 공격진은 아직 힘이 남았습니다. 앞쪽 선수들의 체력이 올라왔습니다.',
+    tone: 'FACT',
+  },
+  FRONT_LINE_FATIGUED: {
+    text: '중원과 공격진의 발이 무겁습니다. 앞쪽 선수들의 체력이 떨어졌습니다.',
+    tone: 'ALERT',
+  },
 }
 
 /**
@@ -192,7 +225,11 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     say(7, 'away-ten-men', '인원', `저쪽은 ${state.awayCount}명입니다. 숫자는 우리가 앞섭니다.`)
   }
 
-  // ── 3. 퇴장 위험. 경고를 안은 선수를 강 압박 속에 두면 열린다 ──
+  // ── 3. 판마다 달라지는 주장 보고. 이 말은 실제 시작 체력과 같은 값이다 ──
+  const report = CAPTAIN_REPORT[state.captainEffect]
+  say(8, 'captain-effect', '팀', report.text, report.tone)
+
+  // ── 4. 퇴장 위험. 경고를 안은 선수를 강 압박 속에 두면 열린다 ──
   const booked = onPitch.filter((s) => s.booked)
   if (booked.length > 0 && state.tactics.press === 2) {
     say(
@@ -204,7 +241,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     )
   }
 
-  // ── 4. 부상 위험. 체력이 임계 아래로 내려간 선수가 있으면 급하다 ──
+  // ── 5. 부상 위험. 체력이 임계 아래로 내려간 선수가 있으면 급하다 ──
   const tired = [...onPitch]
     .filter((s) => s.stamina < TIRED)
     .sort((a, b) => a.stamina - b.stamina)
@@ -219,7 +256,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     )
   }
 
-  // ── 5. 저쪽이 지금 무엇을 하고 있는가 ──
+  // ── 6. 저쪽이 지금 무엇을 하고 있는가 ──
   say(
     18,
     'opponent',

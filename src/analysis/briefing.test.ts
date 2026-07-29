@@ -4,6 +4,7 @@ import { EVENTS } from '../sim/constants'
 import { AWAY_XI, BENCH, HOME_SQUAD, getPlayer, minDefenderSpeed } from '../sim/squad'
 import type { MatchState, Problem } from '../sim/types'
 import { PROBLEMS } from '../sim/problems'
+import { CAPTAIN_EFFECT_IDS } from '../sim/setup'
 import { CORE_BRIEFING_LINES, buildBriefing, captainOf } from './briefing'
 
 const byId = (id: string): Problem => PROBLEMS.find((p) => p.id === id)!
@@ -49,6 +50,19 @@ describe('주장 브리핑', () => {
       expect(b.core[0].id).toBe('score')
       expect(b.core[0].text).toContain(`${p.score[0]} 대 ${p.score[1]}`)
     }
+  })
+
+  it('주장 컨디션 보고는 항상 보이고 여섯 종류가 서로 다르다', () => {
+    const problem = byId('p02')
+    const state = stateOf('p02')
+    const reports = CAPTAIN_EFFECT_IDS.map((captainEffect) => {
+      const changed = { ...state, captainEffect }
+      expect(buildBriefing(problem, changed).core.map((line) => line.id))
+        .toContain('captain-effect')
+      return textOf(changed, problem, 'captain-effect')
+    })
+    expect(reports.every(Boolean)).toBe(true)
+    expect(new Set(reports).size).toBe(CAPTAIN_EFFECT_IDS.length)
   })
 
   it('말하는 사람은 피치 위 필드 플레이어의 등번호다', () => {

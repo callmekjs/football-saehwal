@@ -1,6 +1,14 @@
 import { createRng, type Rng } from './rng'
-import { HOME_SQUAD, getPlayer } from './squad'
-import type { Level, PlayerOrder, PlayerState, Problem, Tactics } from './types'
+import { CAPTAIN_EFFECT } from './constants'
+import { HOME_SQUAD, effectivePos, getPlayer } from './squad'
+import type {
+  CaptainEffect,
+  Level,
+  PlayerOrder,
+  PlayerState,
+  Problem,
+  Tactics,
+} from './types'
 
 /**
  * 국면의 시작 조건을 시드에서 뽑는다.
@@ -25,9 +33,15 @@ import type { Level, PlayerOrder, PlayerState, Problem, Tactics } from './types'
 
 /** 경기용·연출용 스트림과 겹치지 않게 떼어내는 상수 */
 const SETUP_OFFSET = 0x85ebca6b
+/** 시작 조건 슬롯이 늘어도 같은 시드의 주장 보고는 바뀌지 않게 분리한다 */
+const CAPTAIN_OFFSET = 0xc2b2ae35
 
 export function setupRngFor(seed: number): Rng {
   return createRng((seed ^ SETUP_OFFSET) >>> 0)
+}
+
+export function captainRngFor(seed: number): Rng {
+  return createRng((seed ^ CAPTAIN_OFFSET) >>> 0)
 }
 
 /**
@@ -38,6 +52,19 @@ export function setupRngFor(seed: number): Rng {
  * 선택지가 아니라 벌이다.
  */
 const MAX_PRESET_ORDERS = 2
+
+/**
+ * 긍정 셋·부정 셋. 어느 한쪽이 더 자주 나오지 않아야 국면 전체가 몰래
+ * 쉬워지거나 어려워지지 않는다.
+ */
+export const CAPTAIN_EFFECT_IDS: CaptainEffect[] = [
+  'TEAM_RECOVERED',
+  'TEAM_FATIGUED',
+  'BACK_LINE_RECOVERED',
+  'BACK_LINE_FATIGUED',
+  'FRONT_LINE_RECOVERED',
+  'FRONT_LINE_FATIGUED',
+]
 
 /** 흔든 뒤에도 반드시 참이어야 하는 것들을 여기서 지킨다 */
 function clamp(v: number, lo: number, hi: number) {
@@ -148,6 +175,41 @@ function rollPlayers(problem: Problem, base: PlayerState[], rng: Rng): PlayerSta
   return next
 }
 
+/** 주장 보고 전용 스트림에서 슬롯 하나를 뽑는다 */
+export function rollCaptainEffect(rng: Rng): CaptainEffect {
+  const draw = rng.next()
+  const at = Math.min(CAPTAIN_EFFECT_IDS.length - 1, Math.floor(draw * CAPTAIN_EFFECT_IDS.length))
+  return CAPTAIN_EFFECT_IDS[at]
+}
+
+/**
+ * 주장이 말한 컨디션을 실제 선수 체력에 반영한다.
+ *
+ * 벤치는 급수 타임 전 구간을 뛰지 않았으므로 영향을 받지 않는다. 개별
+ * 지시로 줄을 옮긴 선수는 등록 포지션이 아니라 지금 서 있는 줄로 묶는다.
+ */
+export function applyCaptainEffect(
+  players: PlayerState[],
+  effect: CaptainEffect,
+): PlayerState[] {
+  return players.map((state) => {
+    if (!state.onPitch || state.out) return state
+    const pos = effectivePos(state)
+    let delta = 0
+    if (effect === 'TEAM_RECOVERED') delta = CAPTAIN_EFFECT.wholeTeamStamina
+    if (effect === 'TEAM_FATIGUED') delta = -CAPTAIN_EFFECT.wholeTeamStamina
+    if (effect === 'BACK_LINE_RECOVERED' && pos === 'DF') delta = CAPTAIN_EFFECT.unitStamina
+    if (effect === 'BACK_LINE_FATIGUED' && pos === 'DF') delta = -CAPTAIN_EFFECT.unitStamina
+    if (effect === 'FRONT_LINE_RECOVERED' && (pos === 'MF' || pos === 'FW')) {
+      delta = CAPTAIN_EFFECT.unitStamina
+    }
+    if (effect === 'FRONT_LINE_FATIGUED' && (pos === 'MF' || pos === 'FW')) {
+      delta = -CAPTAIN_EFFECT.unitStamina
+    }
+    return delta === 0 ? state : { ...state, stamina: clamp(state.stamina + delta, 0, 100) }
+  })
+}
+
 /**
  * 국면의 시작 조건 한 벌.
  *
@@ -157,14 +219,16 @@ function rollPlayers(problem: Problem, base: PlayerState[], rng: Rng): PlayerSta
 export function rollSetup(
   problem: Problem,
   base: PlayerState[],
-): { tactics: Tactics; players: PlayerState[] } {
-  if (!problem.variation) {
-    return { tactics: { ...problem.initialTactics }, players: base }
-  }
+): { tactics: Tactics; players: PlayerState[]; captainEffect: CaptainEffect } {
   const rng = setupRngFor(problem.seed)
-  const tactics = rollTactics(problem, rng)
-  const players = rollPlayers(problem, base, rng)
-  return { tactics, players }
+  const tactics = problem.variation
+    ? rollTactics(problem, rng)
+    : { ...problem.initialTactics }
+  const rolledPlayers = problem.variation ? rollPlayers(problem, base, rng) : base
+  // 경기와 기존 시작 조건 양쪽의 난수 소비 순서를 건드리지 않는 별도 스트림이다.
+  const captainEffect = rollCaptainEffect(captainRngFor(problem.seed))
+  const players = applyCaptainEffect(rolledPlayers, captainEffect)
+  return { tactics, players, captainEffect }
 }
 
 /** 벤치에 선발보다 이만큼 빠른 수비수가 반드시 있어야 한다 */
