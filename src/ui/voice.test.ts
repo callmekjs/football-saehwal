@@ -127,13 +127,13 @@ describe('음성 지시 걸기', () => {
     const a = actions()
     const note = applyCommand(parseCommand('15번 내려')!, createState(problem), a)
     expect(a.setOrder).not.toHaveBeenCalled()
-    expect(note).toContain('피치 위에 없습니다')
+    expect(note).toContain('경기에 뛰고 있지 않습니다')
   })
 
   it('막힌 이유는 탭으로 눌렀을 때와 같은 문장으로 나온다', () => {
     const a = actions()
-    a.setOrder.mockReturnValue('골키퍼에게는 지시할 수 없다')
+    a.setOrder.mockReturnValue('골키퍼에게는 이 지시를 내릴 수 없습니다')
     const note = applyCommand(parseCommand('1번 내려')!, createState(problem), a)
-    expect(note).toBe('골키퍼에게는 지시할 수 없다')
+    expect(note).toBe('골키퍼에게는 이 지시를 내릴 수 없습니다')
   })
 })

@@ -109,7 +109,7 @@ describe('자유 위치 결정', () => {
 
   it('골키퍼 이동과 수비 셋 아래 이동은 엔진의 한국어 사유로 막는다', () => {
     const goalkeeper = changePosition(createState(problem), 'GK01', { x: 30, y: 34 })
-    expect(goalkeeper.error).toBe('골키퍼는 자리를 옮길 수 없다')
+    expect(goalkeeper.error).toBe('골키퍼는 자리를 옮길 수 없습니다')
 
     const shortProblem = PROBLEMS.find((entry) => entry.id === 'p03')!
     const shortBase = createState(shortProblem)
@@ -135,7 +135,7 @@ describe('자유 위치 결정', () => {
         effectivePos(player) === 'DF',
     )!
     const tooHigh = changePosition(short, defender.id, { x: 80, y: 34 })
-    expect(tooHigh.error).toBe('뒤에 수비가 셋은 남아야 한다')
+    expect(tooHigh.error).toBe('뒤에는 수비수가 적어도 세 명 남아야 합니다')
     expect(tooHigh.record).toBeNull()
     expect(tooHigh.next).toBe(short)
   })

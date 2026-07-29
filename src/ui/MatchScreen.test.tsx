@@ -41,4 +41,12 @@ describe('경기 기록 범위', () => {
     expect(first).toContain('이 반만')
     expect(second).toContain('이 반만')
   })
+
+  it('내부 집계값을 실제 세트피스 횟수처럼 쓰지 않는다', () => {
+    const html = renderToStaticMarkup(<StatBars state={state} half={1} />)
+
+    expect(html).toContain('세트피스 위험')
+    expect(html).not.toContain('세트피스 허용')
+    expect(html).toContain('배후 침투')
+  })
 })

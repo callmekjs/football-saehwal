@@ -57,7 +57,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '4-4-2': {
     id: '4-4-2',
     label: '4-4-2',
-    hint: '균형. 어느 쪽으로도 치우치지 않는다',
+    hint: '공수 어느 한쪽에도 치우치지 않는다',
     slots: [
       GK,
       { pos: 'DF', x: 22, y: 10 },
@@ -77,7 +77,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '4-2-3-1': {
     id: '4-2-3-1',
     label: '4-2-3-1',
-    hint: '중원 장악. 공을 뺏지만 골 넣을 사람이 하나뿐이다',
+    hint: '중원에서 공을 되찾기 쉽지만 앞에 한 명만 남는다',
     slots: [
       GK,
       { pos: 'DF', x: 22, y: 10 },
@@ -97,7 +97,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '4-3-3': {
     id: '4-3-3',
     label: '4-3-3',
-    hint: '측면을 넓게 쓴다. 상대가 뭉쳐 있을 때 길이 난다',
+    hint: '측면을 넓게 써서 뭉친 수비 바깥으로 길을 낸다',
     slots: [
       GK,
       { pos: 'DF', x: 24, y: 10 },
@@ -117,7 +117,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '5-4-1': {
     id: '5-4-1',
     label: '5-4-1',
-    hint: '뒤를 두껍게. 버티지만 공이 앞으로 안 나간다',
+    hint: '뒤를 두껍게 지키는 대신 공을 앞으로 내보내기 어렵다',
     slots: [
       GK,
       { pos: 'DF', x: 26, y: 8 },
@@ -137,7 +137,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '3-4-3': {
     id: '3-4-3',
     label: '3-4-3',
-    hint: '전부 앞으로. 뚫리면 그대로 실점이다',
+    hint: '앞에 사람을 많이 두지만 한 번 뚫리면 곧바로 슛을 내준다',
     slots: [
       GK,
       { pos: 'DF', x: 20, y: 22 },
@@ -171,7 +171,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '3-5-2': {
     id: '3-5-2',
     label: '3-5-2',
-    hint: '윙백이 위아래를 다 뛴다. 폭은 나오지만 가장 힘들다',
+    hint: '윙백이 위아래를 오가며 폭을 만들지만 체력을 많이 쓴다',
     slots: [
       GK,
       { pos: 'DF', x: 20, y: 21 },
@@ -198,7 +198,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '4-1-4-1': {
     id: '4-1-4-1',
     label: '4-1-4-1',
-    hint: '수비 앞에 한 명을 세워 길을 막는다. 대신 공격이 외롭다',
+    hint: '수비 앞에 한 명을 세워 길을 막지만 공격에 나설 선수가 적다',
     slots: [
       GK,
       { pos: 'DF', x: 22, y: 10 },
@@ -220,7 +220,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '4-4-2D': {
     id: '4-4-2D',
     label: '4-4-2 다이아몬드',
-    hint: '중앙을 겹겹이 쌓는다. 대신 측면을 통째로 내준다',
+    hint: '중앙을 겹겹이 막지만 측면을 통째로 내준다',
     slots: [
       GK,
       { pos: 'DF', x: 22, y: 10 },
@@ -242,7 +242,7 @@ export const FORMATIONS: Record<FormationId, Formation> = {
   '4-2-2-2': {
     id: '4-2-2-2',
     label: '4-2-2-2',
-    hint: '처진 공격수 둘이 바깥을 벌린다. 중원 허리가 얇다',
+    hint: '공격수 둘이 옆으로 벌려 길을 내지만 중원에 남는 선수가 적다',
     slots: [
       GK,
       { pos: 'DF', x: 22, y: 10 },

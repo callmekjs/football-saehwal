@@ -264,7 +264,7 @@ function causeOf(event: MatchEventLog): string[] {
 function causeLabel(cause: string): string {
   if (cause === 'BUILD_UP') return '박스 안 공격 전개'
   if (cause === 'BEHIND') return '수비 뒷공간 침투'
-  if (cause === 'OPEN_PLAY') return '상대 오픈플레이'
+  if (cause === 'OPEN_PLAY') return '상대 공격'
   if (cause === 'SET_PIECE') return '세트피스'
   if (cause === 'PENALTY') return '페널티킥'
   return '기록으로 특정할 수 없는 경로'
@@ -292,35 +292,35 @@ function goalFinding(
   if (side === 'FOR') {
     explanation =
       primary === 'BUILD_UP'
-        ? '전진 시도가 박스 안 슈팅으로 이어졌고, 그 슈팅이 득점으로 완성됐습니다.'
+        ? '박스 안까지 전진한 뒤 슈팅했고, 그 슛으로 득점했습니다.'
         : '득점은 확인되지만 현재 기록만으로 전개 경로까지 단정할 수 없습니다.'
     evidence.push(`우리 공격 전개 ${totals.homeAttempt}회 중 슈팅 ${totals.homeShot}회`)
     if (primary === 'BUILD_UP') {
       evidence.push(
-        `라인 ${withJosa(LEVEL_LABEL.line[setup.tactics.line], '은는')} 박스 진입 뒤 슈팅 가치에, 폭 ${withJosa(
+        `라인을 ${withJosa(LEVEL_LABEL.line[setup.tactics.line], '로으로')} 두면 박스 진입 뒤 슈팅 가능성이 달라지고, 폭을 ${withJosa(
           LEVEL_LABEL.width[setup.tactics.width],
-          '은는',
-        )} 전진 시도 수에 영향을 줬습니다.`,
+          '로으로',
+        )} 두면 전진 횟수가 달라집니다.`,
       )
     }
   } else {
     if (primary === 'BEHIND') {
       explanation =
-        '상대가 수비 뒷공간을 찌른 뒤 일대일 슈팅까지 연결해 실점했습니다.'
+        '상대가 수비 뒷공간을 찌른 뒤 일대일로 슈팅해 실점했습니다.'
       evidence.push(`경기 전체 배후 침투 허용 ${totals.behind}회`)
       if (setup.tactics.line === 2) {
-        evidence.push('높은 수비라인은 이 시뮬레이션에서 배후 침투 위험을 직접 키웁니다.')
+        evidence.push('라인을 높이면 수비 뒷공간을 더 내줍니다.')
       }
     } else if (primary === 'OPEN_PLAY') {
       explanation =
-        '상대의 일반 공격이 박스 안 슈팅으로 이어졌고, 그 슈팅을 막지 못했습니다.'
+        '상대가 일반 공격으로 박스 안까지 들어와 슈팅했고, 막지 못했습니다.'
       evidence.push(`상대 공격 전개 ${totals.awayAttempt}회 중 슈팅 ${totals.awayShot}회`)
       if (setup.tactics.width === 2) {
-        evidence.push('넓은 수비 폭은 공격 통로를 늘리는 대신 중앙 공간을 내주는 대가가 있습니다.')
+        evidence.push('폭을 넓히면 공격할 길이 늘지만 중앙도 비웁니다.')
       }
     } else if (primary === 'SET_PIECE') {
       explanation =
-        '오픈플레이가 아니라 세트피스에서 실점했습니다. 세트피스 위험이 반복됐는지와 당시 라인을 함께 봐야 합니다.'
+        '일반 공격이 아니라 세트피스에서 실점했습니다. 같은 위험이 반복됐는지와 당시 라인을 함께 봐야 합니다.'
       evidence.push(`경기 전체 세트피스 위험 ${totals.setPiece}`)
       if (setup.tactics.line === 0) {
         evidence.push('라인을 낮추면 배후 침투는 줄지만 세트피스 위험은 크게 커집니다.')
@@ -329,10 +329,10 @@ function goalFinding(
       evidence.push(`득점 시점 골문 앞 지시 ${holding}명`)
     } else if (primary === 'PENALTY') {
       explanation =
-        '박스 안 반칙으로 내준 페널티킥이 실점으로 이어졌습니다. 당시 압박 강도를 함께 봐야 합니다.'
+        '박스 안에서 반칙해 페널티킥을 내줬고, 실점했습니다. 당시 압박 강도도 함께 봐야 합니다.'
       evidence.push(`당시 압박 ${LEVEL_LABEL.press[setup.tactics.press]}`)
       if (setup.tactics.press === 2) {
-        evidence.push('강한 압박은 공을 되찾을 가능성과 함께 파울 빈도도 높입니다.')
+        evidence.push('강하게 압박하면 공을 되찾기 쉬운 대신 파울도 늘어납니다.')
       }
     } else {
       explanation =
@@ -388,8 +388,8 @@ function noGoalFinding(
       title: totals.homeShot === 0 ? '슈팅까지 연결하지 못했다' : '슈팅은 만들었지만 득점은 없었다',
       explanation:
         totals.homeShot === 0
-          ? '공격 전개는 있었지만 박스 안 슈팅으로 이어지지 않았습니다. 기록상 결정력보다 진입 과정이 먼저 문제입니다.'
-          : '슈팅 기회는 만들었습니다. 다만 현재 기록에는 슈팅 위치·선방 정보가 없어 결정력 문제라고 단정하지 않습니다.',
+          ? '공격은 전개했지만 박스 안에서 슈팅하지 못했습니다. 이 기록만 보면 마무리보다 진입 과정부터 살펴야 합니다.'
+          : '슈팅 기회는 만들었습니다. 다만 슈팅 위치와 선방 기록이 없어 마무리가 문제였다고 단정할 수 없습니다.',
       evidence,
       confidence: confidenceOf(evidence, {
         observed: true,
@@ -409,7 +409,7 @@ function noGoalFinding(
     explanation:
       attack.shots === 0
         ? '상대의 공격을 슈팅 이전에 끊었습니다.'
-        : '상대에게 슈팅은 허용했지만 실제 실점으로 이어지지는 않았습니다.',
+        : '상대에게 슈팅은 내줬지만 실점하지는 않았습니다.',
     evidence,
     confidence: confidenceOf(evidence, {
       observed: true,
@@ -470,22 +470,22 @@ function decisionLine(item: Timed<Decision>): string {
   return clock
 }
 
-/** 한 반에서 무엇을 몇 번 했는지 */
+/** 한 반에서 무엇을 몇 번 바꿨는지 */
 function categoryText(items: Timed<Decision>[]): string {
   const count = (types: Decision['type'][]) =>
     items.filter((item) => types.includes(item.value.type)).length
   const parts: string[] = []
   const formation = count(['FORMATION'])
-  if (formation > 0) parts.push(`포메이션 ${formation}회`)
+  if (formation > 0) parts.push(`포메이션 변경 ${formation}번`)
   const lever = count(['LINE', 'PRESS', 'WIDTH'])
-  if (lever > 0) parts.push(`전술 ${lever}회`)
+  if (lever > 0) parts.push(`전술 조정 ${lever}번`)
   const sub = count(['SUB'])
-  if (sub > 0) parts.push(`교체 ${sub}회`)
+  if (sub > 0) parts.push(`교체 ${sub}번`)
   const order = count(['ORDER'])
-  if (order > 0) parts.push(`개별 지시 ${order}회`)
+  if (order > 0) parts.push(`개별 지시 ${order}번`)
   const position = count(['POSITION'])
-  if (position > 0) parts.push(`직접 배치 ${position}회`)
-  return parts.length > 0 ? parts.join(' · ') : '개입 없음'
+  if (position > 0) parts.push(`직접 배치 ${position}번`)
+  return parts.join(' · ')
 }
 
 /** 한 반에서 보여줄 근거 줄 수 상한. 직접 배치는 열한 명까지 나올 수 있다 */
@@ -528,8 +528,12 @@ function halfSplitFinding(
     label: '반별 결정',
     title: perLeg.map(({ leg, items }) => `${halfLabel(leg.half)} ${items.length}회`).join(' · '),
     explanation: perLeg
-      .map(({ leg, items }) => `${withJosa(halfLabel(leg.half), '은는')} ${categoryText(items)}`)
-      .join(', ') + '였습니다.',
+      .map(({ leg, items }) =>
+        items.length > 0
+          ? `${halfLabel(leg.half)}에 내린 결정은 ${categoryText(items)}입니다.`
+          : `${halfLabel(leg.half)}에는 개입하지 않았습니다.`,
+      )
+      .join(' '),
     evidence,
   }
   return {
@@ -554,7 +558,7 @@ function decisionFindings(
   const totalTicks = legs.length * TOTAL_TICKS
 
   const impactEvidence = [
-    `무개입 ${percent(metrics.noopRate)} · 사용자 ${percent(metrics.userRate)}`,
+    `무개입 ${percent(metrics.noopRate)} · 직접 판단 ${percent(metrics.userRate)}`,
     `권장 전술 ${percent(metrics.recommendationRate)}`,
     ...(showHalf ? ['비교 150판도 사용자와 같이 전반·후반 두 반을 이어서 돌렸습니다.'] : []),
   ]
@@ -567,7 +571,7 @@ function decisionFindings(
         : metrics.userDelta <= -0.04
           ? '방치보다 위험한 선택이었다'
           : '방치와 통계적으로 큰 차이가 없었다',
-    explanation: `한 경기의 점수와 별개로 같은 150개 시드를 다시 적용한 결과, 사용자 판단은 방치 대비 ${point(
+    explanation: `같은 150판을 다시 돌려 한 경기의 운을 걷어냈습니다. 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
       metrics.userDelta,
     )}였습니다.`,
     evidence: impactEvidence,
@@ -585,21 +589,21 @@ function decisionFindings(
   ]
   result.push({
     id: 'decision-channels',
-    label: '150경기 양상',
+    label: '150판 비교',
     title:
       Math.abs(concededDelta) >= Math.abs(scoredDelta)
         ? concededDelta < -0.03
-          ? '실점 위험을 줄이는 방향으로 작동했다'
+          ? '실점 위험을 줄였다'
           : concededDelta > 0.03
-            ? '실점 위험을 키우는 방향으로 작동했다'
+            ? '실점 위험을 키웠다'
             : '평균 실점은 방치와 비슷했다'
         : scoredDelta > 0.03
-          ? '득점 생산을 늘리는 방향으로 작동했다'
+          ? '평균 득점을 높였다'
           : scoredDelta < -0.03
-            ? '득점 생산을 줄이는 방향으로 작동했다'
+            ? '평균 득점을 낮췄다'
             : '평균 득점은 방치와 비슷했다',
     explanation:
-      '같은 시드 150개에서 성공 여부뿐 아니라 득점·실점과 위험 채널의 평균도 함께 비교했습니다.',
+      '같은 150판에서 성공 여부와 평균 득실, 위험 장면을 함께 비교했습니다.',
     evidence: channelEvidence,
     confidence: confidenceOf(channelEvidence, { repeated: true, compared: true }),
   })
@@ -613,7 +617,7 @@ function decisionFindings(
         ? '전반과 후반 모두 전술 개입이 없었다'
         : '경기 중 전술 개입이 없었다',
       explanation:
-        '앞 감독에게서 물려받은 설정을 그대로 유지했습니다. 이번 경기에서는 결과와 사용자의 판단을 구분할 근거가 없습니다.',
+        '앞 감독이 남긴 설정을 그대로 뒀습니다. 따로 내린 판단이 없어 경기 결과와 판단을 나눠 평가할 수 없습니다.',
       evidence,
       confidence: confidenceOf(evidence, { observed: true }),
     })
@@ -629,8 +633,8 @@ function decisionFindings(
       title: `${firstTime}에 첫 개입, 총 ${timeline.length}회 결정`,
       explanation:
         first.g <= totalTicks * 0.2
-          ? '초반에 방향을 정했습니다. 전술이 작동할 시간을 충분히 확보한 선택입니다.'
-          : '첫 개입이 경기 중반 이후였습니다. 같은 선택도 늦게 내리면 영향을 줄 시간이 줄어듭니다.',
+          ? '초반에 방향을 정해 바꾼 전술을 시험할 시간을 충분히 벌었습니다.'
+          : '경기 중반이 지나서야 처음 바꿨습니다. 같은 선택도 늦게 내리면 효과를 낼 시간이 줄어듭니다.',
       evidence,
       confidence: confidenceOf(evidence, {
         observed: true,
@@ -648,15 +652,15 @@ function decisionFindings(
     const reachedTime = stamp(reached.leg, reached.tick, showHalf)
     const evidence = [
       `도달 설정: ${setupText(setupAt(problem, timeline, reached.g))}`,
-      '국면별 1200시드 검증 권장안과 비교했습니다.',
+      '같은 국면을 1,200번 검증해 고른 권장안과 비교했습니다.',
     ]
     result.push({
       id: 'decision-recommendation',
-      label: '권장안 도달',
+      label: '권장안 적용',
       time: reachedTime,
-      title: `${reachedTime}에 검증된 권장 설정을 완성했다`,
+      title: `${reachedTime}에 검증된 권장 설정을 모두 맞췄다`,
       explanation:
-        '포메이션·라인·압박·폭 네 항목이 1200시드 검증의 국면별 권장안과 모두 일치했습니다.',
+        '권장 포메이션과 라인·압박·폭을 모두 맞췄습니다.',
       evidence,
       confidence: confidenceOf(evidence, { observed: true, compared: true }),
     })
@@ -731,7 +735,7 @@ function decisionFindings(
       label: '선수 개입',
       title: `교체·개별 지시·직접 배치 ${personnel.length}회`,
       explanation:
-        '선수 단위 개입은 적용 시점까지 기록해 150판 비교에 그대로 재현했습니다.',
+        '교체와 지시, 직접 배치를 내린 시점 그대로 150판에 다시 적용했습니다.',
       evidence,
       confidence: confidenceOf(evidence, {
         observed: true,
@@ -766,13 +770,13 @@ function turningPointOf(
   const timing = decisionReview.find((finding) => finding.id === 'decision-timing')
   if (timing) return { ...timing, id: 'turning-point', label: '경기의 전환점' }
 
-  const evidence = ['경기 이벤트 로그에 득점·실점 없음']
+  const evidence = ['경기 기록에 득점·실점 없음']
   return {
     id: 'turning-point',
     label: '경기의 전환점',
-    title: '점수를 바꾼 단일 사건은 없었다',
+    title: '점수가 바뀐 장면은 없었다',
     explanation:
-      '골·퇴장·부상 같은 명확한 전환점이 없었습니다. 이 경우에는 한 장면보다 경기 전체의 슈팅과 위험 허용을 봐야 합니다.',
+      '골·퇴장·부상처럼 흐름을 단번에 바꾼 장면은 없었습니다. 한 장면보다 경기 전체의 슈팅과 위험 장면을 봐야 합니다.',
     evidence,
     confidence: confidenceOf(evidence, { observed: true }),
   }
@@ -799,7 +803,7 @@ function prescriptionsOf(
   const reached = reachesRecommendation(problem, timeline, legs)
   const totalTicks = legs.length * TOTAL_TICKS
   if (reached === null) {
-    items.push('네 항목을 따로 늦게 맞추지 말고 초반에 한 번에 완성해 전술이 작동할 시간을 확보하세요.')
+    items.push('네 항목을 따로 늦게 바꾸지 말고 초반에 한 번에 맞춰 효과를 낼 시간을 확보하세요.')
   } else if (reached.g > totalTicks * 0.2) {
     items.push(
       `${stamp(reached.leg, reached.tick, showHalf)}에 완성한 권장 설정을 다음에는 킥오프 직후부터 적용하세요.`,
@@ -938,7 +942,7 @@ export function buildCoachReport(
       `우리 공격 ${totals.homeAttempt}회 → 슈팅 ${totals.homeShot}회 → 득점 ${scored}골${splitFor}`,
       `상대 공격 ${totals.awayAttempt}회 → 슈팅 ${totals.awayShot}회 → 실점 ${conceded}골${splitAgainst}`,
       `세트피스 위험 ${totals.setPiece} · 배후 침투 ${totals.behind}회`,
-      `사용자 판단 ${percent(metrics.userRate)} · 방치 대비 ${point(metrics.userDelta)}`,
+      `직접 내린 판단 ${percent(metrics.userRate)} · 방치 대비 ${point(metrics.userDelta)}`,
       `권장 전술 성공 가능성 ${percent(metrics.recommendationRate)}`,
     ],
     turningPoint: turningPointOf([...rankedFor, ...rankedAgainst], decisionReview),

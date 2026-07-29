@@ -137,7 +137,7 @@ describe('3×3 위치 안내와 접근성 대안', () => {
   })
 
   it('엔진이 막은 한국어 사유를 위치 안내보다 먼저 보여준다', () => {
-    const reason = '뒤에 수비가 셋은 남아야 한다'
+    const reason = '뒤에는 수비수가 적어도 세 명 남아야 합니다'
     expect(
       dropHint({ kind: 'PLACE', position: { x: 90, y: 34 } }, reason, 4),
     ).toBe(reason)

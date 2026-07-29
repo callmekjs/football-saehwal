@@ -54,11 +54,20 @@ export const slotTop = (x: number) => pct((1 - (x - X0) / (X1 - X0)) * 100)
 export const slotLeft = (y: number) => pct(((y - Y0) / (Y1 - Y0)) * 100)
 
 export const ORDER_LABELS: Record<Exclude<PlayerOrder, 'NONE'>, { name: string; hint: string }> = {
-  DROP_BACK: { name: '내려서라', hint: '수비로 내려간다. 발이 빠르면 배후가 막힌다' },
-  PUSH_UP: { name: '올라가라', hint: '공격으로 올라간다. 골 넣을 사람이 하나 는다' },
-  HOLD: { name: '골문 앞', hint: '공이 반대편에 있어도 골문 앞에 남는다' },
-  BACK_OFF: { name: '물러서라', hint: '달려들지 않고 자리를 지킨다. 경고·퇴장을 피한다' },
-  CONSERVE: { name: '아껴 뛰어라', hint: '전력으로 안 뛴다. 체력이 덜 닳는다' },
+  DROP_BACK: {
+    name: '내려서라',
+    hint: '수비 쪽으로 내려옵니다. 빠른 선수는 배후를 더 잘 지킵니다',
+  },
+  PUSH_UP: {
+    name: '올라가라',
+    hint: '공격에 가담합니다. 득점을 노릴 선수가 한 명 늘어납니다',
+  },
+  HOLD: { name: '골문 앞', hint: '공이 반대편에 있어도 골문 앞을 지킵니다' },
+  BACK_OFF: {
+    name: '물러서라',
+    hint: '달려들지 않고 자리를 지킵니다. 두 번째 경고를 피하는 데 도움이 됩니다',
+  },
+  CONSERVE: { name: '아껴 뛰어라', hint: '전력 질주를 줄여 체력을 아낍니다' },
 }
 
 /** 지시가 걸린 선수 카드에 붙는 짧은 꼬리표 */
@@ -78,10 +87,12 @@ const ORDER_TAG: Record<Exclude<PlayerOrder, 'NONE'>, string> = {
  * 스스로 말하면 읽는 비용이 0이 된다.
  */
 function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | null {
-  if (s.stamina < 25) return { tag: '위험', why: '체력이 바닥이다 — 부상 위험' }
-  if (s.booked && press === 2) return { tag: '퇴장', why: '경고를 안고 강하게 압박 중 — 퇴장 위험' }
-  if (s.stamina < 35) return { tag: '지침', why: '지쳤다' }
-  if (s.booked) return { tag: '경고', why: '경고를 안고 있다' }
+  if (s.stamina < 25) return { tag: '위험', why: '체력이 바닥나 부상 위험이 큽니다' }
+  if (s.booked && press === 2) {
+    return { tag: '퇴장', why: '경고가 있는데 강하게 압박 중입니다. 퇴장 위험이 큽니다' }
+  }
+  if (s.stamina < 35) return { tag: '지침', why: '많이 지쳤습니다' }
+  if (s.booked) return { tag: '경고', why: '경고가 있습니다' }
   return null
 }
 
@@ -528,8 +539,8 @@ export function SquadPanel({
       </div>
 
       <p className="squad-caption">
-        <b>{getFormation(state.formation).label}</b> · 수비 {shape.DF} 중원 {shape.MF} 공격{' '}
-        {shape.FW} · 원하는 곳에 놓기
+        <b>{getFormation(state.formation).label}</b> · 수비 {shape.DF}명 · 중원 {shape.MF}명
+        · 공격 {shape.FW}명 · 원하는 곳에 놓기
       </p>
 
       <div className="squad-shape" data-dragging={drag ? 'on' : undefined}>
@@ -594,8 +605,8 @@ export function SquadPanel({
                 disabled={locked || p.pos === 'GK'}
                 title={
                   p.pos === 'GK'
-                    ? `${detail} · 골키퍼는 자리를 옮길 수 없다`
-                    : `${detail} · 눌러서 고르거나 원하는 곳으로 끌어 놓는다`
+                    ? `${detail} · 골키퍼는 자리를 옮길 수 없습니다`
+                    : `${detail} · 누르거나 원하는 곳으로 끌어 놓으세요`
                 }
                 style={{
                   top: `${preview?.y ?? baseDisplay.top}%`,
@@ -704,12 +715,12 @@ export function SquadPanel({
             <span className="squad-orders-head">
               {locked
                 ? '경기가 끝났습니다'
-                : '선수를 누르거나 원하는 곳으로 끌어 놓습니다'}
+                : '선수를 누르거나 원하는 곳으로 끌어 놓으세요'}
             </span>
             <div className="squad-order-list">
               {active.length === 0 ? (
                 <span className="squad-empty">
-                  걸린 지시 없음 · 동시에 {MAX_ORDERS}명까지
+                  개별 지시 없음 · 동시에 {MAX_ORDERS}명까지
                 </span>
               ) : (
                 active.map((s) => (
@@ -736,15 +747,17 @@ export function awaySummary(state: MatchState): string {
   const shown = awaySlots(state.away.formation, state.awayCount)
   const counts: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
   for (const [pos] of shown) counts[pos] += 1
-  const shape = `${state.away.formation} · 수비 ${counts.DF} · 중원 ${counts.MF} · 공격 ${counts.FW}`
+  const shape =
+    `${state.away.formation} 대형이며 수비 ${counts.DF}명·중원 ${counts.MF}명·` +
+    `공격 ${counts.FW}명입니다.`
 
   if (state.opponent === 'ALL_OUT') {
-    return `상대는 전부 올라와 강하게 압박합니다. 현재 ${shape} 형태입니다.`
+    return `상대가 전부 올라와 강하게 압박합니다. ${shape}`
   }
   if (state.opponent === 'PARK_BUS') {
-    return `상대는 뒤로 물러나 골문 앞을 채웁니다. 현재 ${shape} 형태입니다.`
+    return `상대가 뒤로 물러나 골문 앞을 채웁니다. ${shape}`
   }
-  return `상대는 균형을 유지하고 있습니다. 현재 ${shape} 형태입니다.`
+  return `상대가 균형을 유지합니다. ${shape}`
 }
 
 export function AwayPanel({ state }: { state: MatchState }) {
@@ -768,10 +781,10 @@ export function AwayPanel({ state }: { state: MatchState }) {
         <b>읽기 전용</b>
       </h2>
 
-      <p className="squad-caption">위쪽이 우리 골문 · 등번호와 서 있는 자리만 보입니다</p>
+      <p className="squad-caption">위쪽이 우리 골문입니다 · 등번호와 위치만 보입니다</p>
 
       <div className="away-vitals">
-        <span className="away-vitals-label">상대 팀 체력</span>
+        <span className="away-vitals-label">상대 체력</span>
         <span className="squad-stamina" aria-hidden>
           <i style={{ width: `${stamina}%` }} data-low={stamina < 60 ? 'on' : undefined} />
         </span>
@@ -790,7 +803,7 @@ export function AwayPanel({ state }: { state: MatchState }) {
                 className="squad-card away"
                 data-booked={booked ? 'on' : undefined}
                 data-hurt={hurt ? 'on' : undefined}
-                title={`${num}번 ${pos}${mark}${hurt ? ' · 무릎이 안 좋다' : ''}`}
+                title={`${num}번 ${pos}${mark}${hurt ? ' · 무릎이 좋지 않습니다' : ''}`}
                 style={{ top: `${awayTop(x)}%`, left: `${slotLeft(y)}%` }}
               >
                 <span className="squad-num">{num}</span>
@@ -805,10 +818,10 @@ export function AwayPanel({ state }: { state: MatchState }) {
       <p className="away-note">
         {awaySummary(state)}
         {state.away.booked.length > 0 &&
-          ` 경고를 안고 뛰는 선수는 ${state.away.booked.map((n) => `${n}번`).join(' · ')}입니다.`}
+          ` 경고가 있는 선수는 ${state.away.booked.map((n) => `${n}번`).join(' · ')}입니다.`}
         {state.away.injured !== null &&
-          ` ${state.away.injured}번은 무릎이 안 좋아 보입니다.`}
-        {' '}개별 능력치는 볼 수 없습니다 — 보이는 것은 서 있는 자리뿐입니다.
+          ` ${state.away.injured}번은 무릎 상태가 좋지 않습니다.`}
+        {' '}개별 능력치는 확인할 수 없습니다. 등번호와 위치만 보입니다.
       </p>
     </section>
   )

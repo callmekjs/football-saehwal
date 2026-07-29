@@ -122,7 +122,7 @@ function CaptainBrief({ briefing, voice }: { briefing: Briefing; voice: VoiceHan
           {briefing.speaker}
         </span>
         <span>
-          <b>{briefing.speaker}번</b> 주장이 상황을 전합니다
+          <b>{briefing.speaker}번</b> 주장이 지금 상황을 전합니다
         </span>
 
         {/*
@@ -165,7 +165,7 @@ function CaptainBrief({ briefing, voice }: { briefing: Briefing; voice: VoiceHan
 
       {briefing.more.length > 0 && (
         <details className="captain-more">
-          <summary>더 듣기 · {briefing.more.length}줄</summary>
+          <summary>이어서 듣기 · {briefing.more.length}줄</summary>
           <ul className="captain-lines">
             {briefing.more.map((line) => (
               <li key={line.id} data-tone={line.tone === 'ALERT' ? 'alert' : undefined}>
@@ -192,7 +192,7 @@ function CaptainBrief({ briefing, voice }: { briefing: Briefing; voice: VoiceHan
         <p className="captain-voice" role="status">
           {voice.denied ? (
             <span className="captain-voice-off">
-              마이크를 쓸 수 없습니다 — 탭으로 하시면 됩니다
+              마이크를 쓸 수 없습니다. 화면의 버튼으로 지시해 주세요
             </span>
           ) : voice.heard || voice.note ? (
             <>
@@ -290,9 +290,9 @@ export function StatBars({ state, half }: { state: MatchState; half: Half }) {
   const s = state.stats
   const rows: Array<[string, number, number, boolean]> = [
     ['공격 전개', s.homeAttempt, s.awayAttempt, false],
-    ['슈팅 상황', s.homeShot, s.awayShot, false],
-    ['세트피스 허용', 0, s.setPiece, true],
-    ['배후 뚫림', 0, s.behind, true],
+    ['슈팅', s.homeShot, s.awayShot, false],
+    ['세트피스 위험', 0, s.setPiece, true],
+    ['배후 침투', 0, s.behind, true],
   ]
 
   return (
@@ -331,7 +331,7 @@ function Log({ state, half }: { state: MatchState; half: Half }) {
     <section className="panel log-panel">
       <h2>경기 이벤트</h2>
       <div className="log-rows">
-        {shown.length === 0 && <span className="log-empty">아직 특이사항 없음</span>}
+        {shown.length === 0 && <span className="log-empty">아직 주요 장면이 없습니다</span>}
         {shown.map((e, i) => (
           <div key={`${e.tick}-${i}`} className="log-row">
             <span className="log-min">
@@ -387,13 +387,13 @@ function Bench({
   return (
     <section className="panel bench-panel">
       <h2>
-        벤치 · 교체 {state.subsLeft}장 남음
+        벤치 · 교체 카드 {state.subsLeft}장
         {locked ? (
           <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — {endLabel(half)}</span>
         ) : picked ? (
-          <span style={{ color: 'var(--accent)' }}> — 나갈 선수를</span>
+          <span style={{ color: 'var(--accent)' }}> — 나갈 선수 선택</span>
         ) : (
-          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 넣을 선수부터</span>
+          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 들어올 선수 먼저</span>
         )}
       </h2>
 
@@ -402,8 +402,8 @@ function Bench({
         <div className="bench-pending">
           {state.pendingSubs.map((p) => (
             <span key={p.in}>
-              {getPlayer(p.out).num}번 → {getPlayer(p.in).num}번 · 준비 중{' '}
-              {Math.max(0, Math.ceil((p.atTick - state.tick) / 10))}초
+              {getPlayer(p.out).num}번 → {getPlayer(p.in).num}번 ·{' '}
+              {Math.max(0, Math.ceil((p.atTick - state.tick) / 10))}초 뒤 투입
             </span>
           ))}
         </div>
@@ -730,7 +730,7 @@ export function MatchScreen({
             급수 <b>{formatBreak(breakLeft)}</b>
           </span>
         ) : (
-          <span className="match-subs">교체 {state.subsLeft}</span>
+          <span className="match-subs">교체 카드 {state.subsLeft}장</span>
         )}
       </header>
 
@@ -836,8 +836,8 @@ export function MatchScreen({
                   data-hot={breakLeft <= BREAK_WARN_SECONDS ? 'on' : undefined}
                   onClick={resume}
                 >
-                  지시 끝 · 경기 재개
-                  <small>기다리지 않아도 됩니다 · 이후 시계는 멈추지 않습니다</small>
+                  경기 재개
+                  <small>바로 시작할 수 있습니다 · 재개 후 시계는 멈추지 않습니다</small>
                 </button>
               </div>
             </section>
@@ -845,7 +845,7 @@ export function MatchScreen({
 
           {phase === 'RUNNING' && (
             <section className="panel side-note">
-              <h2>지금 걸려 있는 것</h2>
+              <h2>현재 설정</h2>
               <div className="side-note-body">
                 <div className="side-facts">
                   <span>
@@ -870,9 +870,9 @@ export function MatchScreen({
                         {ORDER_LABELS[s.order as Exclude<PlayerOrder, 'NONE'>].name}
                       </li>
                     ))}
-                  {orderCount === 0 && <li className="dim">걸린 개별 지시 없음</li>}
+                  {orderCount === 0 && <li className="dim">개별 지시 없음</li>}
                 </ul>
-                <small>시계는 멈추지 않습니다. 되돌릴 수 없습니다.</small>
+                <small>시계는 멈추지 않고, 결정은 되돌릴 수 없습니다.</small>
               </div>
             </section>
           )}
@@ -903,7 +903,7 @@ export function MatchScreen({
                 </div>
                 <button className="kickoff-button" onClick={goSecondHalf}>
                   후반 시작
-                  <small>급수 타임에서 지시를 다시 겁니다 · 경기는 이어집니다</small>
+                  <small>후반 급수 타임에서 지시를 다시 내릴 수 있습니다</small>
                 </button>
               </div>
             </section>
@@ -916,11 +916,11 @@ export function MatchScreen({
                 <strong className="result-verdict">
                   {problem.objective.type === 'SURVIVE'
                     ? passed
-                      ? '지켜냈다'
-                      : '무너졌다'
+                      ? '리드를 지켜냈습니다'
+                      : '리드를 지키지 못했습니다'
                     : passed
-                      ? '따라잡았다'
-                      : '실패했다'}
+                      ? '동점을 만들었습니다'
+                      : '따라잡지 못했습니다'}
                 </strong>
                 <span>
                   {problem.title} · {objective}

@@ -61,8 +61,8 @@ describe('하프타임 주장 정리', () => {
       const h = buildHalftime(problem, s)
       const shots = h.lines.find((l) => l.id === 'shots')
       if (shots) {
-        expect(shots.text).toContain(`우리 ${s.stats.homeShot}`)
-        expect(shots.text).toContain(`상대 ${s.stats.awayShot}`)
+        expect(shots.text).toContain(`우리가 ${s.stats.homeShot}번`)
+        expect(shots.text).toContain(`상대가 ${s.stats.awayShot}번`)
       }
       const sp = h.lines.find((l) => l.id === 'setpiece')
       if (sp) {
@@ -115,8 +115,8 @@ describe('하프타임 주장 정리', () => {
       const h = buildHalftime(problem, playOut(problem))
       const recovery = h.lines.find((line) => line.id === 'recovery')
       expect(recovery).toBeDefined()
-      expect(recovery!.text).toContain('체력을 많이 쓴 선수')
-      expect(recovery!.text).toContain('쉬어도 많이 돌아오지 않습니다')
+      expect(recovery!.text).toContain('많이 뛴 선수')
+      expect(recovery!.text).toContain('체력이 조금만 돌아옵니다')
       expect(recovery!.text).toContain('후반 교체')
     }
   })
@@ -139,6 +139,18 @@ describe('하프타임 주장 정리', () => {
     if (s.score[0] < s.score[1]) {
       expect(goal!.text).toContain(`${s.score[1] - s.score[0]}골`)
       expect(goal!.tone).toBe('BAD')
+    }
+  })
+
+  it('라커룸 주장 말도 짧게 끊는다', () => {
+    for (const problem of FIRST_HALF) {
+      const halftime = buildHalftime(problem, playOut(problem))
+      for (const line of halftime.lines) {
+        expect(line.text.length, `${problem.id} / ${line.id}`).toBeLessThanOrEqual(120)
+        expect(line.text, `${problem.id} / ${line.id}`).not.toMatch(
+          /전반적으로|판정이 열|되어집니다|보여집니다/,
+        )
+      }
     }
   })
 })

@@ -113,7 +113,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   if (ourShots + theirShots > 0) {
     const tone: HalftimeTone =
       ourShots > theirShots ? 'GOOD' : ourShots < theirShots ? 'BAD' : 'FACT'
-    say('shots', `슈팅은 우리 ${ourShots}, 상대 ${theirShots}였습니다.`, tone)
+    say('shots', `슛은 우리가 ${ourShots}번, 상대가 ${theirShots}번 했습니다.`, tone)
   }
 
   // ── 우리가 내준 것. 어디가 뚫렸나 ──
@@ -128,7 +128,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
      */
     say(
       'setpiece',
-      `세트피스 허용이 ${state.stats.setPiece}입니다.`,
+      `세트피스 위험이 ${state.stats.setPiece}까지 쌓였습니다.`,
       state.stats.setPiece >= SET_PIECE_HEAVY ? 'BAD' : 'FACT',
     )
   }
@@ -136,7 +136,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
     // 배후는 판당 0~5라 실제로 셀 수 있는 사건이다. "번"을 써도 된다
     say(
       'behind',
-      `등 뒤 공간을 ${state.stats.behind}번 내줬습니다.`,
+      `뒷공간을 ${state.stats.behind}번 내줬습니다.`,
       state.stats.behind >= BEHIND_HEAVY ? 'BAD' : 'FACT',
     )
   }
@@ -147,7 +147,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   if (booked.length > 0) {
     say(
       'booked',
-      `${booked.sort((a, b) => a - b).join('번, ')}번이 경고를 안고 후반에 들어갑니다. 한 장 더 받으면 나갑니다.`,
+      `${booked.sort((a, b) => a - b).join('번, ')}번은 경고가 있습니다. 한 장 더 받으면 나갑니다.`,
       'BAD',
     )
   }
@@ -178,7 +178,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   if (HALFTIME_RECOVERY.rate > 0) {
     say(
       'recovery',
-      '숨을 고를 시간은 있지만, 전반에 체력을 많이 쓴 선수는 쉬어도 많이 돌아오지 않습니다. 후반 교체를 고민할 만합니다.',
+      '숨은 고를 수 있습니다. 다만 많이 뛴 선수는 쉬어도 체력이 조금만 돌아옵니다. 후반 교체가 필요할 수 있습니다.',
     )
   }
 
@@ -195,7 +195,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
     say(
       'awayStamina',
       worn
-        ? `저쪽도 전반을 다 뛰었습니다. 상대 체력이 ${away}입니다 — 후반에 뒤가 헐거워집니다.`
+        ? `상대도 전반을 다 뛰었습니다. 체력은 ${away}입니다. 후반에는 뒷공간이 더 벌어질 수 있습니다.`
         : `상대 체력은 ${away}입니다. 아직 버틸 만합니다.`,
       worn ? 'GOOD' : 'FACT',
     )

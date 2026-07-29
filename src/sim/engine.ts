@@ -85,19 +85,21 @@ export function createState(problem: Problem): MatchState {
 
 /** 교체가 유효한지. 무효면 사유를 돌려준다 */
 export function checkSub(state: MatchState, out: string, inId: string): string | null {
-  if (state.subsLeft <= 0) return '남은 교체 카드가 없다'
+  if (state.subsLeft <= 0) return '남은 교체 카드가 없습니다'
   const o = state.players.find((s) => s.id === out)
   const i = state.players.find((s) => s.id === inId)
-  if (!o) return `${out} 은 명단에 없다`
-  if (!i) return `${inId} 은 명단에 없다`
-  if (!o.onPitch || o.out) return `${out} 은 이미 피치 밖이다`
-  if (i.onPitch || i.out) return `${inId} 은 투입할 수 없다`
-  if (state.pendingSubs.some((p) => p.out === out || p.in === inId)) return '이미 대기 중이다'
+  if (!o) return `${out} 선수는 명단에 없습니다`
+  if (!i) return `${inId} 선수는 명단에 없습니다`
+  if (!o.onPitch || o.out) return `${out} 선수는 이미 피치 밖에 있습니다`
+  if (i.onPitch || i.out) return `${inId} 선수는 투입할 수 없습니다`
+  if (state.pendingSubs.some((p) => p.out === out || p.in === inId)) {
+    return '선택한 선수는 이미 교체를 기다리고 있습니다'
+  }
   // 골키퍼를 필드 플레이어로 바꾸면 골문이 빈다. 벤치에 백업 골키퍼가
   // 없으므로 되돌릴 방법도 없다. 규칙상 존재할 수 없는 수를 화면이
   // 허용하면 그건 선택지가 아니라 함정이다.
   if (getPlayer(out).pos === 'GK' && getPlayer(inId).pos !== 'GK') {
-    return '골키퍼는 골키퍼로만 교체할 수 있다'
+    return '골키퍼는 골키퍼와만 교체할 수 있습니다'
   }
   return null
 }
@@ -168,12 +170,12 @@ export function checkPosition(
   position: PlayerPosition | null,
 ): string | null {
   const player = state.players.find((s) => s.id === target)
-  if (!player) return `${target} 은 명단에 없다`
-  if (!player.onPitch || player.out) return '피치 위 선수가 아니다'
+  if (!player) return `${target} 선수는 명단에 없습니다`
+  if (!player.onPitch || player.out) return '경기 중인 선수가 아닙니다'
 
   const registered = getPlayer(target).pos
   if (registered === 'GK') {
-    return position === null ? null : '골키퍼는 자리를 옮길 수 없다'
+    return position === null ? null : '골키퍼는 자리를 옮길 수 없습니다'
   }
 
   if (position) {
@@ -186,7 +188,7 @@ export function checkPosition(
       position.y < pitch.minY ||
       position.y > pitch.maxY
     ) {
-      return '경기장 안에 놓아야 한다'
+      return '경기장 안에 놓아주세요'
     }
   }
 
@@ -200,7 +202,7 @@ export function checkPosition(
       (s) => s.onPitch && !s.out && s.id !== target && effectivePos(s) === 'DF',
     )
     if (remaining.length < FREE_POSITION.rules.minDefenders) {
-      return '뒤에 수비가 셋은 남아야 한다'
+      return '뒤에는 수비수가 적어도 세 명 남아야 합니다'
     }
   }
   return null
@@ -212,27 +214,31 @@ export function checkOrder(
   order: PlayerOrder,
 ): string | null {
   const p = state.players.find((s) => s.id === target)
-  if (!p) return `${target} 은 명단에 없다`
-  if (!p.onPitch || p.out) return '피치 위 선수가 아니다'
+  if (!p) return `${target} 선수는 명단에 없습니다`
+  if (!p.onPitch || p.out) return '경기 중인 선수가 아닙니다'
   if (p.order === order) return null
   if (order === 'NONE') return null
 
   const active = state.players.filter((s) => s.onPitch && !s.out && s.order !== 'NONE')
   if (p.order === 'NONE' && active.length >= MAX_ORDERS) {
-    return `지시는 ${MAX_ORDERS}명까지다. 하나를 풀어라`
+    return `지시는 ${MAX_ORDERS}명에게만 내릴 수 있습니다. 먼저 하나를 풀어주세요`
   }
   const registered = getPlayer(target).pos
-  if (registered === 'GK') return '골키퍼에게는 지시할 수 없다'
+  if (registered === 'GK') return '골키퍼에게는 이 지시를 내릴 수 없습니다'
   const pos = effectivePos(p)
 
   if (order === 'HOLD') {
-    if (pos !== 'DF' && pos !== 'MF') return '골문 앞은 수비수와 미드필더만'
+    if (pos !== 'DF' && pos !== 'MF') {
+      return '골문 앞 지시는 수비수와 미드필더에게만 내릴 수 있습니다'
+    }
     const holding = active.filter((s) => s.order === 'HOLD' && s.id !== target)
-    if (holding.length >= MAX_HOLD) return `골문 앞은 ${MAX_HOLD}명까지다`
+    if (holding.length >= MAX_HOLD) {
+      return `골문 앞 지시는 ${MAX_HOLD}명까지만 내릴 수 있습니다`
+    }
   }
   // 이미 그 줄에 서 있는 선수에게 그리로 가라고 할 수는 없다
-  if (order === 'DROP_BACK' && pos === 'DF') return '이미 수비수다'
-  if (order === 'PUSH_UP' && pos === 'FW') return '이미 공격수다'
+  if (order === 'DROP_BACK' && pos === 'DF') return '이미 수비 줄에 서 있습니다'
+  if (order === 'PUSH_UP' && pos === 'FW') return '이미 공격 줄에 서 있습니다'
 
   // 수비 자원을 전부 앞으로 올리면 배후가 통째로 빈다. 실점 공식이
   // "수비수가 없으면 최악값"으로 떨어져 한 번의 조작으로 판이 끝난다
@@ -241,7 +247,7 @@ export function checkOrder(
       (s) => s.onPitch && !s.out && s.id !== target && effectivePos(s) === 'DF',
     )
     if (backs.length < FREE_POSITION.rules.minDefenders) {
-      return '뒤에 수비가 셋은 남아야 한다'
+      return '뒤에는 수비수가 적어도 세 명 남아야 합니다'
     }
   }
   return null

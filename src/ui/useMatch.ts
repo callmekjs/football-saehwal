@@ -85,7 +85,7 @@ export function changePosition(
   const error = checkPosition(state, target, position)
   if (error) return { next: state, record: null, error }
   const before = state.players.find((player) => player.id === target)
-  if (!before) return { next: state, record: null, error: `${target} 은 명단에 없다` }
+  if (!before) return { next: state, record: null, error: '선수를 명단에서 찾을 수 없습니다' }
 
   const samePosition =
     before.position === position ||

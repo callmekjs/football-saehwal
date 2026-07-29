@@ -153,7 +153,7 @@ describe('Coach 경기 분석', () => {
     expect(report.goalsAgainst).toHaveLength(3)
     expect(report.goalsAgainst.map((finding) => finding.title)).toEqual([
       '수비 뒷공간 침투',
-      '상대 오픈플레이',
+      '상대 공격',
       '페널티킥',
     ])
   })
@@ -200,6 +200,33 @@ describe('Coach 경기 분석', () => {
 
     expect(personnel?.title).toContain('직접 배치')
     expect(personnel?.title).toContain('1회')
+  })
+
+  it('감독 보고서는 차분한 존댓말로 근거를 설명한다', () => {
+    const final = finalWith({
+      score: [1, 1],
+      stats: {
+        homeAttempt: 12,
+        awayAttempt: 6,
+        homeShot: 3,
+        awayShot: 2,
+        setPiece: 9,
+        behind: 1,
+      },
+      log: [{ tick: 500, kind: 'CONCEDE', detail: 'SET_PIECE' }],
+    })
+    const report = buildCoachReport(problemAt(), final, [], metrics, 77)
+    const prose = [
+      report.headline,
+      report.turningPoint.explanation,
+      ...report.goalsFor.map((finding) => finding.explanation),
+      ...report.goalsAgainst.map((finding) => finding.explanation),
+      ...report.decisionReview.map((finding) => finding.explanation),
+    ].join(' ')
+
+    expect(prose).not.toMatch(/전반적으로|되어집니다|보여집니다|득점 생산|작동했습니다/)
+    expect(report.decisionReview.find((finding) => finding.id === 'decision-channels')?.label)
+      .toBe('150판 비교')
   })
 })
 

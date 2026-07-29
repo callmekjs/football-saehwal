@@ -67,8 +67,8 @@ export function breakRatio(remaining: number, total: number = BREAK_SECONDS): nu
 /** 화면에 뜨는 한 줄. 남은 시간에 따라 말이 바뀐다 */
 export function breakMessage(remaining: number): string {
   if (remaining <= 0) return '휘슬 — 경기가 재개됩니다'
-  if (remaining <= BREAK_WARN_SECONDS) return '곧 재개됩니다 · 지금 걸어둔 것으로 시작합니다'
-  return '이 시간이 지나면 자동으로 재개됩니다'
+  if (remaining <= BREAK_WARN_SECONDS) return '곧 재개됩니다 · 현재 지시대로 시작합니다'
+  return '시간이 끝나면 자동으로 재개됩니다'
 }
 
 /**

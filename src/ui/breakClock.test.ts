@@ -62,6 +62,7 @@ describe('경고 단계', () => {
     const over = breakMessage(0)
     expect(new Set([calm, warn, over]).size).toBe(3)
     expect(warn).toContain('곧')
+    expect(warn).toContain('현재 지시대로')
   })
 })
 

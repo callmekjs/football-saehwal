@@ -213,7 +213,7 @@ describe('주장 브리핑', () => {
     for (const p of PROBLEMS) {
       const text = textOf(createState(p), p, 'inherited')!
       // 세 국면 모두 전제가 "정상 전술이 아니다" 이다
-      expect(text).toContain('어디에도 맞지 않습니다')
+      expect(text).toContain('어느 전술에도 맞지 않습니다')
     }
     const p = byId('p02')
     const balanced = {
@@ -252,6 +252,18 @@ describe('주장 브리핑', () => {
       const a = buildBriefing(p, createState(p))
       const b = buildBriefing(p, createState(p))
       expect(a).toEqual(b)
+    }
+  })
+
+  it('주장 말은 짧고 급하며 보고서 말투를 쓰지 않는다', () => {
+    for (const problem of PROBLEMS) {
+      const briefing = buildBriefing(problem, createState(problem))
+      for (const line of [...briefing.core, ...briefing.more]) {
+        expect(line.text.length, line.id).toBeLessThanOrEqual(130)
+        expect(line.text, line.id).not.toMatch(
+          /전반적으로|판정이 열|위험은 꺼|득점 생산|작동했습니다/,
+        )
+      }
     }
   })
 })

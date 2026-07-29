@@ -86,27 +86,27 @@ interface Candidate {
 
 const CAPTAIN_REPORT: Record<CaptainEffect, { text: string; tone: BriefingTone }> = {
   TEAM_RECOVERED: {
-    text: '다들 몸이 가벼워졌습니다. 전반적으로 체력이 올라왔습니다.',
+    text: '다들 몸이 가볍습니다. 체력도 올랐습니다.',
     tone: 'FACT',
   },
   TEAM_FATIGUED: {
-    text: '다들 숨이 차고 다리가 무겁습니다. 전반적으로 체력이 떨어졌습니다.',
+    text: '다들 숨이 찹니다. 다리도 무겁습니다.',
     tone: 'ALERT',
   },
   BACK_LINE_RECOVERED: {
-    text: '수비진은 호흡을 되찾았습니다. 뒤쪽 선수들의 체력이 올라왔습니다.',
+    text: '수비진은 숨을 돌렸습니다. 체력도 올랐습니다.',
     tone: 'FACT',
   },
   BACK_LINE_FATIGUED: {
-    text: '수비진의 다리가 무겁습니다. 뒤쪽 선수들의 체력이 떨어졌습니다.',
+    text: '수비진 다리가 무겁습니다. 체력도 떨어졌습니다.',
     tone: 'ALERT',
   },
   FRONT_LINE_RECOVERED: {
-    text: '중원과 공격진은 아직 힘이 남았습니다. 앞쪽 선수들의 체력이 올라왔습니다.',
+    text: '중원과 공격진은 힘이 남았습니다. 체력도 올랐습니다.',
     tone: 'FACT',
   },
   FRONT_LINE_FATIGUED: {
-    text: '중원과 공격진의 발이 무겁습니다. 앞쪽 선수들의 체력이 떨어졌습니다.',
+    text: '중원과 공격진의 발이 무겁습니다. 체력도 떨어졌습니다.',
     tone: 'ALERT',
   },
 }
@@ -214,9 +214,13 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
   // ── 1. 몇 대 몇이고 무엇을 해야 하는가. 이것만은 항상 첫 줄이다 ──
   const [us, them] = state.score
   const standing =
-    us > them ? '우리가 앞서 있습니다' : us < them ? '우리가 뒤지고 있습니다' : '동점입니다'
-  const goal = chasing ? '최소 동점은 만들어야 합니다' : '이대로 끝내야 합니다'
-  say(0, 'score', '상황', `지금 ${us} 대 ${them}, ${standing}. ${goal}.`, us < them ? 'ALERT' : 'FACT')
+    us > them
+      ? `지금 ${us} 대 ${withJosa(them, '로으로')} 앞섭니다.`
+      : us < them
+        ? `지금 ${us} 대 ${withJosa(them, '로으로')} 뒤집니다.`
+        : `지금 ${us} 대 ${withJosa(them, '로으로')} 동점입니다.`
+  const goal = chasing ? '최소 동점까지 따라가야 합니다.' : '이대로 끝까지 지켜야 합니다.'
+  say(0, 'score', '상황', `${standing} ${goal}`, us < them ? 'ALERT' : 'FACT')
 
   // ── 2. 인원. 한 명이 없으면 다른 어떤 말보다 먼저다 ──
   if (state.homeCount < 11) {
@@ -225,12 +229,12 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       5,
       'ten-men',
       '인원',
-      `우리는 ${state.homeCount}명입니다. ${numberList(gone)} 자리는 다시 못 채웁니다.`,
+      `지금 ${state.homeCount}명입니다. 빠진 ${numberList(gone)} 자리는 못 채웁니다.`,
       'ALERT',
     )
   }
   if (state.awayCount < 11) {
-    say(7, 'away-ten-men', '인원', `저쪽은 ${state.awayCount}명입니다. 숫자는 우리가 앞섭니다.`)
+    say(7, 'away-ten-men', '인원', `상대는 ${state.awayCount}명입니다. 우리가 한 명 많습니다.`)
   }
 
   // ── 3. 판마다 달라지는 주장 보고. 이 말은 실제 시작 체력과 같은 값이다 ──
@@ -244,7 +248,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       10,
       'send-off-risk',
       '위험',
-      `${numberList(booked)}이 경고를 안고 있는데 지금 압박이 강입니다. 한 번 더 걸리면 퇴장이고, 압박을 낮추면 이 위험은 꺼집니다.`,
+      `${numberList(booked)}은 경고가 있는데 강하게 압박 중입니다. 한 번 더 받으면 나갑니다. 압박을 낮추면 위험도 줄어듭니다.`,
       'ALERT',
     )
   }
@@ -259,7 +263,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       15,
       'injury-now',
       '위험',
-      `당장 위험합니다 — ${staminaList(critical)}. 이미 부상 판정이 열리는 ${EVENTS.injuryThreshold} 아래이고, 부상은 교체 카드를 강제로 태웁니다.`,
+      `당장 위험합니다. ${staminaList(critical)}. 부상 기준인 ${EVENTS.injuryThreshold} 아래입니다. 다치면 교체 카드도 한 장 잃습니다.`,
       'ALERT',
     )
   }
@@ -274,13 +278,13 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
    * **지어내지 않는다.** 대형·경고·부상은 전부 `state.away` 의 실제
    * 값이고, 같은 시드는 같은 상대를 만든다.
    */
-  say(11, 'awayShape', '상대', `저쪽은 ${withJosa(state.away.formation, '로으로')} 나왔습니다.`)
+  say(11, 'awayShape', '상대', `상대는 ${withJosa(state.away.formation, '로으로')} 나왔습니다.`)
   if (state.away.booked.length > 0) {
     say(
       16,
       'awayBooked',
       '상대',
-      `저쪽 ${state.away.booked.map((n) => `${n}번`).join(' · ')}이 경고를 안고 있습니다.`,
+      `상대 ${state.away.booked.map((n) => `${n}번`).join(' · ')}에게 경고가 있습니다.`,
     )
   }
   if (state.away.injured !== null) {
@@ -288,7 +292,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       17,
       'awayInjury',
       '상대',
-      `저쪽 ${state.away.injured}번이 무릎을 절뚝입니다.`,
+      `상대 ${state.away.injured}번이 무릎을 절고 있습니다.`,
     )
   }
 
@@ -298,10 +302,10 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     'opponent',
     '상대',
     state.opponent === 'ALL_OUT'
-      ? '저쪽은 지고 있어서 전부 올라옵니다. 우리 뒤가 계속 빕니다.'
+      ? '상대는 지고 있어 전원이 올라옵니다. 우리 뒷공간을 계속 노립니다.'
       : state.opponent === 'PARK_BUS'
-        ? '저쪽은 앞서 있으니 내려앉아 골문 앞을 채웁니다. 가운데는 이미 막혀 있습니다.'
-        : '저쪽은 아직 어느 쪽으로도 크게 걸지 않았습니다.',
+        ? '상대는 앞서 있어 골문 앞에 내려앉았습니다. 가운데는 이미 막혔습니다.'
+        : '상대는 아직 크게 치우치지 않았습니다.',
   )
 
   /**
@@ -320,8 +324,8 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       'opponentStamina',
       '상대',
       worn
-        ? `저쪽도 많이 뛰었습니다. 상대 체력이 ${Math.round(state.awayStamina)}까지 떨어졌습니다 — 지금이 밀어붙일 때입니다.`
-        : `저쪽 체력은 ${Math.round(state.awayStamina)}입니다. 아직 쌩쌩합니다.`,
+        ? `상대도 많이 뛰었습니다. 체력이 ${Math.round(state.awayStamina)}까지 떨어졌습니다.`
+        : `상대 체력은 ${Math.round(state.awayStamina)}입니다. 아직 버틸 힘이 있습니다.`,
       // 이 브리핑의 어조는 사실과 경고 둘뿐이다. 좋은 소식도 사실로 전한다
       'FACT',
     )
@@ -338,7 +342,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       20,
       'top-threat',
       '상대',
-      `제일 위험한 건 저쪽 ${top.num}번입니다. 속도 ${top.speed} 대 우리 뒷선 최저 ${slow.num}번 ${slow.speed}, ${top.speed - slow.speed} 차이입니다. ${tail}.`,
+      `상대 ${top.num}번이 가장 빠릅니다. 속도 ${top.speed}, 우리 뒷선 최저는 ${slow.num}번 ${slow.speed}입니다. 차이는 ${top.speed - slow.speed}입니다. ${tail}.`,
       top.speed - slow.speed >= 10 ? 'ALERT' : 'FACT',
     )
     const next = threats.slice(1, 3).filter((p) => p.speed > slow.speed)
@@ -347,7 +351,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
         50,
         'next-threats',
         '상대',
-        `그다음은 ${next.map((p) => `${p.num}번 ${p.speed}`).join(' · ')}입니다. 우리 뒷선보다 빠른 발이 저쪽에 ${threats.filter((p) => p.speed > slow.speed).length}명 있습니다.`,
+        `다음은 ${next.map((p) => `${p.num}번 ${p.speed}`).join(' · ')}입니다. 우리 뒷선보다 빠른 선수가 상대에 ${threats.filter((p) => p.speed > slow.speed).length}명 있습니다.`,
       )
     }
   }
@@ -359,7 +363,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       30,
       'stamina',
       '위험',
-      `체력이 떨어졌습니다 — ${staminaList(fading.slice(0, MAX_TIRED_NAMED))}. ${EVENTS.injuryThreshold} 밑으로 가면 부상이고, 부상은 교체 카드를 강제로 태웁니다.`,
+      `체력이 낮습니다. ${staminaList(fading.slice(0, MAX_TIRED_NAMED))}. ${EVENTS.injuryThreshold} 아래로 내려가면 다칠 수 있고 교체 카드도 한 장 잃습니다.`,
       'ALERT',
     )
   }
@@ -370,7 +374,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       35,
       'booked',
       '위험',
-      `${numberList(booked)}이 경고를 안고 있습니다. 지금 압박이 ${LEVEL_WORD.press[state.tactics.press]}이라 퇴장 위험은 꺼져 있지만, 강으로 올리면 켜집니다.`,
+      `${numberList(booked)}은 경고가 있습니다. 지금 압박이면 괜찮지만, 강하게 올리면 퇴장 위험이 생깁니다.`,
     )
   }
 
@@ -380,7 +384,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       40,
       'low-line',
       '위험',
-      `수비라인이 낮음입니다. 뒤로 넘어가는 공은 ${LINE[0].behind}배지만 세트피스는 ${LINE[0].setPiece}배입니다. 깊이 잠글수록 오히려 더 맞는 구간입니다.`,
+      `라인이 낮습니다. 뒷공간 위험은 ${LINE[0].behind}배로 줄지만 세트피스 위험은 ${LINE[0].setPiece}배로 뜁니다. 너무 깊이 물러서면 더 위험합니다.`,
       'ALERT',
     )
   } else if (state.tactics.line === 2) {
@@ -388,7 +392,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       40,
       'high-line',
       '위험',
-      `수비라인이 높음입니다. 세트피스는 ${LINE[2].setPiece}배지만 뒤로 넘어가는 공이 ${LINE[2].behind}배입니다.`,
+      `라인이 높습니다. 세트피스 위험은 ${LINE[2].setPiece}배로 줄지만 뒷공간 위험은 ${LINE[2].behind}배로 뜁니다.`,
     )
   }
 
@@ -404,7 +408,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     '상황',
     preset
       ? `앞 감독은 ${formation} · ${preset.name} 그대로 두고 나갔습니다.`
-      : `앞 감독이 남긴 건 ${formation}, ${levers}입니다. 이름 붙은 전술 어디에도 맞지 않습니다.`,
+      : `앞 감독이 남긴 건 ${formation}, ${levers}입니다. 어느 전술에도 맞지 않습니다.`,
     preset ? 'FACT' : 'ALERT',
   )
 
@@ -415,7 +419,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       48,
       'finisher',
       '자원',
-      `지금 골을 넣을 사람은 ${finisher.num}번입니다. 마무리 ${finisher.finishing.toFixed(2)}, 피치 위에서 제일 높습니다.`,
+      `마무리가 가장 좋은 선수는 ${finisher.num}번입니다. 수치는 ${finisher.finishing.toFixed(2)}입니다.`,
     )
   }
 
@@ -428,7 +432,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       chasing ? 62 : 52,
       'bench-back',
       '자원',
-      `벤치 ${benchBack.num}번은 수비 속도 ${benchBack.speed}입니다. 지금 우리 뒷선 최저는 ${slow.speed}입니다.`,
+      `벤치 ${benchBack.num}번의 수비 속도는 ${benchBack.speed}입니다. 현재 뒷선 최저는 ${slow.speed}입니다.`,
     )
   }
 
@@ -438,7 +442,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       chasing ? 52 : 62,
       'bench-finisher',
       '자원',
-      `벤치 ${benchFinisher.num}번 마무리는 ${benchFinisher.finishing.toFixed(2)}입니다. 지금 피치 위 최고는 ${finisher.finishing.toFixed(2)}입니다.`,
+      `벤치 ${benchFinisher.num}번의 마무리는 ${benchFinisher.finishing.toFixed(2)}입니다. 현재 경기 중인 선수의 최고치는 ${finisher.finishing.toFixed(2)}입니다.`,
     )
   }
 
@@ -452,7 +456,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       66,
       'bench-fast',
       '자원',
-      `벤치에서 제일 빠른 건 ${benchFast.num}번 ${benchFast.speed}입니다. 지금 피치 위 최고 속도는 ${fastestOnPitch}입니다.`,
+      `벤치에서는 ${benchFast.num}번이 가장 빠릅니다. 속도 ${benchFast.speed}, 현재 경기 중인 선수의 최고치는 ${fastestOnPitch}입니다.`,
     )
   }
 
@@ -462,7 +466,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     'subs',
     '자원',
     state.subsLeft > 0
-      ? `교체는 ${state.subsLeft}장 남아 있습니다.`
+      ? `교체 카드는 ${state.subsLeft}장 남았습니다.`
       : '교체 카드는 다 썼습니다. 지금 있는 사람으로 끝내야 합니다.',
     state.subsLeft > 0 ? 'FACT' : 'ALERT',
   )

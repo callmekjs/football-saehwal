@@ -195,7 +195,7 @@ export function applyCommand(
   const target = state.players.find(
     (s) => s.onPitch && !s.out && getPlayer(s.id).num === cmd.num,
   )
-  if (!target) return `${cmd.num}번은 지금 피치 위에 없습니다`
+  if (!target) return `${cmd.num}번은 지금 경기에 뛰고 있지 않습니다`
 
   const reason = actions.setOrder(target.id, cmd.order)
   if (reason) return reason

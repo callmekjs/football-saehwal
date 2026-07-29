@@ -25,7 +25,7 @@ function HalfButton({ half, onPick }: { half: Half; onPick: () => void }) {
     <button
       className={`fx-half ${half === 1 ? 'first' : 'second'}`}
       onClick={onPick}
-      title={`${breakStart(half)}분 급수 타임에서 시작해 ${segmentEnd(half)}분에 끝납니다`}
+      title={`${breakStart(half)}분 급수 타임부터 ${segmentEnd(half)}분까지 진행됩니다`}
     >
       <b>{halfLabel(half)}</b>
       <small>
@@ -50,7 +50,7 @@ function FixtureCard({
     <div className="fixture">
       <span className="fx-band">
         <b>제{n}국면</b>
-        <span>전반 · 후반 중 고르기</span>
+        <span>전반 또는 후반 선택</span>
       </span>
       <span className="fx-main">
         <span className="fx-score">
@@ -63,10 +63,10 @@ function FixtureCard({
       </span>
       <span className="fx-chips">
         <span className="tagchip">{survive ? '리드 지키기' : '동점 이상'}</span>
-        <span className="tagchip dim">교체 {problem.subsLeft}장</span>
+        <span className="tagchip dim">교체 카드 {problem.subsLeft}장</span>
         {problem.awayCount < 11 && <span className="tagchip warn">상대 10명</span>}
         {problem.unavailable.length > 0 && <span className="tagchip warn">우리 10명</span>}
-        {problem.booked.length > 0 && <span className="tagchip warn">경고 보유</span>}
+        {problem.booked.length > 0 && <span className="tagchip warn">경고 있음</span>}
       </span>
       <span className="fx-halves">
         <HalfButton half={1} onPick={() => onPick(1)} />
@@ -77,8 +77,8 @@ function FixtureCard({
 }
 
 const TICKER =
-  '시계는 멈추지 않는다 — 일시정지 없음　　되돌릴 수 없다 — 교체 카드는 회수되지 않는다　　' +
-  '결과와 판단은 따로 본다 — 무너져도 좋은 판단일 수 있다　　판마다 더 나은 전술이 다르다 — 만능 전술은 없다　　' +
+  '시계는 끝까지 흐른다 — 일시정지 없음　　교체 카드는 되돌릴 수 없다　　' +
+  '좋은 판단도 결과가 나쁠 수 있다　　판마다 답이 다르다 — 만능 전술은 없다　　' +
   '모든 국면·선수·수치는 창작이다　　'
 
 export function App() {
@@ -140,17 +140,17 @@ export function App() {
         <div className="hero-inner">
           <span className="live">
             <i aria-hidden />
-            라이브 — 뒤에서 엔진이 진짜 경기를 돌리고 있다
+            라이브 — 지금도 경기가 흐르고 있다
           </span>
           <h1 className="hero-title">
-            신의 한수:
+            신의 한 수:
             <br />
             <em>축구 사활</em>
           </h1>
           <p className="hero-sub">
-            경기 15분을 75초에 압축한 실시간 전술 시뮬레이션.
+            22분짜리 경기가 75초 동안 펼쳐집니다.
             <br />
-            시계는 멈추지 않고, 내린 결정은 되돌릴 수 없다.
+            시계는 멈추지 않습니다. 내린 결정은 되돌릴 수 없습니다.
           </p>
           <div className="hero-cta">
             <button
@@ -161,7 +161,7 @@ export function App() {
                 setAttempt((n) => n + 1)
               }}
             >
-              바로 킥오프
+              바로 킥오프{' '}
               <small>제1국면 · 후반</small>
             </button>
             <a className="cta ghost" href="#fixtures">
@@ -175,7 +175,7 @@ export function App() {
         <div className="board-head">
           <h2>국면 선택</h2>
           <span>
-            전술 상황 훈련 — 판마다 더 나은 선택이 다르다 · <b>전반과 후반 중 고른다</b>
+            같은 전술이 모든 판을 풀어주지 않습니다 · <b>전반 또는 후반을 선택하세요</b>
           </span>
         </div>
         <div className="fixtures">

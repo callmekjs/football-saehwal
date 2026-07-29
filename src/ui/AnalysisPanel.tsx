@@ -17,10 +17,10 @@ function percent(rate: number) {
   return `${(rate * 100).toFixed(1)}%`
 }
 
-function verdict(delta: number) {
-  if (delta >= 0.04) return '당신의 판단이 성공 가능성을 분명히 높였습니다.'
-  if (delta <= -0.04) return '이번 판단은 방치했을 때보다 위험을 키웠습니다.'
-  return '이번 판단은 방치했을 때와 큰 차이가 없었습니다.'
+export function verdict(delta: number) {
+  if (delta >= 0.04) return '내린 판단 덕분에 성공 가능성이 분명히 커졌습니다.'
+  if (delta <= -0.04) return '이번에는 그대로 뒀을 때보다 위험이 더 커졌습니다.'
+  return '그대로 뒀을 때와 성공 가능성이 비슷했습니다.'
 }
 
 function pointDelta(delta: number) {
@@ -90,7 +90,7 @@ export function AnalysisPanel({
 
   return (
     <section className="panel analysis">
-      <h2>감독 경기 분석 · 같은 국면 {ANALYSIS_RUNS}번 검증</h2>
+      <h2>감독 경기 분석 · 같은 조건 {ANALYSIS_RUNS}경기 비교</h2>
       <div className="analysis-body" aria-live="polite">
         {!analysis && !error && (
           <span className="analysis-loading">성공 가능성을 계산하고 있습니다…</span>
@@ -99,7 +99,7 @@ export function AnalysisPanel({
         {analysis && (
           <>
             <section className="coach-overview">
-              <span>COACH REPORT · 근거 기반</span>
+              <span>감독 보고서 · 경기 기록으로 분석</span>
               <h3>{analysis.coach.headline}</h3>
               <ul>
                 {analysis.coach.summary.map((line) => (
@@ -110,10 +110,11 @@ export function AnalysisPanel({
 
             <div className="analysis-headline">
               <strong className="analysis-verdict">{verdict(analysis.userDelta)}</strong>
-              <span>방치 대비 {pointDelta(analysis.userDelta)}</span>
+              <span>그대로 뒀을 때와 비교 {pointDelta(analysis.userDelta)}</span>
             </div>
             <span className="analysis-caption">
-              한 경기의 운을 빼기 위해 세 전술에 똑같은 150경기를 적용했습니다.
+              한 경기의 운을 덜어내려고 같은 조건의 {ANALYSIS_RUNS}경기에서 세 가지
+              판단을 비교했습니다.
             </span>
             <div className="analysis-bars">
               {analysis.rows.map((item) => (
@@ -141,7 +142,7 @@ export function AnalysisPanel({
             </div>
 
             <details className="coach-details" open>
-              <summary>득점·실점 장면 분석</summary>
+              <summary>득점과 실점은 왜 나왔나</summary>
               <div className="coach-findings">
                 {analysis.coach.goalsFor.map((finding) => (
                   <FindingCard key={finding.id} finding={finding} />
@@ -162,7 +163,7 @@ export function AnalysisPanel({
             </details>
 
             <section className="coach-prescriptions">
-              <h3>다음 경기 처방</h3>
+              <h3>다음 경기에서 바꿀 것</h3>
               <ol>
                 {analysis.coach.prescriptions.map((prescription) => (
                   <li key={prescription}>{prescription}</li>
@@ -171,7 +172,7 @@ export function AnalysisPanel({
             </section>
 
             <div className="analysis-advice">
-              <strong>검증된 권장 설정</strong>
+              <strong>{ANALYSIS_RUNS}경기로 확인한 권장 설정</strong>
               <div>
                 <span>
                   <small>포메이션</small>

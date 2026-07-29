@@ -20,7 +20,9 @@ describe('우리 팀 배치판', () => {
         onFormation={() => undefined}
       />,
     )
-    expect(html).toContain('수비 3 중원 4 공격 2')
+    expect(html).toContain('수비 3명')
+    expect(html).toContain('중원 4명')
+    expect(html).toContain('공격 2명')
     expect(html).toContain('11번 FW')
   })
 
@@ -51,7 +53,7 @@ describe('우리 팀 배치판', () => {
       />,
     )
     expect(html).toContain('원하는 곳에 놓기')
-    expect(html).toContain('골키퍼는 자리를 옮길 수 없다')
+    expect(html).toContain('골키퍼는 자리를 옮길 수 없습니다')
     expect(html).not.toContain('위아래로 끌어')
   })
 })
@@ -62,6 +64,7 @@ describe('상대 배치판', () => {
     const text = awaySummary(state)
     expect(text).toContain('전부 올라와')
     expect(text).not.toContain('뒤로 물러나')
+    expect(text).toMatch(/수비 \d+명·중원 \d+명·공격 \d+명입니다/)
     expect(renderToStaticMarkup(<AwayPanel state={state} />)).toContain(text)
   })
 
