@@ -173,6 +173,17 @@ export interface MatchState {
   }
   players: PlayerState[]
   opponent: Mentality
+  /**
+   * 상대 팀의 남은 체력(0~100).
+   *
+   * 상대도 같이 뛴다. 우리가 세게 누를수록 더 닳고, 전면 공세로 나오면
+   * 더 닳는다. 후반으로 그대로 넘어가므로 두 반을 뛰면 후반의 상대는
+   * 실제로 지쳐 있다.
+   *
+   * 선수 개인이 아니라 팀 하나의 값이다 — 상대는 개별로 추적하지 않고
+   * 성향 테이블로 다루기 때문이다.
+   */
+  awayStamina: number
   homeCount: number
   awayCount: number
   subsLeft: number

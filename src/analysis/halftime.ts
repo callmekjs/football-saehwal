@@ -165,6 +165,25 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
     )
   }
 
+  /**
+   * ── 저쪽도 전반을 다 뛰었다 ──
+   *
+   * 사용자가 지적했다 — *"상대방도 같이 뛰었는데 당연히 그쪽도 힘들고
+   * 지쳐있어야 당연한 거 아냐."* 그리고 그것을 주장이 설명해서 감독이
+   * 후반을 더 수월하게 풀도록 돕는 것이 이 줄의 목적이다.
+   */
+  {
+    const away = Math.round(state.awayStamina)
+    const worn = state.awayStamina < 70
+    say(
+      'awayStamina',
+      worn
+        ? `저쪽도 전반을 다 뛰었습니다. 상대 체력이 ${away}입니다 — 후반에 뒤가 헐거워집니다.`
+        : `상대 체력은 ${away}입니다. 아직 버틸 만합니다.`,
+      worn ? 'GOOD' : 'FACT',
+    )
+  }
+
   // ── 인원. 숫자가 어긋났으면 그것이 후반의 전제다 ──
   if (state.homeCount < state.awayCount) {
     say('count', `우리가 ${state.homeCount}명, 상대가 ${state.awayCount}명입니다.`, 'BAD')

@@ -1,9 +1,16 @@
 import { createRng, type Rng } from './rng'
-import { applyOrders, applyPositions, drainFactorOf, resolveCoefficients } from './tactics'
+import {
+  applyAwayFatigue,
+  applyOrders,
+  applyPositions,
+  drainFactorOf,
+  resolveCoefficients,
+} from './tactics'
 import { drawTick, resolveAttacks, type TickDraws } from './attack'
 import type { Coefficients } from './tactics'
 import { resolveEvents } from './events'
 import { drainTick, effectiveFactor } from './stamina'
+import { AWAY_FATIGUE, STAMINA } from './constants'
 import {
   bestFinishing,
   effectivePos,
@@ -58,6 +65,8 @@ export function createState(problem: Problem): MatchState {
     stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },
     players,
     opponent: mentalityOf(problem.score),
+    // 상대도 100에서 시작해 같이 닳는다
+    awayStamina: 100,
     homeCount: onPitchCount(players),
     awayCount: problem.awayCount,
     subsLeft: problem.subsLeft,
@@ -294,18 +303,22 @@ function nextBall(
 export function tick(state: MatchState, rng: Rng): MatchState {
   // 레버가 정한 계수 위에 개별 지시를 얹는다.
   // 지시가 하나도 없으면 `applyOrders` 는 항등이라 계수가 그대로 나간다
-  const c = applyPositions(
-    applyOrders(
-      resolveCoefficients(
-        state.tactics,
-        state.opponent,
-        state.awayCount < 11,
-        state.homeCount < 11,
-        state.formation,
+  const c = applyAwayFatigue(
+    applyPositions(
+      applyOrders(
+        resolveCoefficients(
+          state.tactics,
+          state.opponent,
+          state.awayCount < 11,
+          state.homeCount < 11,
+          state.formation,
+        ),
+        state.players,
       ),
       state.players,
     ),
-    state.players,
+    // 상대도 뛴 만큼 무뎌진다. 이 줄이 없으면 90분 내내 싱싱하다
+    state.awayStamina,
   )
 
   // 체력 소모는 선수마다 다르다. 아껴 뛰라고 한 선수만 덜 닳는다 —
@@ -316,6 +329,20 @@ export function tick(state: MatchState, rng: Rng): MatchState {
       ? { ...s, stamina: drainTick(s.stamina, c.drain * drainFactorOf(s.order)) }
       : s,
   )
+  /**
+   * 상대도 닳는다.
+   *
+   * 우리가 세게 누를수록 더 뛰고, 전면 공세로 나오면 더 뛴다. 압박의
+   * 대가가 우리 체력만이 아니게 된다 — 강하게 눌러 우리가 지치는 대신
+   * 상대도 지친다.
+   */
+  const awayStamina = drainTick(
+    state.awayStamina,
+    (AWAY_FATIGUE.drain / STAMINA.drainBase) *
+      (1 + AWAY_FATIGUE.pressAdd * state.tactics.press) *
+      AWAY_FATIGUE.run[state.opponent],
+  )
+
   const log = [...state.log]
   let score: [number, number] = [...state.score] as [number, number]
 
@@ -385,6 +412,7 @@ export function tick(state: MatchState, rng: Rng): MatchState {
     },
     log,
     pendingSubs: stillPending,
+    awayStamina,
     homeCount: onPitchCount(players),
     // 부상은 계획에 없던 교체를 강제한다. 남은 카드가 줄어든다
     subsLeft: ev.forcedSub ? Math.max(0, state.subsLeft - 1) : state.subsLeft,

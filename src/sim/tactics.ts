@@ -6,6 +6,7 @@ import {
   COUNT_PENALTY,
   FREE_POSITION,
   ORDERS,
+  AWAY_FATIGUE,
 } from './constants'
 import { getFormation, type FormationId } from './formations'
 import type { Mentality, PlayerState, Tactics } from './types'
@@ -208,6 +209,28 @@ export function applyPositions(c: Coefficients, players: PlayerState[]): Coeffic
     oppOpen: c.oppOpen * factors.risk,
     widthK: c.widthK * factors.attack,
   }
+}
+
+/**
+ * 지친 상대는 덜 밀어붙인다.
+ *
+ * 사용자가 지적했다 — *"상대방도 같이 뛰었는데 당연히 그쪽도 힘들고
+ * 지쳐있어야 당연한 거 아냐."* 전에는 상대가 90분을 뛰어도 첫 분과
+ * 똑같이 싱싱했다.
+ *
+ * 오픈플레이와 배후 침투 **양쪽**에 건다. 둘 다 상대가 뛰어야 나오는
+ * 것이라, 한쪽만 걸면 지친 상대가 배후로만 계속 파고드는 이상한 그림이
+ * 된다. 세트피스는 건드리지 않는다 — 멈춘 공을 차는 데는 체력이 덜
+ * 든다.
+ *
+ * `AWAY_FATIGUE.effect` 가 0이면 **항등이다.** 밸런스 기준선이 흔들리면
+ * 그 값을 0으로 되돌려라. 주장의 설명은 남고 확률만 원래대로 간다.
+ */
+export function applyAwayFatigue(c: Coefficients, awayStamina: number): Coefficients {
+  const spent = 1 - Math.max(0, Math.min(100, awayStamina)) / 100
+  const factor = 1 - spent * AWAY_FATIGUE.effect
+  if (factor === 1) return c
+  return { ...c, oppOpen: c.oppOpen * factor, behind: c.behind * factor }
 }
 
 /** 이 선수의 체력 소모 배수. 아껴 뛰라고 하면 덜 닳는다 */

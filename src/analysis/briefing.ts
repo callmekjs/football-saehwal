@@ -275,6 +275,29 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
         : '저쪽은 아직 어느 쪽으로도 크게 걸지 않았습니다.',
   )
 
+  /**
+   * ── 6-1. 저쪽도 뛰었다 ──
+   *
+   * 사용자가 지적했다 — *"상대방도 같이 뛰었는데 당연히 그쪽도 힘들고
+   * 지쳐있어야 당연한 거 아냐."* 후반 급수 타임에서 특히 중요하다.
+   * 상대가 지쳐 있으면 지금이 밀어붙일 때이고, 아직 싱싱하면 버텨야 한다.
+   *
+   * **숫자를 그대로 말한다.** 지어낸 형용사가 아니라 실제 상태값이다.
+   */
+  if (state.awayStamina < 92) {
+    const worn = state.awayStamina < 65
+    say(
+      worn ? 12 : 19,
+      'opponentStamina',
+      '상대',
+      worn
+        ? `저쪽도 많이 뛰었습니다. 상대 체력이 ${Math.round(state.awayStamina)}까지 떨어졌습니다 — 지금이 밀어붙일 때입니다.`
+        : `저쪽 체력은 ${Math.round(state.awayStamina)}입니다. 아직 쌩쌩합니다.`,
+      // 이 브리핑의 어조는 사실과 경고 둘뿐이다. 좋은 소식도 사실로 전한다
+      'FACT',
+    )
+  }
+
   // ── 6. 가장 위협적인 상대 선수 vs 우리 뒷선에서 가장 느린 발 ──
   const threats = awayThreats(state.awayCount)
   const slow = slowestDefender(onPitch)
