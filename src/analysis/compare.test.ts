@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../data/problems.json' with { type: 'json' }
 import { toProblem } from '../sim/problems'
-import type { Problem } from '../sim/types'
+import type { Decision, Problem } from '../sim/types'
 import { compareDecisions } from './compare'
 
 function problemAt(index: number): Problem {
@@ -27,6 +27,29 @@ describe('경기 분석', () => {
       const result = compareDecisions(problemAt(index), [])
       expect(result.rows[2].rate).toBeGreaterThan(result.rows[0].rate + 0.1)
     }
+  })
+
+  it('전반부터 뛴 경기는 감독 보고서가 전반 결정과 전반 기록까지 말한다', () => {
+    const problem = problemAt(1)
+    const first: Decision[] = [{ tick: 40, type: 'FORMATION', value: '5-4-1' }]
+    const second: Decision[] = [{ tick: 200, type: 'LINE', value: 1 }]
+    const result = compareDecisions(problem, second, 12, 70, first)
+    const halves = result.coach.decisionReview.find(
+      (finding) => finding.id === 'decision-halves',
+    )
+
+    expect(halves?.title).toBe('전반 1회 · 후반 1회')
+    expect(halves?.evidence.join(' ')).toContain('5-4-1')
+    // 전반 기록이 실제로 넘어왔는지 — 후반 집계만 보면 이 합계가 안 나온다
+    expect(result.coach.summary[0]).toContain('전반')
+  })
+
+  it('후반만 뛴 경기는 반 이름표 없이 예전과 같은 보고서를 낸다', () => {
+    const result = compareDecisions(problemAt(1), [], 12)
+    expect(
+      result.coach.decisionReview.some((finding) => finding.id === 'decision-halves'),
+    ).toBe(false)
+    expect(JSON.stringify(result.coach)).not.toContain('전반')
   })
 
   it('성공률을 재던 같은 경기에서 평균 득실과 위험 채널도 함께 계산한다', () => {

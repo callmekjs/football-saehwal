@@ -1,6 +1,7 @@
-import { SEGMENT_MINUTES } from '../matchClock'
+import { SEGMENT_MINUTES, halfLabel, kickoffMinute, type Half } from '../matchClock'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
+import { getPlayer } from '../sim/squad'
 import type {
   Decision,
   Level,
@@ -11,6 +12,24 @@ import type {
   Problem,
   Tactics,
 } from '../sim/types'
+
+/**
+ * 감독 보고서 — 경기가 끝난 뒤 무엇이 왜 일어났는지 설명한다.
+ *
+ * ★ **경기는 한 반일 수도 두 반일 수도 있다.** 사용자가 전반을 고르면
+ * 전반을 뛰고 그대로 후반까지 이어진다(`simulateHalves`). 그때 보고서가
+ * 후반만 보면 전반에 내린 포메이션 변경·교체·개별 지시가 통째로 빠지고,
+ * 후반 장면의 "당시 설정"도 앞 감독의 초기값으로 잘못 적힌다.
+ *
+ * 그래서 이 파일은 두 반을 `Leg` 라는 같은 모양으로 다루고, 모든 시각을
+ * **경기 전체 기준 틱(`g`)** 으로 줄 세운다. 같은 틱 번호가 두 반에
+ * 존재하므로(전반 30틱과 후반 30틱), `g` 없이는 둘이 같은 시각으로 찍힌다.
+ *
+ * ★ **후반만 뛴 경기는 예전과 똑같이 동작해야 한다.** 반 이름표(`전반`·
+ * `후반`)는 반이 둘일 때만 붙고, 하나일 때의 문구·시각·근거는 그대로다.
+ *
+ * ★ **읽기만 한다.** 경기 결과·확률·매 틱 난수 18개에 닿지 않는다.
+ */
 
 export type Confidence = '높음' | '보통' | '낮음'
 
@@ -59,6 +78,41 @@ export interface OutcomeProfile {
   injury: number
 }
 
+/**
+ * 전반의 기록. 사용자가 전반부터 뛴 경기에서만 있다.
+ *
+ * `final` 은 전반 종료 시점의 상태다(`simulateHalves` 의 `halftime`).
+ * 후반 상태는 `carryToNextHalf` 가 기록과 집계를 비웠으므로, 이걸 받지
+ * 않으면 전반의 골도 통계도 보고서에 존재하지 않는다.
+ */
+export interface CoachFirstHalf {
+  decisions: Decision[]
+  final: MatchState
+}
+
+/** 한 반의 기록. 전반부터 뛰면 둘, 후반만 뛰면 하나다 */
+interface Leg {
+  half: Half
+  /** 이 반이 재개하는 분. 전반 25, 후반 70 */
+  kickoff: number
+  decisions: Decision[]
+  final: MatchState
+}
+
+/** 경기 전체의 시간축 위에 놓인 무엇 하나 */
+interface Timed<T> {
+  /**
+   * 경기 전체 기준 틱.
+   *
+   * 반마다 틱이 0부터 다시 시작하므로 이것 없이는 전반 30틱과 후반 30틱을
+   * 구분할 수 없다.
+   */
+  g: number
+  leg: Leg
+  tick: number
+  value: T
+}
+
 interface Setup {
   formation: FormationId
   tactics: Tactics
@@ -66,10 +120,21 @@ interface Setup {
   positions: Map<string, PlayerPosition>
 }
 
+type Stats = MatchState['stats']
+
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
   line: { 0: '낮음', 1: '보통', 2: '높음' },
   press: { 0: '약', 1: '중', 2: '강' },
   width: { 0: '좁게', 1: '보통', 2: '넓게' },
+}
+
+const ORDER_LABEL: Record<PlayerOrder, string> = {
+  NONE: '지시 해제',
+  HOLD: '골문 앞',
+  BACK_OFF: '물러서라',
+  CONSERVE: '아껴 뛰어라',
+  DROP_BACK: '내려서라',
+  PUSH_UP: '올라가라',
 }
 
 const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`
@@ -82,7 +147,47 @@ function clockOf(tick: number, kickoff: number): string {
   return `${minute}:${String(second).padStart(2, '0')}`
 }
 
-function setupAt(problem: Problem, decisions: Decision[], tick: number): Setup {
+/**
+ * 화면에 적는 시각.
+ *
+ * 반이 둘일 때만 `전반`·`후반`을 붙인다. 분이 이미 25~47 과 70~92 로
+ * 갈리지만, 비전공자에게는 "전반 32:11" 이 훨씬 빨리 읽힌다.
+ */
+function stamp(leg: Leg, tick: number, showHalf: boolean): string {
+  const clock = clockOf(tick, leg.kickoff)
+  return showHalf ? `${halfLabel(leg.half)} ${clock}` : clock
+}
+
+/** 등번호. 명단에 없는 id 가 들어와도 보고서가 죽지 않는다 */
+function numberOf(id: string): string {
+  try {
+    return `${getPlayer(id).num}번`
+  } catch {
+    return id
+  }
+}
+
+function sumStats(legs: Leg[]): Stats {
+  return legs.reduce<Stats>(
+    (acc, leg) => ({
+      homeAttempt: acc.homeAttempt + leg.final.stats.homeAttempt,
+      awayAttempt: acc.awayAttempt + leg.final.stats.awayAttempt,
+      homeShot: acc.homeShot + leg.final.stats.homeShot,
+      awayShot: acc.awayShot + leg.final.stats.awayShot,
+      setPiece: acc.setPiece + leg.final.stats.setPiece,
+      behind: acc.behind + leg.final.stats.behind,
+    }),
+    { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },
+  )
+}
+
+/**
+ * 그 시점까지의 설정.
+ *
+ * **전반 결정도 반드시 포함해야 한다.** 전반에 5-4-1 로 바꾼 감독의 후반
+ * 실점 장면에 "당시 포메이션 4-4-2" 라고 적으면 그건 거짓 근거다.
+ */
+function setupAt(problem: Problem, timeline: Timed<Decision>[], g: number): Setup {
   const setup: Setup = {
     formation: problem.initialFormation,
     tactics: { ...problem.initialTactics },
@@ -90,8 +195,9 @@ function setupAt(problem: Problem, decisions: Decision[], tick: number): Setup {
     positions: new Map(),
   }
 
-  for (const decision of decisions) {
-    if (decision.tick > tick) break
+  for (const item of timeline) {
+    if (item.g > g) break
+    const decision = item.value
     if (decision.type === 'FORMATION') {
       setup.formation = decision.value
       setup.positions.clear()
@@ -132,18 +238,18 @@ function causeLabel(cause: string): string {
 }
 
 function goalFinding(
-  event: MatchEventLog,
+  item: Timed<MatchEventLog>,
   side: 'FOR' | 'AGAINST',
   index: number,
   problem: Problem,
-  final: MatchState,
-  decisions: Decision[],
-  kickoff: number,
+  totals: Stats,
+  timeline: Timed<Decision>[],
+  showHalf: boolean,
 ): CoachFinding {
-  const setup = setupAt(problem, decisions, event.tick)
-  const causes = causeOf(event)
+  const setup = setupAt(problem, timeline, item.g)
+  const causes = causeOf(item.value)
   const labels = causes.map(causeLabel)
-  const time = clockOf(event.tick, kickoff)
+  const time = stamp(item.leg, item.tick, showHalf)
   const exact = !causes.includes('UNKNOWN')
   const primary = causes[0]
 
@@ -155,9 +261,7 @@ function goalFinding(
       primary === 'BUILD_UP'
         ? '전진 시도가 박스 안 슈팅으로 이어졌고, 그 슈팅이 득점으로 완성됐습니다.'
         : '득점은 확인되지만 현재 기록만으로 전개 경로까지 단정할 수 없습니다.'
-    evidence.push(
-      `우리 공격 전개 ${final.stats.homeAttempt}회 중 슈팅 ${final.stats.homeShot}회`,
-    )
+    evidence.push(`우리 공격 전개 ${totals.homeAttempt}회 중 슈팅 ${totals.homeShot}회`)
     if (primary === 'BUILD_UP') {
       evidence.push(
         `라인 ${LEVEL_LABEL.line[setup.tactics.line]}은 박스 진입 뒤 슈팅 가치에, 폭 ${
@@ -169,23 +273,21 @@ function goalFinding(
     if (primary === 'BEHIND') {
       explanation =
         '상대가 수비 뒷공간을 찌른 뒤 일대일 슈팅까지 연결해 실점했습니다.'
-      evidence.push(`경기 전체 배후 침투 허용 ${final.stats.behind}회`)
+      evidence.push(`경기 전체 배후 침투 허용 ${totals.behind}회`)
       if (setup.tactics.line === 2) {
         evidence.push('높은 수비라인은 이 시뮬레이션에서 배후 침투 위험을 직접 키웁니다.')
       }
     } else if (primary === 'OPEN_PLAY') {
       explanation =
         '상대의 일반 공격이 박스 안 슈팅으로 이어졌고, 그 슈팅을 막지 못했습니다.'
-      evidence.push(
-        `상대 공격 전개 ${final.stats.awayAttempt}회 중 슈팅 ${final.stats.awayShot}회`,
-      )
+      evidence.push(`상대 공격 전개 ${totals.awayAttempt}회 중 슈팅 ${totals.awayShot}회`)
       if (setup.tactics.width === 2) {
         evidence.push('넓은 수비 폭은 공격 통로를 늘리는 대신 중앙 공간을 내주는 대가가 있습니다.')
       }
     } else if (primary === 'SET_PIECE') {
       explanation =
         '오픈플레이가 아니라 세트피스에서 실점했습니다. 반복 허용 여부와 당시 라인을 함께 봐야 합니다.'
-      evidence.push(`경기 전체 세트피스 허용 ${final.stats.setPiece}회`)
+      evidence.push(`경기 전체 세트피스 허용 ${totals.setPiece}회`)
       if (setup.tactics.line === 0) {
         evidence.push('낮은 라인은 배후를 줄이지만 세트피스 허용 빈도를 크게 높입니다.')
       }
@@ -205,7 +307,7 @@ function goalFinding(
   }
 
   return {
-    id: `${side.toLowerCase()}-${event.tick}-${index}`,
+    id: `${side.toLowerCase()}-${item.g}-${index}`,
     label: side === 'FOR' ? `득점 ${index + 1}` : `실점 ${index + 1}`,
     time,
     title: labels.join(' + '),
@@ -218,20 +320,20 @@ function goalFinding(
 function noGoalFinding(
   side: 'FOR' | 'AGAINST',
   problem: Problem,
-  final: MatchState,
+  totals: Stats,
 ): CoachFinding {
   const attack = side === 'FOR'
-    ? { attempts: final.stats.homeAttempt, shots: final.stats.homeShot }
-    : { attempts: final.stats.awayAttempt, shots: final.stats.awayShot }
+    ? { attempts: totals.homeAttempt, shots: totals.homeShot }
+    : { attempts: totals.awayAttempt, shots: totals.awayShot }
   const shotRate = attack.attempts > 0 ? attack.shots / attack.attempts : 0
 
   if (side === 'FOR') {
     return {
       id: 'for-none',
       label: '득점 분석',
-      title: final.stats.homeShot === 0 ? '슈팅까지 연결하지 못했다' : '슈팅은 만들었지만 득점은 없었다',
+      title: totals.homeShot === 0 ? '슈팅까지 연결하지 못했다' : '슈팅은 만들었지만 득점은 없었다',
       explanation:
-        final.stats.homeShot === 0
+        totals.homeShot === 0
           ? '공격 전개는 있었지만 박스 안 슈팅으로 이어지지 않았습니다. 기록상 결정력보다 진입 과정이 먼저 문제입니다.'
           : '슈팅 기회는 만들었습니다. 다만 현재 기록에는 슈팅 위치·선방 정보가 없어 결정력 문제라고 단정하지 않습니다.',
       evidence: [
@@ -239,7 +341,7 @@ function noGoalFinding(
         `전개→슈팅 전환율 ${(shotRate * 100).toFixed(1)}%`,
         `최종 목표: ${problem.objective.type === 'EQUALIZE' ? '동점 이상' : '리드 유지'}`,
       ],
-      confidence: final.stats.homeShot === 0 ? '높음' : '보통',
+      confidence: totals.homeShot === 0 ? '높음' : '보통',
     }
   }
 
@@ -253,13 +355,24 @@ function noGoalFinding(
         : '상대에게 슈팅은 허용했지만 실제 실점으로 이어지지는 않았습니다.',
     evidence: [
       `상대 공격 전개 ${attack.attempts}회 · 슈팅 ${attack.shots}회`,
-      `세트피스 허용 ${final.stats.setPiece}회 · 배후 침투 ${final.stats.behind}회`,
+      `세트피스 허용 ${totals.setPiece}회 · 배후 침투 ${totals.behind}회`,
     ],
     confidence: '높음',
   }
 }
 
-function reachesRecommendation(problem: Problem, decisions: Decision[]): number | null {
+/** 권장 설정을 완성한 시점. `null` 이면 끝까지 완성하지 못했다 */
+interface ReachPoint {
+  g: number
+  leg: Leg
+  tick: number
+}
+
+function reachesRecommendation(
+  problem: Problem,
+  timeline: Timed<Decision>[],
+  legs: Leg[],
+): ReachPoint | null {
   if (!problem.recommendation) return null
   const matches = (setup: Setup) =>
     setup.formation === problem.recommendation?.formation &&
@@ -267,22 +380,111 @@ function reachesRecommendation(problem: Problem, decisions: Decision[]): number 
     setup.tactics.press === problem.recommendation.tactics.press &&
     setup.tactics.width === problem.recommendation.tactics.width
 
-  if (matches(setupAt(problem, decisions, -1))) return 0
-  for (const decision of decisions) {
-    if (matches(setupAt(problem, decisions, decision.tick))) return decision.tick
+  if (matches(setupAt(problem, timeline, -1))) return { g: 0, leg: legs[0], tick: 0 }
+  for (const item of timeline) {
+    if (matches(setupAt(problem, timeline, item.g))) {
+      return { g: item.g, leg: item.leg, tick: item.tick }
+    }
   }
   return null
+}
+
+/** 결정 한 건을 사람이 읽는 한 줄로 */
+function decisionLine(item: Timed<Decision>): string {
+  const clock = clockOf(item.tick, item.leg.kickoff)
+  const decision = item.value
+  if (decision.type === 'FORMATION') return `${clock} 포메이션 → ${decision.value}`
+  if (decision.type === 'LINE') return `${clock} 라인 → ${LEVEL_LABEL.line[decision.value]}`
+  if (decision.type === 'PRESS') return `${clock} 압박 → ${LEVEL_LABEL.press[decision.value]}`
+  if (decision.type === 'WIDTH') return `${clock} 폭 → ${LEVEL_LABEL.width[decision.value]}`
+  if (decision.type === 'SUB') {
+    return `${clock} 교체 ${numberOf(decision.out)} → ${numberOf(decision.in)}`
+  }
+  if (decision.type === 'ORDER') {
+    return `${clock} ${numberOf(decision.target)} ${ORDER_LABEL[decision.order]}`
+  }
+  if (decision.type === 'POSITION') {
+    return `${clock} ${numberOf(decision.target)} ${decision.position ? '직접 배치' : '기본 자리'}`
+  }
+  return clock
+}
+
+/** 한 반에서 무엇을 몇 번 했는지 */
+function categoryText(items: Timed<Decision>[]): string {
+  const count = (types: Decision['type'][]) =>
+    items.filter((item) => types.includes(item.value.type)).length
+  const parts: string[] = []
+  const formation = count(['FORMATION'])
+  if (formation > 0) parts.push(`포메이션 ${formation}회`)
+  const lever = count(['LINE', 'PRESS', 'WIDTH'])
+  if (lever > 0) parts.push(`전술 ${lever}회`)
+  const sub = count(['SUB'])
+  if (sub > 0) parts.push(`교체 ${sub}회`)
+  const order = count(['ORDER'])
+  if (order > 0) parts.push(`개별 지시 ${order}회`)
+  const position = count(['POSITION'])
+  if (position > 0) parts.push(`직접 배치 ${position}회`)
+  return parts.length > 0 ? parts.join(' · ') : '개입 없음'
+}
+
+/** 한 반에서 보여줄 근거 줄 수 상한. 직접 배치는 열한 명까지 나올 수 있다 */
+const LINES_PER_HALF = 6
+
+/**
+ * 반별 결정 내역.
+ *
+ * **반이 둘일 때만 만든다.** 후반만 뛴 경기에 "후반 3회"라고만 적힌 카드가
+ * 하나 더 붙으면 새로 알려주는 것 없이 화면만 길어진다.
+ */
+function halfSplitFinding(
+  legs: Leg[],
+  timeline: Timed<Decision>[],
+): CoachFinding | null {
+  if (legs.length < 2) return null
+
+  const perLeg = legs.map((leg) => ({
+    leg,
+    items: timeline.filter((item) => item.leg === leg),
+  }))
+
+  const evidence: string[] = []
+  for (const { leg, items } of perLeg) {
+    const name = halfLabel(leg.half)
+    if (items.length === 0) {
+      evidence.push(`${name} · 개입 없음`)
+      continue
+    }
+    for (const item of items.slice(0, LINES_PER_HALF)) {
+      evidence.push(`${name} · ${decisionLine(item)}`)
+    }
+    if (items.length > LINES_PER_HALF) {
+      evidence.push(`${name} · 외 ${items.length - LINES_PER_HALF}회`)
+    }
+  }
+
+  return {
+    id: 'decision-halves',
+    label: '반별 결정',
+    title: perLeg.map(({ leg, items }) => `${halfLabel(leg.half)} ${items.length}회`).join(' · '),
+    explanation: perLeg
+      .map(({ leg, items }) => `${halfLabel(leg.half)}은 ${categoryText(items)}`)
+      .join(', ') + '였습니다.',
+    evidence,
+    confidence: '높음',
+  }
 }
 
 function decisionFindings(
   problem: Problem,
   final: MatchState,
-  decisions: Decision[],
+  legs: Leg[],
+  timeline: Timed<Decision>[],
   metrics: CoachMetrics,
-  kickoff: number,
+  showHalf: boolean,
 ): CoachFinding[] {
   const result: CoachFinding[] = []
-  const first = decisions[0]
+  const first = timeline[0]
+  const totalTicks = legs.length * TOTAL_TICKS
 
   result.push({
     id: 'decision-impact',
@@ -299,6 +501,7 @@ function decisionFindings(
     evidence: [
       `무개입 ${percent(metrics.noopRate)} · 사용자 ${percent(metrics.userRate)}`,
       `권장 전술 ${percent(metrics.recommendationRate)}`,
+      ...(showHalf ? ['비교 150판도 사용자와 같이 전반·후반 두 반을 이어서 돌렸습니다.'] : []),
     ],
     confidence: '높음',
   })
@@ -336,22 +539,25 @@ function decisionFindings(
     result.push({
       id: 'decision-none',
       label: '결정 시점',
-      title: '경기 중 전술 개입이 없었다',
+      title: showHalf
+        ? '전반과 후반 모두 전술 개입이 없었다'
+        : '경기 중 전술 개입이 없었다',
       explanation:
         '앞 감독에게서 물려받은 설정을 그대로 유지했습니다. 이번 경기에서는 결과와 사용자의 판단을 구분할 근거가 없습니다.',
       evidence: ['포메이션·레버·교체·개별 지시 변경 0회'],
       confidence: '높음',
     })
   } else {
-    const firstTime = clockOf(first.tick, kickoff)
-    const lastTime = clockOf(decisions[decisions.length - 1].tick, kickoff)
+    const last = timeline[timeline.length - 1]
+    const firstTime = stamp(first.leg, first.tick, showHalf)
+    const lastTime = stamp(last.leg, last.tick, showHalf)
     result.push({
       id: 'decision-timing',
       label: '결정 시점',
       time: firstTime,
-      title: `${firstTime}에 첫 개입, 총 ${decisions.length}회 결정`,
+      title: `${firstTime}에 첫 개입, 총 ${timeline.length}회 결정`,
       explanation:
-        first.tick <= TOTAL_TICKS * 0.2
+        first.g <= totalTicks * 0.2
           ? '초반에 방향을 정했습니다. 전술이 작동할 시간을 충분히 확보한 선택입니다.'
           : '첫 개입이 경기 중반 이후였습니다. 같은 선택도 늦게 내리면 영향을 줄 시간이 줄어듭니다.',
       evidence: [`첫 결정 ${firstTime} · 마지막 결정 ${lastTime}`],
@@ -359,14 +565,18 @@ function decisionFindings(
     })
   }
 
-  const reached = reachesRecommendation(problem, decisions)
-  const finalSetup = setupAt(problem, decisions, TOTAL_TICKS)
+  const halves = halfSplitFinding(legs, timeline)
+  if (halves) result.push(halves)
+
+  const reached = reachesRecommendation(problem, timeline, legs)
+  const finalSetup = setupAt(problem, timeline, totalTicks)
   if (reached !== null) {
+    const reachedTime = stamp(reached.leg, reached.tick, showHalf)
     result.push({
       id: 'decision-recommendation',
       label: '권장안 도달',
-      time: clockOf(reached, kickoff),
-      title: `${clockOf(reached, kickoff)}에 검증된 권장 설정을 완성했다`,
+      time: reachedTime,
+      title: `${reachedTime}에 검증된 권장 설정을 완성했다`,
       explanation:
         '포메이션·라인·압박·폭 네 항목이 1200시드 검증의 국면별 권장안과 모두 일치했습니다.',
       evidence: [`도달 설정: ${setupText(finalSetup)}`],
@@ -408,13 +618,23 @@ function decisionFindings(
     })
   }
 
-  const personnel = decisions.filter(
-    (decision) =>
-      decision.type === 'SUB' ||
-      decision.type === 'ORDER' ||
-      decision.type === 'POSITION',
+  const personnel = timeline.filter(
+    (item) =>
+      item.value.type === 'SUB' ||
+      item.value.type === 'ORDER' ||
+      item.value.type === 'POSITION',
   )
   if (personnel.length > 0) {
+    const perHalf = showHalf
+      ? [
+          `반별 ${legs
+            .map(
+              (leg) =>
+                `${halfLabel(leg.half)} ${personnel.filter((item) => item.leg === leg).length}회`,
+            )
+            .join(' · ')}`,
+        ]
+      : []
     result.push({
       id: 'decision-personnel',
       label: '선수 개입',
@@ -422,6 +642,7 @@ function decisionFindings(
       explanation:
         '선수 단위 개입은 적용 시점까지 기록해 150판 비교에 그대로 재현했습니다.',
       evidence: [
+        ...perHalf,
         `종료 인원 우리 ${final.homeCount}명 · 상대 ${final.awayCount}명`,
         `남은 교체 카드 ${final.subsLeft}장`,
       ],
@@ -432,16 +653,18 @@ function decisionFindings(
   return result
 }
 
+/** 골 장면 하나와 그것이 경기 전체에서 몇 번째 틱인지 */
+interface RankedFinding {
+  g: number
+  finding: CoachFinding
+}
+
 function turningPointOf(
-  goalsFor: CoachFinding[],
-  goalsAgainst: CoachFinding[],
+  goals: RankedFinding[],
   decisionReview: CoachFinding[],
 ): CoachFinding {
-  const goalFindings = [...goalsFor, ...goalsAgainst]
-    .filter((finding) => finding.time)
-    .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
-  if (goalFindings.length > 0) {
-    const last = goalFindings[goalFindings.length - 1]
+  if (goals.length > 0) {
+    const last = [...goals].sort((a, b) => a.g - b.g)[goals.length - 1].finding
     return {
       ...last,
       id: 'turning-point',
@@ -466,9 +689,10 @@ function turningPointOf(
 
 function prescriptionsOf(
   problem: Problem,
-  decisions: Decision[],
+  timeline: Timed<Decision>[],
+  legs: Leg[],
   goalsAgainst: CoachFinding[],
-  kickoff: number,
+  showHalf: boolean,
 ): string[] {
   if (!problem.recommendation) return ['현재 국면에는 검증된 권장 전술이 없습니다.']
   const recommendation = problem.recommendation
@@ -480,12 +704,13 @@ function prescriptionsOf(
     }로 시작하세요.`,
   ]
 
-  const reached = reachesRecommendation(problem, decisions)
+  const reached = reachesRecommendation(problem, timeline, legs)
+  const totalTicks = legs.length * TOTAL_TICKS
   if (reached === null) {
     items.push('네 항목을 따로 늦게 맞추지 말고 초반에 한 번에 완성해 전술이 작동할 시간을 확보하세요.')
-  } else if (reached > TOTAL_TICKS * 0.2) {
+  } else if (reached.g > totalTicks * 0.2) {
     items.push(
-      `${clockOf(reached, kickoff)}에 완성한 권장 설정을 다음에는 킥오프 직후부터 적용하세요.`,
+      `${stamp(reached.leg, reached.tick, showHalf)}에 완성한 권장 설정을 다음에는 킥오프 직후부터 적용하세요.`,
     )
   }
 
@@ -501,43 +726,90 @@ function prescriptionsOf(
   return items.slice(0, 3)
 }
 
+/** 그 반의 골만 골라 경기 전체 시간축에 얹는다 */
+function goalEventsOf(leg: Leg, index: number): {
+  forUs: Timed<MatchEventLog>[]
+  against: Timed<MatchEventLog>[]
+} {
+  const at = (event: MatchEventLog): Timed<MatchEventLog> => ({
+    g: index * TOTAL_TICKS + event.tick,
+    leg,
+    tick: event.tick,
+    value: event,
+  })
+
+  return {
+    forUs: leg.final.log.filter((event) => event.kind === 'GOAL').map(at),
+    against: leg.final.log.flatMap((event) => {
+      if (event.kind === 'PENALTY' && event.detail === 'PENALTY_SCORED') return [at(event)]
+      if (event.kind !== 'CONCEDE') return []
+      // 한 틱에 두 채널이 동시에 득점하면 점수도 두 골 오른다. 기존 로그는
+      // 한 줄이므로 분석 단계에서 원인별 골로 다시 펼친다.
+      return causeOf(event).map((cause) => at({ ...event, detail: cause }))
+    }),
+  }
+}
+
 export function buildCoachReport(
   problem: Problem,
   final: MatchState,
   decisions: Decision[],
   metrics: CoachMetrics,
   kickoff: number,
+  /**
+   * 전반 기록. 사용자가 전반부터 뛴 경기에서만 넘어온다.
+   *
+   * 없으면 예전과 완전히 같은 한 반짜리 보고서가 나온다.
+   */
+  firstHalf: CoachFirstHalf | null = null,
 ): CoachReport {
-  const orderedDecisions = [...decisions].sort((a, b) => a.tick - b.tick)
-  const goalForEvents = final.log.filter((event) => event.kind === 'GOAL')
-  const goalAgainstEvents = final.log.flatMap((event) => {
-    if (event.kind === 'PENALTY' && event.detail === 'PENALTY_SCORED') return [event]
-    if (event.kind !== 'CONCEDE') return []
-    const causes = causeOf(event)
-    // 한 틱에 두 채널이 동시에 득점하면 점수도 두 골 오른다. 기존 로그는
-    // 한 줄이므로 분석 단계에서 원인별 골로 다시 펼친다.
-    return causes.map((cause) => ({ ...event, detail: cause }))
-  })
+  const sorted = (list: Decision[]) => [...list].sort((a, b) => a.tick - b.tick)
+  const legs: Leg[] = firstHalf
+    ? [
+        // 전반이 재개하는 분은 국면이 아니라 반이 정한다. 숫자는 matchClock 만 안다
+        {
+          half: 1,
+          kickoff: kickoffMinute(1),
+          decisions: sorted(firstHalf.decisions),
+          final: firstHalf.final,
+        },
+        { half: 2, kickoff, decisions: sorted(decisions), final },
+      ]
+    : [{ half: 2, kickoff, decisions: sorted(decisions), final }]
+  const showHalf = legs.length > 1
+
+  const timeline: Timed<Decision>[] = legs.flatMap((leg, index) =>
+    leg.decisions.map((decision) => ({
+      g: index * TOTAL_TICKS + decision.tick,
+      leg,
+      tick: decision.tick,
+      value: decision,
+    })),
+  )
+
+  const totals = sumStats(legs)
+  const goalEvents = legs.map((leg, index) => goalEventsOf(leg, index))
+  const forEvents = goalEvents.flatMap((set) => set.forUs)
+  const againstEvents = goalEvents.flatMap((set) => set.against)
+
+  const rankedFor: RankedFinding[] = forEvents.map((item, index) => ({
+    g: item.g,
+    finding: goalFinding(item, 'FOR', index, problem, totals, timeline, showHalf),
+  }))
+  const rankedAgainst: RankedFinding[] = againstEvents.map((item, index) => ({
+    g: item.g,
+    finding: goalFinding(item, 'AGAINST', index, problem, totals, timeline, showHalf),
+  }))
 
   const goalsFor =
-    goalForEvents.length > 0
-      ? goalForEvents.map((event, index) =>
-          goalFinding(event, 'FOR', index, problem, final, orderedDecisions, kickoff),
-        )
-      : [noGoalFinding('FOR', problem, final)]
+    rankedFor.length > 0
+      ? rankedFor.map((ranked) => ranked.finding)
+      : [noGoalFinding('FOR', problem, totals)]
   const goalsAgainst =
-    goalAgainstEvents.length > 0
-      ? goalAgainstEvents.map((event, index) =>
-          goalFinding(event, 'AGAINST', index, problem, final, orderedDecisions, kickoff),
-        )
-      : [noGoalFinding('AGAINST', problem, final)]
-  const decisionReview = decisionFindings(
-    problem,
-    final,
-    orderedDecisions,
-    metrics,
-    kickoff,
-  )
+    rankedAgainst.length > 0
+      ? rankedAgainst.map((ranked) => ranked.finding)
+      : [noGoalFinding('AGAINST', problem, totals)]
+  const decisionReview = decisionFindings(problem, final, legs, timeline, metrics, showHalf)
 
   const resultWord =
     problem.objective.type === 'SURVIVE'
@@ -554,23 +826,33 @@ export function buildCoachReport(
         ? '결과와 별개로 판단은 방치보다 위험했습니다.'
         : '판단은 방치와 통계적으로 비슷했습니다.'
 
+  // 반별 득점·실점. 점수는 후반으로 이어지므로 하프타임 점수로 갈라야 한다
+  const scored = final.score[0] - problem.score[0]
+  const conceded = final.score[1] - problem.score[1]
+  const splitFor = firstHalf
+    ? ` (전반 ${firstHalf.final.score[0] - problem.score[0]} · 후반 ${
+        final.score[0] - firstHalf.final.score[0]
+      })`
+    : ''
+  const splitAgainst = firstHalf
+    ? ` (전반 ${firstHalf.final.score[1] - problem.score[1]} · 후반 ${
+        final.score[1] - firstHalf.final.score[1]
+      })`
+    : ''
+
   return {
     headline: `${final.score[0]}-${final.score[1]}, ${resultWord} ${judgmentWord}`,
     summary: [
-      `우리 공격 ${final.stats.homeAttempt}회 → 슈팅 ${final.stats.homeShot}회 → 득점 ${
-        final.score[0] - problem.score[0]
-      }골`,
-      `상대 공격 ${final.stats.awayAttempt}회 → 슈팅 ${final.stats.awayShot}회 → 실점 ${
-        final.score[1] - problem.score[1]
-      }골`,
-      `위험 허용: 세트피스 ${final.stats.setPiece}회 · 배후 침투 ${final.stats.behind}회`,
+      `우리 공격 ${totals.homeAttempt}회 → 슈팅 ${totals.homeShot}회 → 득점 ${scored}골${splitFor}`,
+      `상대 공격 ${totals.awayAttempt}회 → 슈팅 ${totals.awayShot}회 → 실점 ${conceded}골${splitAgainst}`,
+      `위험 허용: 세트피스 ${totals.setPiece}회 · 배후 침투 ${totals.behind}회`,
       `사용자 판단 ${percent(metrics.userRate)} · 방치 대비 ${point(metrics.userDelta)}`,
       `권장 전술 성공 가능성 ${percent(metrics.recommendationRate)}`,
     ],
-    turningPoint: turningPointOf(goalsFor, goalsAgainst, decisionReview),
+    turningPoint: turningPointOf([...rankedFor, ...rankedAgainst], decisionReview),
     goalsFor,
     goalsAgainst,
     decisionReview,
-    prescriptions: prescriptionsOf(problem, orderedDecisions, goalsAgainst, kickoff),
+    prescriptions: prescriptionsOf(problem, timeline, legs, goalsAgainst, showHalf),
   }
 }

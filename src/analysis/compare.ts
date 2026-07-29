@@ -45,6 +45,13 @@ interface MeasureResult {
   passed: number
   profile: OutcomeProfile
   firstFinal: MatchState
+  /**
+   * 첫 판의 **전반 종료 상태**. 두 반을 뛴 경기에서만 있다.
+   *
+   * `carryToNextHalf` 가 후반을 시작하면서 기록과 집계를 비우기 때문에,
+   * 이걸 따로 챙기지 않으면 전반의 골도 슈팅 수도 보고서에서 사라진다.
+   */
+  firstHalftime: MatchState | null
 }
 
 /**
@@ -55,8 +62,16 @@ interface MeasureResult {
  * 실제보다 훨씬 높게 나온다. 그러면 "당신의 판단이 무개입보다 못했다"는
  * 거짓 결론이 나온다.
  */
-function runOnce(problem: Problem, second: Decision[], first: Decision[] | null) {
-  return first === null ? simulate(problem, second) : simulateHalves(problem, first, second)
+function runOnce(
+  problem: Problem,
+  second: Decision[],
+  first: Decision[] | null,
+): { final: MatchState; passed: boolean; halftime: MatchState | null } {
+  if (first === null) {
+    const run = simulate(problem, second)
+    return { final: run.final, passed: run.passed, halftime: null }
+  }
+  return simulateHalves(problem, first, second)
 }
 
 function measure(
@@ -81,11 +96,15 @@ function measure(
     injury: 0,
   }
   let firstFinal: MatchState | null = null
+  let firstHalftime: MatchState | null = null
 
   for (let i = 0; i < runs; i++) {
     const replay = { ...problem, seed: problem.seed + i }
     const result = runOnce(replay, decisions, firstHalf)
-    if (i === 0) firstFinal = result.final
+    if (i === 0) {
+      firstFinal = result.final
+      firstHalftime = result.halftime
+    }
     if (result.passed) passed += 1
     totals.goalsFor += result.final.score[0] - problem.score[0]
     totals.goalsAgainst += result.final.score[1] - problem.score[1]
@@ -103,7 +122,7 @@ function measure(
   const average = Object.fromEntries(
     Object.entries(totals).map(([key, value]) => [key, value / runs]),
   ) as unknown as OutcomeProfile
-  return { passed, profile: average, firstFinal }
+  return { passed, profile: average, firstFinal, firstHalftime }
 }
 
 function row(
@@ -174,6 +193,12 @@ export function compareDecisions(
         },
       },
       kickoff,
+      // 전반부터 뛴 경기라면 전반 결정과 전반 종료 기록을 함께 넘긴다.
+      // 안 넘기면 전반에 내린 포메이션·교체·개별 지시가 보고서에서 통째로
+      // 빠지고, 후반 장면의 "당시 설정"도 앞 감독의 초기값으로 잘못 적힌다.
+      firstHalf && user.firstHalftime
+        ? { decisions: firstHalf, final: user.firstHalftime }
+        : null,
     ),
   }
 }

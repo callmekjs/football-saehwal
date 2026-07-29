@@ -153,3 +153,165 @@ describe('Coach 경기 분석', () => {
     expect(personnel?.title).toContain('1회')
   })
 })
+
+/**
+ * 전반부터 뛴 경기.
+ *
+ * 사용자가 전반을 고르면 경기는 1,500틱이고 전반 결정이 후반까지 살아
+ * 있다. 그런데 후반 상태는 `carryToNextHalf` 가 기록과 집계를 비운 뒤라
+ * 전반의 골·슈팅·결정이 하나도 남아 있지 않다. 전반 기록을 따로 넘기지
+ * 않으면 보고서가 그 45분을 통째로 못 본다.
+ */
+describe('Coach 두 반 분석', () => {
+  const firstDecisions: Decision[] = [
+    { tick: 30, type: 'FORMATION', value: '5-4-1' },
+    { tick: 300, type: 'SUB', out: 'DF04', in: 'DF15' },
+  ]
+  const secondDecisions: Decision[] = [{ tick: 200, type: 'LINE', value: 1 }]
+
+  /** 전반 종료 상태. 1-0 국면에서 한 골을 더 넣고 한 골을 내줬다 */
+  const halftime = () =>
+    finalWith({
+      score: [2, 1],
+      stats: {
+        homeAttempt: 10,
+        awayAttempt: 5,
+        homeShot: 3,
+        awayShot: 2,
+        setPiece: 4,
+        behind: 1,
+      },
+      log: [
+        { tick: 30, kind: 'GOAL', detail: 'BUILD_UP' },
+        { tick: 500, kind: 'CONCEDE', detail: 'SET_PIECE' },
+      ],
+    })
+
+  /** 후반 종료 상태. 점수는 이어지고 기록·집계만 후반의 것이다 */
+  const secondHalf = () =>
+    finalWith({
+      score: [2, 2],
+      stats: {
+        homeAttempt: 8,
+        awayAttempt: 6,
+        homeShot: 2,
+        awayShot: 3,
+        setPiece: 5,
+        behind: 2,
+      },
+      log: [{ tick: 30, kind: 'CONCEDE', detail: 'SET_PIECE' }],
+    })
+
+  it('같은 틱 번호라도 전반과 후반을 다른 시각으로 적는다', () => {
+    const report = buildCoachReport(problemAt(), secondHalf(), [], metrics, 70, {
+      decisions: [],
+      final: halftime(),
+    })
+    expect(report.goalsFor.map((finding) => finding.time)).toEqual(['전반 25:53'])
+    expect(report.goalsAgainst.map((finding) => finding.time)).toEqual([
+      '전반 39:40',
+      '후반 70:53',
+    ])
+  })
+
+  it('전반에 내린 결정을 반별로 나눠 말한다', () => {
+    const report = buildCoachReport(
+      problemAt(),
+      secondHalf(),
+      secondDecisions,
+      metrics,
+      70,
+      { decisions: firstDecisions, final: halftime() },
+    )
+    const halves = report.decisionReview.find((finding) => finding.id === 'decision-halves')
+
+    expect(halves?.title).toBe('전반 2회 · 후반 1회')
+    expect(halves?.evidence.some((line) => line.startsWith('전반 · '))).toBe(true)
+    expect(halves?.evidence.some((line) => line.startsWith('후반 · '))).toBe(true)
+    expect(halves?.evidence.join(' ')).toContain('5-4-1')
+    expect(halves?.evidence.join(' ')).toContain('교체')
+  })
+
+  it('전반 결정도 총 결정 수와 선수 개입에 함께 센다', () => {
+    const report = buildCoachReport(
+      problemAt(),
+      secondHalf(),
+      secondDecisions,
+      metrics,
+      70,
+      { decisions: firstDecisions, final: halftime() },
+    )
+    const timing = report.decisionReview.find((finding) => finding.id === 'decision-timing')
+    const personnel = report.decisionReview.find(
+      (finding) => finding.id === 'decision-personnel',
+    )
+
+    expect(timing?.title).toContain('총 3회')
+    expect(timing?.time).toBe('전반 25:53')
+    expect(personnel?.title).toContain('1회')
+    expect(personnel?.evidence.some((line) => line.includes('전반 1회'))).toBe(true)
+  })
+
+  it('후반 장면의 당시 설정에 전반에 바꾼 포메이션이 남는다', () => {
+    const report = buildCoachReport(
+      problemAt(),
+      secondHalf(),
+      secondDecisions,
+      metrics,
+      70,
+      { decisions: firstDecisions, final: halftime() },
+    )
+    const secondGoal = report.goalsAgainst.find((finding) => finding.time === '후반 70:53')
+
+    expect(secondGoal?.evidence.join(' ')).toContain('5-4-1')
+    expect(secondGoal?.evidence.join(' ')).not.toContain('4-4-2')
+  })
+
+  it('전반의 골과 집계를 합쳐서 요약한다', () => {
+    const report = buildCoachReport(problemAt(), secondHalf(), [], metrics, 70, {
+      decisions: [],
+      final: halftime(),
+    })
+
+    // 공격 10+8 · 슈팅 3+2 · 득점 1골(전반 1 · 후반 0)
+    expect(report.summary[0]).toBe('우리 공격 18회 → 슈팅 5회 → 득점 1골 (전반 1 · 후반 0)')
+    expect(report.summary[1]).toBe('상대 공격 11회 → 슈팅 5회 → 실점 2골 (전반 1 · 후반 1)')
+    expect(report.summary[2]).toBe('위험 허용: 세트피스 9회 · 배후 침투 3회')
+  })
+
+  it('전환점은 두 반을 통틀어 가장 늦은 장면이다', () => {
+    const report = buildCoachReport(problemAt(), secondHalf(), [], metrics, 70, {
+      decisions: [],
+      final: halftime(),
+    })
+    expect(report.turningPoint.title.startsWith('후반 70:53')).toBe(true)
+  })
+
+  it('전반 기록이 없으면 반 이름표도 반별 카드도 붙이지 않는다', () => {
+    const report = buildCoachReport(problemAt(), secondHalf(), secondDecisions, metrics, 70)
+
+    expect(report.goalsAgainst[0].time).toBe('70:53')
+    expect(report.decisionReview.some((finding) => finding.id === 'decision-halves')).toBe(
+      false,
+    )
+    expect(JSON.stringify(report)).not.toContain('전반')
+  })
+
+  it('같은 두 반 기록에는 같은 분석을 만든다', () => {
+    const build = () =>
+      buildCoachReport(problemAt(), secondHalf(), secondDecisions, metrics, 70, {
+        decisions: firstDecisions,
+        final: halftime(),
+      })
+    expect(build()).toEqual(build())
+  })
+
+  it('두 반 모두 개입이 없으면 그렇게 말한다', () => {
+    const report = buildCoachReport(problemAt(), secondHalf(), [], metrics, 70, {
+      decisions: [],
+      final: halftime(),
+    })
+    const none = report.decisionReview.find((finding) => finding.id === 'decision-none')
+    expect(none?.title).toContain('전반과 후반 모두')
+  })
+})

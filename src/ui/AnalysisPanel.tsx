@@ -38,9 +38,13 @@ function FindingCard({ finding }: { finding: CoachFinding }) {
       </div>
       <strong>{finding.title}</strong>
       <p>{finding.explanation}</p>
+      {/*
+        키는 내용이 아니라 순서로 잡는다. 반별 결정 내역은 "전반 · 25:00
+        7번 올라가라" 같은 줄이 여럿이라 같은 문장이 두 번 나올 수 있다.
+      */}
       <ul>
-        {finding.evidence.map((evidence) => (
-          <li key={evidence}>{evidence}</li>
+        {finding.evidence.map((evidence, index) => (
+          <li key={`${finding.id}-${index}`}>{evidence}</li>
         ))}
       </ul>
     </article>
