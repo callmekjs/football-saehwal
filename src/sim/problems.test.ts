@@ -14,6 +14,10 @@ import { PRESETS } from '../analysis/presets'
  * 때마다 화면 코드를 고쳐야 했다. 그 표를 지운 자리를 이 테스트가 지킨다.
  */
 describe('국면 데이터의 계약', () => {
+  it('검증된 국면은 정확히 다섯 개다', () => {
+    expect(PROBLEMS).toHaveLength(5)
+  })
+
   it('국면마다 화면이 필요로 하는 값이 데이터 안에 다 있다', () => {
     for (const p of PROBLEMS) {
       expect(p.summary, `${p.id} 의 한 줄 요약`).toBeTruthy()

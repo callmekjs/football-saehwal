@@ -84,9 +84,9 @@ npx tsx -e "import('./src/sim/engine.ts').then(()=>console.log('OK'))"
 ## 2. 바꾸기 전에 확인해야 하는 것
 
 ```bash
-npm test        # 323개. 전부 통과해야 한다
+npm test        # 324개. 전부 통과해야 한다
 npx tsc --noEmit # 타입 오류 0
-npm run sim     # 네 국면 전부 "합격"
+npm run sim     # 다섯 국면 전부 "합격"
 ```
 
 `npm run sim`이 "미달"을 내면 **`src/sim/constants.ts`만 조정한다.** 구조를 바꾸지 않는다.
@@ -237,7 +237,7 @@ Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴�
 
 ```bash
 npm run dev     # 개발 서버
-npm test        # 테스트 323개
-npm run sim     # 밸런스 검증 (시드 1200개 x 27조합 x 3국면)
+npm test        # 테스트 324개
+npm run sim     # 밸런스 검증 (시드 1200개 x 27조합 x 5국면)
 npm run build   # 프로덕션 빌드 (타입 검사 포함)
 ```

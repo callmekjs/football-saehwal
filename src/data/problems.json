@@ -149,6 +149,84 @@
     }
   },
   {
+    "id": "p03",
+    "title": "경고가 쌓였다",
+    "summary": "1-0으로 앞서지만 경고를 안고 강압박 중이다",
+    "order": 3,
+    "kickoff": 79,
+    "score": [
+      1,
+      0
+    ],
+    "initialTactics": {
+      "line": 0,
+      "press": 2,
+      "width": 0
+    },
+    "initialFormation": "3-4-3",
+    "recommendation": {
+      "formation": "5-4-1",
+      "tactics": {
+        "line": 1,
+        "press": 1,
+        "width": 2
+      },
+      "explanation": "낮은 라인은 세트피스를 내주고 강한 압박은 두 번째 경고를 부릅니다. 라인을 보통으로 올리고 압박을 줄인 뒤, 넓게 빠져나와 공을 골문에서 멀리 보냅니다."
+    },
+    "objective": {
+      "type": "SURVIVE",
+      "bonusOnWin": false
+    },
+    "seed": 83527,
+    "subsLeft": 2,
+    "staminaOverrides": {
+      "DF04": 56,
+      "DF05": 59,
+      "MF06": 43,
+      "MF08": 48,
+      "MF10": 51,
+      "FW09": 54
+    },
+    "booked": [
+      "DF04",
+      "DF05",
+      "MF06",
+      "MF08"
+    ],
+    "unavailable": [],
+    "awayCount": 11,
+    "variation": {
+      "staminaSpread": 8,
+      "staminaRange": [
+        30,
+        88
+      ],
+      "booked": [
+        5,
+        5
+      ],
+      "orders": [
+        0,
+        2
+      ],
+      "orderKinds": [
+        "PUSH_UP",
+        "CONSERVE"
+      ],
+      "tactics": {
+        "line": [
+          0
+        ],
+        "press": [
+          2
+        ],
+        "width": [
+          0
+        ]
+      }
+    }
+  },
+  {
     "id": "p04",
     "title": "한 명이 없다",
     "summary": "1-0으로 이기는데 한 명이 퇴장당했다",
