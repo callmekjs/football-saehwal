@@ -1,20 +1,29 @@
 /**
- * 경기 소리 — 파일 없이 브라우저가 직접 만든다.
+ * 경기 소리 — 휘슬은 CC0 녹음, 나머지는 브라우저가 합성한다.
  *
  * 사용자가 정했다 — *"경기 시작, 부상, 아웃, 반칙 선언, 프리킥 선언,
  * 패널티킥 선언 할때 휘슬 넣어. 골 넣거나 먹히면 환호 소리와 득점, 실점
  * 글자 나오게 하고. 경기 끝나면 휘슬 두번."*
  *
- * ★ **음원 파일을 쓰지 않는다.** 대회 규칙에 "타인의 결과물을 무단
- * 복제하거나 라이선스를 위반하면 실격 또는 감점"이 있다. 무료 효과음도
- * 대부분 출처 표기 의무가 붙어 있어서, 심사 중에 그걸 따지게 되는 것
- * 자체가 손해다. Web Audio 로 파형을 합성하면 **파일 0개·저작권 0·용량
- * 0** 이다.
+ * ★ **출처가 확실한 것만 쓴다.** 대회 규칙에 "타인의 결과물을 무단
+ * 복제하거나 라이선스를 위반하면 실격 또는 감점"이 있다. 유튜브에서
+ * 받아 쓰는 것은 그쪽 약관 위반이라 아예 후보가 아니다. 여기 있는
+ * 휘슬은 **CC0**(저작권을 전 세계적으로 포기한 공유 재산)이고, 함성은
+ * 파형을 직접 합성해 만든다 — 둘 다 남의 권리를 건드리지 않는다.
  *
  * ★ **소리를 꺼도 아무 기능을 잃지 않는다.** 심사자 상당수가 소리를 끄고
  * 본다. 휘슬이 울리는 모든 사건은 화면에도 이미 표시된다 — 주심이 그
  * 자리로 달려가고, 카드를 들고, 깃발이 오르고, 문구가 뜬다. 소리는
  * **덤**이다. 음성 지시를 덤으로 만든 것과 같은 원칙이다.
+ *
+ * ★ **휘슬만 진짜 녹음을 쓴다.** `public/sound/whistle.wav` 는 위키미디어
+ * 공용의 **CC0**(저작권 전면 포기) 음원이라 출처 표기 의무조차 없다.
+ * 합성 휘슬은 아무리 다듬어도 "분 소리"가 안 나서 전자음으로 들렸다.
+ * 출처와 라이선스는 `docs/credits.md` 에 적어뒀다 — 심사 때 물어보면
+ * 그 파일을 보여주면 된다.
+ *
+ * 파일을 못 읽으면 **합성으로 돌아간다.** 배포가 잘못되거나 네트워크가
+ * 끊겨도 소리가 아예 없어지지는 않는다.
  *
  * ★ **브라우저는 사용자가 뭔가 누르기 전에는 소리를 막는다.** 그래서
  * `AudioContext` 를 미리 만들지 않고 **첫 소리가 필요한 순간에** 만든다.
@@ -69,7 +78,42 @@ function audio(): AudioContext | null {
   }
 }
 
-/** 잡음 한 조각. 휘슬의 바람 소리와 함성의 재료다 */
+/**
+ * 녹음된 휘슬에서 실제로 소리가 나는 구간(초).
+ *
+ * 받은 파일은 3.33초인데 재보니 **0.12~0.70초에만 소리가 있고** 나머지
+ * 2.6초는 체육관의 빈 여운이다. 통째로 틀면 다음 사건이 그 여운에
+ * 묻힌다. 파일을 자를 도구가 이 환경에 없어서 **재생할 때 구간을
+ * 지정**한다 — 결과는 같고 파일은 원본 그대로 남는다.
+ */
+const CLIP = { at: 0.1, len: 0.62 }
+
+/** 휘슬 녹음. 못 읽으면 null 이고 그때는 합성으로 분다 */
+let sample: AudioBuffer | null = null
+let loading = false
+
+/**
+ * 휘슬 파일을 한 번만 읽어 온다.
+ *
+ * 실패해도 조용히 넘어간다 — 소리 때문에 경기가 멈추면 안 된다.
+ * `BASE_URL` 을 쓰는 이유: 배포가 하위 경로에 올라가도 경로가 맞아야 한다.
+ */
+function loadSample(ac: AudioContext): void {
+  if (sample || loading) return
+  loading = true
+  const url = `${import.meta.env.BASE_URL}sound/whistle.wav`
+  fetch(url)
+    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+    .then((buf) => ac.decodeAudioData(buf))
+    .then((decoded) => {
+      sample = decoded
+    })
+    .catch(() => {
+      // 합성으로 계속 간다
+    })
+}
+
+/** 잡음 한 조각. 합성 휘슬의 바람 소리와 함성의 재료다 */
 function noiseBuffer(ac: AudioContext, seconds: number): AudioBuffer {
   const frames = Math.max(1, Math.floor(ac.sampleRate * seconds))
   const buf = ac.createBuffer(1, frames, ac.sampleRate)
@@ -145,10 +189,36 @@ function whistleAt(ac: AudioContext, at: number, soft = false): void {
 export function whistle(times = 1, soft = false): void {
   const ac = audio()
   if (!ac) return
+  loadSample(ac)
   const now = ac.currentTime
+  const gap = soft ? 0.24 : 0.34
   for (let i = 0; i < times; i++) {
-    whistleAt(ac, now + i * (soft ? 0.2 : 0.3), soft)
+    const at = now + i * gap
+    if (sample) playSample(ac, at, soft)
+    else whistleAt(ac, at, soft)
   }
+}
+
+/**
+ * 녹음된 휘슬 한 번.
+ *
+ * 아웃처럼 자주 나는 것은 **작고 짧게** 낸다. 같은 세기로 울리면 한 판에
+ * 수십 번이라 금방 거슬린다.
+ */
+function playSample(ac: AudioContext, at: number, soft: boolean): void {
+  if (!sample) return
+  const src = ac.createBufferSource()
+  src.buffer = sample
+  const gain = ac.createGain()
+  const peak = soft ? 0.34 : 0.72
+  const len = soft ? CLIP.len * 0.6 : CLIP.len
+  gain.gain.setValueAtTime(peak, at)
+  // 끝을 부드럽게 닫는다. 뚝 끊으면 딱 소리가 난다
+  gain.gain.setValueAtTime(peak, at + len * 0.8)
+  gain.gain.linearRampToValueAtTime(0.0001, at + len)
+  src.connect(gain).connect(ac.destination)
+  src.start(at, CLIP.at, len)
+  src.stop(at + len)
 }
 
 /**
