@@ -215,9 +215,12 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
 
 function Bench({
   state,
+  locked,
   onSub,
 }: {
   state: MatchState
+  /** 끝난 경기에는 교체할 수 없다 */
+  locked: boolean
   onSub: (out: string, inId: string) => string | null
 }) {
   const [picked, setPicked] = useState<string | null>(null)
@@ -229,13 +232,19 @@ function Bench({
     return () => clearTimeout(t)
   }, [note])
 
+  useEffect(() => {
+    if (locked) setPicked(null)
+  }, [locked])
+
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
 
   return (
     <section className="panel bench-panel">
       <h2>
         벤치 · 교체 {state.subsLeft}장 남음
-        {picked ? (
+        {locked ? (
+          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 경기 종료</span>
+        ) : picked ? (
           <span style={{ color: 'var(--accent)' }}> — 나갈 선수를</span>
         ) : (
           <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 넣을 선수부터</span>
@@ -263,7 +272,7 @@ function Bench({
                 key={b.id}
                 className="chip bench-chip"
                 aria-pressed={picked === b.id}
-                disabled={used || state.subsLeft <= 0}
+                disabled={locked || used || state.subsLeft <= 0}
                 onClick={() => setPicked(picked === b.id ? null : b.id)}
               >
                 <span className="bench-num">{b.num}</span>
@@ -435,7 +444,7 @@ export function MatchScreen({
             />
           </div>
           <div className="pane" data-pane="SQUAD">
-            <Bench state={state} onSub={substitute} />
+            <Bench state={state} locked={phase === 'DONE'} onSub={substitute} />
           </div>
         </div>
 
