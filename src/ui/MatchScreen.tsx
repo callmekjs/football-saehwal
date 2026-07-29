@@ -3,14 +3,23 @@ import { Pitch } from './Pitch'
 import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
 import { BENCH, getPlayer } from '../sim/squad'
 import { judge } from '../sim/engine'
-import { TOTAL_TICKS } from '../sim/constants'
 import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
 import { PRESETS, presetOf } from '../analysis/presets'
 import { buildBriefing, type Briefing } from '../analysis/briefing'
+import { buildHalftime } from '../analysis/halftime'
 import { useVoice, type VoiceHandle } from './useVoice'
 import { applyCommand, parseCommand } from './voice'
 import { scoreboardScore } from './scoreboard'
+import {
+  addedTimeOf,
+  clockOf,
+  endLabel,
+  inAddedTime,
+  kickoffLabel,
+  minuteAt,
+  type Half,
+} from './matchClock'
 import { commentaryFor } from './commentary'
 import {
   BREAK_WARN_SECONDS,
@@ -22,33 +31,15 @@ import {
 } from './breakClock'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
+// 국면 카드가 쓰던 자리라 그대로 재수출한다
+export { addedTimeOf } from './matchClock'
+
 const LEVER_LABELS = {
   LINE: ['낮음', '보통', '높음'],
   PRESS: ['약', '중', '강'],
   WIDTH: ['좁게', '보통', '넓게'],
 } as const
 
-/** 경기 내 시계. 국면 시작 분에서 15분이 흐른다 */
-function clockOf(tick: number, kickoff: number): string {
-  const minutes = kickoff + (tick / TOTAL_TICKS) * 15
-  const m = Math.floor(minutes)
-  const s = String(Math.floor((minutes - m) * 60)).padStart(2, '0')
-  return `${m}:${s}`
-}
-
-/**
- * 90분을 넘겼는가.
- *
- * 후반은 90분에 끝나지 않는다. 90분을 채우고 주심이 정한 추가시간을 더
- * 뛴다. 중계 화면은 이때 시계를 그대로 흘려보내면서 `+3` 을 따로 띄운다 —
- * 시계만 보면 "왜 아직 안 끝나지?"가 되고, 시계를 90:00에 세우면 남은
- * 시간을 읽을 수 없다. 둘을 나란히 두는 것이 실제 중계의 방식이다.
- */
-const inAddedTime = (tick: number, kickoff: number) =>
-  kickoff + (tick / TOTAL_TICKS) * 15 >= 90
-
-/** 이 국면의 추가시간(분). 90분을 넘겨 끝나는 만큼이다 */
-export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
 
 /**
  * 급수 타임에 주장이 전하는 상황.
@@ -87,10 +78,12 @@ export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
 function BreakHead({
   title,
   kickoff,
+  half,
   remaining,
 }: {
   title: string
   kickoff: number
+  half: Half
   remaining: number
 }) {
   const tone = breakTone(remaining)
@@ -100,7 +93,9 @@ function BreakHead({
         <span className="break-head-word">
           급수 타임 · {title}
           <small>
-            {tone === 'CALM' ? `후반 ${kickoff}분 · 경기 시계 정지` : breakMessage(remaining)}
+            {tone === 'CALM'
+              ? `${kickoffLabel(kickoff, half)} · 경기 시계 정지`
+              : breakMessage(remaining)}
           </small>
         </span>
         <span className="break-head-clock">
@@ -343,7 +338,7 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
         {shown.map((e, i) => (
           <div key={`${e.tick}-${i}`} className="log-row">
             <span className="log-min">
-              {Math.floor(kickoff + (e.tick / TOTAL_TICKS) * 15)}'
+              {Math.floor(minuteAt(e.tick, kickoff))}'
             </span>
             <span
               style={{
@@ -367,11 +362,14 @@ function Log({ state, kickoff }: { state: MatchState; kickoff: number }) {
 function Bench({
   state,
   locked,
+  half,
   onSub,
 }: {
   state: MatchState
   /** 끝난 경기에는 교체할 수 없다 */
   locked: boolean
+  /** 전반이 끝난 것과 경기가 끝난 것은 다른 말이다 */
+  half: Half
   onSub: (out: string, inId: string) => string | null
 }) {
   const [picked, setPicked] = useState<string | null>(null)
@@ -394,7 +392,7 @@ function Bench({
       <h2>
         벤치 · 교체 {state.subsLeft}장 남음
         {locked ? (
-          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 경기 종료</span>
+          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — {endLabel(half)}</span>
         ) : picked ? (
           <span style={{ color: 'var(--accent)' }}> — 나갈 선수를</span>
         ) : (
@@ -491,6 +489,11 @@ export function MatchScreen({
    */
   onRetry?: () => void
 }) {
+  /**
+   * 전반 급수 타임이냐 후반이냐. 시계 기준선·추가시간·종료 문구가
+   * 여기서 갈린다. 국면 데이터에 적혀 있으므로 화면에는 표가 없다.
+   */
+  const half: Half = problem.half ?? 2
   const {
     state,
     phase,
@@ -573,6 +576,13 @@ export function MatchScreen({
   const activePreset = presetOf(state.tactics)
   const setup = `${state.formation} · ${activePreset?.name ?? '직접 맞춤'}`
   const orderCount = state.players.filter((s) => s.onPitch && !s.out && s.order !== 'NONE').length
+  /**
+   * 하프타임 주장 정리. **전반 국면이 끝났을 때만** 만든다.
+   *
+   * 후반 국면이 끝난 것은 경기가 끝난 것이라 정리할 "다음 반"이 없다.
+   * 그때는 감독 보고서가 전체를 분석한다.
+   */
+  const halftime = phase === 'DONE' && half === 1 ? buildHalftime(problem, state) : null
 
   return (
     <div className="match-screen">
@@ -582,8 +592,8 @@ export function MatchScreen({
         </button>
         <div className="match-clock">
           <span>{clockOf(state.tick, kickoff)}</span>
-          {inAddedTime(state.tick, kickoff) && (
-            <b title={`추가시간 ${addedTimeOf(kickoff)}분`}>+{addedTimeOf(kickoff)}</b>
+          {inAddedTime(state.tick, kickoff, half) && (
+            <b title={`추가시간 ${addedTimeOf(kickoff, half)}분`}>+{addedTimeOf(kickoff, half)}</b>
           )}
         </div>
         <div className="match-score">
@@ -671,7 +681,7 @@ export function MatchScreen({
             />
           </div>
           <div className="pane" data-pane="SQUAD">
-            <Bench state={state} locked={phase === 'DONE'} onSub={substitute} />
+            <Bench state={state} locked={phase === 'DONE'} half={half} onSub={substitute} />
           </div>
         </div>
 
@@ -682,7 +692,13 @@ export function MatchScreen({
           </div>
 
           <div className="panel pitch-card">
-            <Pitch state={state} seed={problem.seed} live={phase === 'RUNNING'} onScore={setScene} />
+            <Pitch
+              state={state}
+              seed={problem.seed}
+              half={half}
+              live={phase === 'RUNNING'}
+              onScore={setScene}
+            />
           </div>
 
           <div className="pane" data-pane="TACTICS">
@@ -708,7 +724,12 @@ export function MatchScreen({
                 떠 있다. 같은 말을 여기 다시 적으면 그만큼 주장의 말과
                 경기 재개 버튼이 화면 밖으로 밀려난다. 머리줄 하나로 접었다.
               */}
-              <BreakHead title={problem.title} kickoff={kickoff} remaining={breakLeft} />
+              <BreakHead
+                title={problem.title}
+                kickoff={kickoff}
+                half={half}
+                remaining={breakLeft}
+              />
               <div className="side-note-body">
                 <CaptainBrief briefing={buildBriefing(problem, state)} voice={voice} />
                 <button
@@ -759,7 +780,7 @@ export function MatchScreen({
 
           {phase === 'DONE' && (
             <section className={`panel side-note result ${passed ? 'passed' : 'failed'}`}>
-              <h2>경기 종료</h2>
+              <h2>{endLabel(half)}</h2>
               <div className="side-note-body">
                 <strong className="result-verdict">
                   {problem.objective.type === 'SURVIVE'
@@ -773,6 +794,29 @@ export function MatchScreen({
                 <span>
                   {problem.title} · {objective}
                 </span>
+                {half === 1 && halftime && (
+                  /**
+                   * 하프타임 — 라커룸에서 주장이 전반을 정리한다.
+                   *
+                   * 전반 국면은 경기가 끝난 것이 아니라 **반이 끝난** 것이다.
+                   * 후반 45분이 통째로 남아 있으므로, 결과를 선고하기 전에
+                   * 방금 무슨 일이 있었는지부터 말해준다.
+                   */
+                  <div className="halftime-talk">
+                    <strong>
+                      <i className="ht-num">{halftime.speaker}</i>
+                      {halftime.headline}
+                    </strong>
+                    <ul>
+                      {halftime.lines.map((l) => (
+                        <li key={l.id} className={`ht-${l.tone.toLowerCase()}`}>
+                          {l.text}
+                        </li>
+                      ))}
+                    </ul>
+                    <small>후반 시작 전, 주장이 전한 전반 요약입니다.</small>
+                  </div>
+                )}
                 <small>아래 감독 보고서에서 무엇이 결과를 갈랐는지 볼 수 있습니다.</small>
                 <button
                   className="kickoff-button"

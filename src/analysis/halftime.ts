@@ -1,0 +1,159 @@
+import { getPlayer } from '../sim/squad'
+import type { MatchState, Problem } from '../sim/types'
+
+/**
+ * 하프타임 — 주장이 전반을 정리한다.
+ *
+ * 사용자 요청이다 — *"후반전 시작하기 전에 주장이 간략하게 경기를
+ * 분석해서 사용자에게 알려줘."*
+ *
+ * 급수 타임 브리핑(`briefing.ts`)이 **앞으로 무슨 일이 벌어질지**를
+ * 말한다면 이쪽은 **방금 무슨 일이 있었는지**를 말한다. 라커룸에서
+ * 주장이 감독에게 전반을 요약해주는 자리다.
+ *
+ * ★ **지어내지 않는다.** 모든 문장이 `MatchState` 의 실제 기록에서
+ * 나온다 — 점수, 슈팅 수, 세트피스 허용, 배후 뚫림, 경고, 체력, 남은
+ * 교체. 해당 없는 항목은 아예 나오지 않는다. `briefing.ts` 와 같은
+ * 원칙이고, 같은 이유다: 없는 사실을 말하는 순간 이 화면 전체를
+ * 믿을 수 없게 된다.
+ *
+ * ★ **명령하지 않는다.** "라인을 올리세요"가 아니라 "세트피스를 여덟 번
+ * 내줬습니다"까지다. 판단은 감독이 한다. 다음에 뭘 하라는 처방은 경기가
+ * 완전히 끝난 뒤 `coach.ts` 의 감독 보고서가 맡는다.
+ *
+ * ★ **순수 함수다.** 시계도 난수도 브라우저도 모른다. 경기 결과와 확률에
+ * 닿지 않는다.
+ */
+
+export type HalftimeTone = 'GOOD' | 'BAD' | 'FACT'
+
+export interface HalftimeLine {
+  id: string
+  text: string
+  tone: HalftimeTone
+}
+
+export interface Halftime {
+  /** 말하는 사람. **등번호뿐이다** — 이 명단에 이름 칸은 없다 */
+  speaker: number
+  /** 한 줄 머리말. 전반을 몇 대 몇으로 마쳤는지 */
+  headline: string
+  lines: HalftimeLine[]
+}
+
+/**
+ * 주장을 고르는 규칙.
+ *
+ * 누가 주장인지는 데이터에 없다. 지어내지 않고 **규칙을 정했다** —
+ * 피치 위 필드 플레이어 중 등번호가 가장 작은 선수. `briefing.ts` 와
+ * 같은 규칙을 써야 급수 타임과 하프타임에서 다른 사람이 말하지 않는다.
+ */
+function captainOf(state: MatchState): number {
+  const nums = state.players
+    .filter((s) => s.onPitch && !s.out)
+    .map((s) => getPlayer(s.id))
+    .filter((p) => p.pos !== 'GK')
+    .map((p) => p.num)
+  return nums.length ? Math.min(...nums) : 0
+}
+
+/**
+ * 전반을 정리하는 말.
+ *
+ * `problem` 은 목표를 읽는 데 쓴다 — 같은 0-1이라도 "동점 이상"이 목표면
+ * 아직 할 일이 남은 것이고, "리드 지키기"였다면 이미 무너진 것이다.
+ */
+export function buildHalftime(problem: Problem, state: MatchState): Halftime {
+  const [us, them] = state.score
+  const lines: HalftimeLine[] = []
+  const say = (id: string, text: string, tone: HalftimeTone = 'FACT') =>
+    lines.push({ id, text, tone })
+
+  // ── 머리말: 몇 대 몇으로 마쳤나 ──
+  const headline =
+    us > them
+      ? `전반을 ${us} 대 ${them}으로 앞선 채 마쳤습니다.`
+      : us < them
+        ? `전반을 ${us} 대 ${them}으로 뒤진 채 마쳤습니다.`
+        : `전반을 ${us} 대 ${them}으로 마쳤습니다.`
+
+  // ── 목표를 기준으로 지금 위치 ──
+  const chasing = problem.objective.type === 'EQUALIZE'
+  if (chasing) {
+    if (us >= them) say('goal', '따라붙었습니다. 이 상태로 끝내면 됩니다.', 'GOOD')
+    else say('goal', `아직 ${them - us}골이 모자랍니다. 후반 45분이 남았습니다.`, 'BAD')
+  } else {
+    if (us > them) say('goal', '리드는 지켰습니다. 후반이 더 깁니다.', 'GOOD')
+    else if (us === them) say('goal', '리드를 놓쳤습니다. 다시 앞서야 합니다.', 'BAD')
+    else say('goal', '역전당했습니다. 두 골이 필요합니다.', 'BAD')
+  }
+
+  // ── 슈팅 대비. 경기를 누가 쥐고 있었나 ──
+  const ourShots = state.stats.homeShot
+  const theirShots = state.stats.awayShot
+  if (ourShots + theirShots > 0) {
+    const tone: HalftimeTone =
+      ourShots > theirShots ? 'GOOD' : ourShots < theirShots ? 'BAD' : 'FACT'
+    say('shots', `슈팅은 우리 ${ourShots}, 상대 ${theirShots}였습니다.`, tone)
+  }
+
+  // ── 우리가 내준 것. 어디가 뚫렸나 ──
+  if (state.stats.setPiece > 0) {
+    say(
+      'setpiece',
+      `세트피스를 ${state.stats.setPiece}번 내줬습니다.`,
+      state.stats.setPiece >= 6 ? 'BAD' : 'FACT',
+    )
+  }
+  if (state.stats.behind > 0) {
+    say(
+      'behind',
+      `등 뒤 공간을 ${state.stats.behind}번 내줬습니다.`,
+      state.stats.behind >= 3 ? 'BAD' : 'FACT',
+    )
+  }
+
+  // ── 후반에 안고 들어가는 위험 ──
+  const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+  const booked = onPitch.filter((s) => s.booked).map((s) => getPlayer(s.id).num)
+  if (booked.length > 0) {
+    say(
+      'booked',
+      `${booked.sort((a, b) => a - b).join('번, ')}번이 경고를 안고 후반에 들어갑니다. 한 장 더 받으면 나갑니다.`,
+      'BAD',
+    )
+  }
+
+  const tired = onPitch
+    .filter((s) => s.stamina < 45)
+    .map((s) => ({ num: getPlayer(s.id).num, stamina: Math.round(s.stamina) }))
+    .sort((a, b) => a.stamina - b.stamina)
+  if (tired.length > 0) {
+    const worst = tired[0]
+    say(
+      'stamina',
+      tired.length === 1
+        ? `${worst.num}번 체력이 ${worst.stamina}까지 떨어졌습니다.`
+        : `${tired.length}명이 체력 45 아래입니다. 가장 낮은 건 ${worst.num}번 ${worst.stamina}입니다.`,
+      'BAD',
+    )
+  }
+
+  // ── 인원. 숫자가 어긋났으면 그것이 후반의 전제다 ──
+  if (state.homeCount < state.awayCount) {
+    say('count', `우리가 ${state.homeCount}명, 상대가 ${state.awayCount}명입니다.`, 'BAD')
+  } else if (state.homeCount > state.awayCount) {
+    say('count', `상대가 ${state.awayCount}명입니다. 우리가 한 명 많습니다.`, 'GOOD')
+  }
+
+  // ── 손에 남은 것 ──
+  say(
+    'subs',
+    state.subsLeft > 0
+      ? `교체 카드가 ${state.subsLeft}장 남았습니다.`
+      : '교체 카드를 다 썼습니다.',
+    state.subsLeft > 0 ? 'FACT' : 'BAD',
+  )
+
+  return { speaker: captainOf(state), headline, lines }
+}

@@ -2,13 +2,16 @@ import { useMemo, useState } from 'react'
 import raw from './data/problems.json' with { type: 'json' }
 import { toProblem } from './sim/problems'
 import { Backdrop } from './ui/Backdrop'
-import { MatchScreen, addedTimeOf } from './ui/MatchScreen'
+import { MatchScreen } from './ui/MatchScreen'
+import { addedTimeOf, kickoffLabel, type Half } from './ui/matchClock'
 import type { Problem } from './sim/types'
 
 /** 국면 카드에 띄울 정보. 국면 데이터에서 파생한다 */
 interface Entry {
   problem: Problem
   kickoff: number
+  /** 전반 급수 타임이냐 후반이냐 */
+  half: Half
   summary: string
 }
 
@@ -21,14 +24,14 @@ function FixtureCard({
   n: number
   onPick: () => void
 }) {
-  const { problem, kickoff, summary } = entry
+  const { problem, kickoff, half, summary } = entry
   const survive = problem.objective.type === 'SURVIVE'
   return (
     <button className="fixture" onClick={onPick}>
       <span className="fx-band">
         <b>제{n}국면</b>
         <span>
-          후반 {kickoff}분 · 추가시간 {addedTimeOf(kickoff)}분
+          {kickoffLabel(kickoff, half)} · 추가시간 {addedTimeOf(kickoff, half)}분
         </span>
       </span>
       <span className="fx-main">
@@ -70,6 +73,7 @@ export function App() {
         .map((problem) => ({
           problem,
           kickoff: problem.kickoff ?? 70,
+          half: problem.half ?? 2,
           summary: problem.summary ?? '',
         })),
     [],

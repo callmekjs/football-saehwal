@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { drawPitch } from '../render/pitch'
 import { VisualMatch } from '../render/visual'
 import { TOTAL_TICKS } from '../sim/constants'
+import { endLabel, type Half } from './matchClock'
 import type { MatchState } from '../sim/types'
 
 /** 시뮬 한 틱이 연출에서 차지하는 시간. 엔진은 100ms 마다 한 번 돈다 */
@@ -32,11 +33,18 @@ const MAX_LAG = 1.5
 export function Pitch({
   state,
   seed,
+  half = 2,
   live = true,
   onScore,
 }: {
   state: MatchState
   seed: number
+  /**
+   * 전반 국면이면 1. **전반이 끝난 것은 경기가 끝난 것이 아니다** —
+   * 캔버스 위에 "경기 종료"라고 적으면 1-0으로 지고 있는 전반 종료
+   * 화면을 보고 경기를 졌다고 읽는다.
+   */
+  half?: Half
   live?: boolean
   /**
    * 점수판에 띄울 점수가 바뀌었을 때 부른다.
@@ -51,9 +59,11 @@ export function Pitch({
   const ref = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef(state)
   const liveRef = useRef(live)
+  const halfRef = useRef(half)
   const onScoreRef = useRef(onScore)
   stateRef.current = state
   liveRef.current = live
+  halfRef.current = half
   onScoreRef.current = onScore
 
   useLayoutEffect(() => {
@@ -134,7 +144,7 @@ export function Pitch({
             ctx.textAlign = 'center'
             ctx.textBaseline = 'middle'
             ctx.font = `600 ${Math.max(15, Math.round(w * 0.045))}px system-ui, sans-serif`
-            ctx.fillText('경기 종료', w / 2, h / 2)
+            ctx.fillText(endLabel(halfRef.current), w / 2, h / 2)
             ctx.restore()
           }
         }

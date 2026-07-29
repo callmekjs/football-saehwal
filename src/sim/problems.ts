@@ -52,7 +52,9 @@ export function toProblem(p: (typeof raw)[number]): Problem {
     id: p.id,
     title: p.title,
     order: p.order,
-    // 화면 표시 전용. 국면마다 JSON 에 적으므로 화면에 표를 둘 필요가 없다
+    // 화면 표시 전용. 국면마다 JSON 에 적으므로 화면에 표를 둘 필요가 없다.
+    // 전반 급수 타임이면 1, 후반이면 2 — 시계 기준선과 종료 문구가 갈린다
+    half: p.half === 1 ? 1 : 2,
     kickoff: p.kickoff,
     summary: p.summary,
     seed: p.seed,
