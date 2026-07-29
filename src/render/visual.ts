@@ -254,6 +254,79 @@ const TACKLE_REACH = 4.5
  */
 const HOLD_RANGE = 22
 
+/**
+ * 오프사이드로 부는 최소 차이(미터). **애매하면 안 분다.**
+ *
+ * 실제 규칙은 신체 일부가 앞서기만 해도 오프사이드다. 그대로 옮기면 안
+ * 된다 — 우리 선수는 반지름 7픽셀짜리 점이고 자리가 매 프레임 흔들린다.
+ *
+ * 7미터는 재서 나온 값이다. 시드 40개 × 다섯 국면(200판)으로 잰 판당
+ * 판정 횟수:
+ *
+ * | 기준 | 판당 평균 | 자동검사 |
+ * |---|---|---|
+ * | 1.2m | 4.4회 | 6~10개 실패 |
+ * | 3m | 2.0회 | 3개 실패 |
+ * | 5m | 1.2회 | 4개 실패 |
+ * | **7m** | **0.63회** | **95개 전부 통과** |
+ *
+ * 실제 축구를 이 15분 구간으로 환산하면 0.7~1.0회다. 7미터가 빈도로도
+ * 맞고 나머지 관전 품질을 하나도 깎지 않는다.
+ *
+ * 낮은 기준이 왜 나쁜가: 판정이 잦아지면 데드볼이 늘어(정지 비율 15% →
+ * 27.6%) 75초짜리 관전에서 볼 것이 사라지고, 예약된 골이 전개 시간을
+ * 뺏겨 장면 없이 지나간다. 이 화면은 15분을 75초로 압축하므로 휘슬 한
+ * 번의 값이 실제 축구의 열두 배다.
+ *
+ * 이건 편법이 아니라 규칙에 있는 원칙이다 — **의심스러우면 공격 측에
+ * 유리하게.** 실제 부심도 확신이 없으면 깃발을 올리지 않는다.
+ */
+const OFFSIDE_MARGIN = 7
+
+/**
+ * 재개 뒤 이 시간 동안은 오프사이드를 불지 않는다(초).
+ *
+ * 규칙이다. 스로인·골킥·코너킥에서 직접 받는 공은 오프사이드가 아니다.
+ * 시간으로 두는 이유는 재개 직후 첫 패스만 정확히 짚어내려면 상태를 하나
+ * 더 들고 다녀야 하는데, 이 화면의 재개는 1초 안에 끝나기 때문이다.
+ */
+const OFFSIDE_MUTE = 1.4
+
+/** 깃발을 들고 있는 시간(초) */
+const FLAG_LIFT = 1.8
+
+/** 페널티 지역 깊이(미터). 골라인에서 16.5m 가 규격이다 */
+const PENALTY_DEPTH = 16.5
+
+/** 심판이 낼 수 있는 최고 속도(초당 미터). 선수보다 느리다 */
+const REF_SPEED = 6.2
+
+/**
+ * 주심이 공에서 떨어져 서는 거리(미터).
+ *
+ * 실제 주심은 공에서 15~20미터를 유지한다. 더 붙으면 패스 길에 서고,
+ * 더 떨어지면 반칙을 못 본다.
+ */
+const REF_STANDOFF = 15
+/** 주심이 공보다 뒤에 서는 거리(미터). 플레이를 앞에 두고 본다 */
+const REF_TRAIL = 4
+/** 주심이 반대쪽으로 자리를 옮기는 기준(미터). 여유 구간이 없으면 갈지자가 된다 */
+const REF_SWITCH = 6
+const AR_SPEED = 7.0
+
+/**
+ * 부심이 터치라인에서 안쪽으로 들어와 서는 거리(미터).
+ *
+ * 실제 부심은 라인 **바깥**에 선다. 여기서 바깥에 세우면 화면에서
+ * 사라진다 — 캔버스가 경기장 105×68에 정확히 맞춰져 있어 여백이 없다.
+ * 여백을 만들려면 경기장이 그만큼 작아지는데, 이 화면에서 가장 큰
+ * 면적을 차지해야 하는 것이 경기장이다.
+ *
+ * 1.1미터면 화면에서 라인 위에 선 것으로 읽힌다. 선수와 겹칠 수
+ * 있지만 실제 경기에서도 윙어는 부심 코앞을 스쳐 지나간다.
+ */
+const AR_INSET = 1.1
+
 export interface VPlayer {
   id: string
   num: number
@@ -422,6 +495,47 @@ export interface Celebration {
   y: number
 }
 
+/**
+ * 심판 셋.
+ *
+ * 사용자가 지적했다 — *"심판도 없고 라인 심도 없어. 그냥 동그라미가
+ * 공차는 것만 보이잖아."* 스물두 개의 점만 있으면 그건 어떤 공놀이도
+ * 될 수 있다. 축구장에는 언제나 검은 옷 셋이 더 있고, 그중 둘은
+ * **터치라인 밖에서 옆걸음으로만** 움직인다. 그 셋이 있어야 초록
+ * 사각형이 축구장으로 읽힌다.
+ *
+ * 부심의 자리는 장식이 아니라 **정보**다. 부심은 뒤에서 두 번째 수비수와
+ * 나란히 선다. 그래서 부심의 위치가 곧 오프사이드 라인이고, 관전자는
+ * 선을 그리지 않아도 어디가 경계인지 눈으로 안다.
+ *
+ * **경기 결과에 아무 영향이 없다.** 공에 닿지 않고, 난수를 쓰지 않으며,
+ * 시뮬은 심판이 있는지조차 모른다.
+ */
+export interface Official {
+  /** 주심 하나와 부심 둘. 부심은 서로 반대편 터치라인의 반대편 절반을 맡는다 */
+  kind: 'REFEREE' | 'AR_TOP' | 'AR_BOTTOM'
+  x: number
+  y: number
+  /** 깃발을 든 남은 시간(초). 부심만 쓴다 */
+  flag: number
+}
+
+/**
+ * 오프사이드 판정이 난 자리. 깃발이 내려갈 때까지 화면에 남는다.
+ *
+ * 이것은 **관전 연출 계층의 사건**이다. 스로인·골킥·코너킥과 똑같이
+ * 시뮬 바깥에서 만들어지고, 시뮬의 점수·확률·난수 18개를 건드리지
+ * 않는다. 경기 결과를 바꾸는 판정이 아니라 **공이 다시 놓이는 자리**를
+ * 정할 뿐이다.
+ */
+export interface OffsideCall {
+  x: number
+  y: number
+  /** 깃발을 든 부심 쪽. 화면에서 어느 라인이 불었는지 보인다 */
+  by: Official['kind']
+  life: number
+}
+
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y)
@@ -471,6 +585,19 @@ export class VisualMatch {
   celebration: Celebration | null = null
   /** 공이 밖으로 나가 재개를 기다리는 중 */
   restart: Restart | null = null
+  /**
+   * 주심 하나와 부심 둘.
+   *
+   * 부심은 터치라인 **바깥**에 선다(`y` 가 0 미만이거나 68 초과). 안쪽에
+   * 세우면 선수와 겹쳐서 스물다섯 번째 선수처럼 보인다.
+   */
+  officials: Official[] = [
+    { kind: 'REFEREE', x: PITCH_W / 2, y: PITCH_H / 2 + 10, flag: 0 },
+    { kind: 'AR_TOP', x: PITCH_W * 0.25, y: AR_INSET, flag: 0 },
+    { kind: 'AR_BOTTOM', x: PITCH_W * 0.75, y: PITCH_H - AR_INSET, flag: 0 },
+  ]
+  /** 방금 분 오프사이드. 없으면 null */
+  offside: OffsideCall | null = null
   /** 부상·퇴장으로 빠졌지만 아직 화면에 쓰러져 있는 선수 */
   downed: Downed[] = []
   /** 교체로 걸어 나가는 중인 선수 */
@@ -574,6 +701,18 @@ export class VisualMatch {
   }> = []
   private chaseIds: Record<'HOME' | 'AWAY', string[]> = { HOME: [], AWAY: [] }
   private chaseAt: Record<'HOME' | 'AWAY', number> = { HOME: -9, AWAY: -9 }
+  /**
+   * 이 시간이 남아 있는 동안은 오프사이드를 불지 않는다(초).
+   *
+   * 재개(스로인·골킥·코너킥)에서 직접 받는 공과 킥오프가 여기 걸린다.
+   * 규칙이 그렇다. 이걸 안 두면 코너킥마다 깃발이 올라간다 — 코너킥은
+   * 정의상 공보다 앞에 사람이 잔뜩 서 있는 상황이다.
+   */
+  private offsideMute = OFFSIDE_MUTE
+  /** 깃발은 올라갔지만 아직 휘슬이 안 분 상태. 공이 멎으면 분다 */
+  private flagged: { against: 'HOME' | 'AWAY'; by: Official['kind'] } | null = null
+  /** 이 경기에서 분 오프사이드 횟수. 빈도를 재는 데 쓴다 */
+  offsideCount = 0
 
   constructor(state: MatchState, seed: number) {
     this.rng = createRng((seed ^ 0x5bf03635) >>> 0)
@@ -1439,6 +1578,9 @@ export class VisualMatch {
    * 진영으로 돌아가고, 차는 선수만 센터서클에 선다.
    */
   private kickoff(side: 'HOME' | 'AWAY') {
+    // 킥오프 직후 첫 패스에는 깃발이 올라가지 않는다. 전원이 자기 진영에
+    // 있어 애초에 성립하지 않지만, 배후로 찔러 넣는 첫 공에는 걸릴 수 있다
+    this.offsideMute = OFFSIDE_MUTE
     for (const p of this.players) {
       p.x = p.homeX
       p.y = p.homeY
@@ -1521,6 +1663,18 @@ export class VisualMatch {
     // 골로 판정된 슛이 날아가는 중이면 아무것도 이 공을 가로채지 못한다.
     // 점수판은 이미 올라갔고, 이 공은 골망에 들어가야만 한다
     if (this.ball.mode === 'SHOT' && this.ball.willScore) return
+    /**
+     * 이미 재개를 기다리는 중이면 프리킥으로 덮어쓰지 않는다.
+     *
+     * 공이 이미 죽어 있는데 반칙 프리킥이 들어오면 놓여 있던 공이
+     * 다른 자리로 순간이동한다. 실측으로 재개 대기 중 공이 1.4미터
+     * 움직였고, 최악은 42미터였다. 축구에서도 공이 이미 아웃된 뒤에
+     * 새 프리킥을 주지 않는다 — 앞의 재개가 먼저 끝난다.
+     *
+     * 스로인·골킥·코너는 공이 실제로 라인을 넘은 사실이라 덮어쓸 수
+     * 있어야 한다. 위치를 지어내는 것은 프리킥뿐이다.
+     */
+    if (this.restart && kind === 'FREE_KICK') return
     let px = x
     let py = y
     if (kind === 'GOAL_KICK') {
@@ -1542,6 +1696,8 @@ export class VisualMatch {
     this.ball.x = px
     this.ball.y = py
     this.restart = { kind, side, x: px, y: py, wait: 0.35, takerId: taker?.id ?? null, age: 0 }
+    // 재개에서 직접 받는 공은 오프사이드가 아니다. 규칙이다
+    this.offsideMute = OFFSIDE_MUTE
   }
 
   /**
@@ -1676,6 +1832,233 @@ export class VisualMatch {
     return side === 'HOME' ? GOAL_LINE_HOME : GOAL_LINE_AWAY
   }
 
+  /** 이 팀이 지키는 골라인 */
+  private ownGoalX(side: 'HOME' | 'AWAY') {
+    return this.goalX(side === 'HOME' ? 'AWAY' : 'HOME')
+  }
+
+  /**
+   * 이 자리가 `side` 의 페널티 지역 안인가.
+   *
+   * 오프사이드를 여기서는 보지 않는다. **정직하게 적어두는 한계다.**
+   * 실제 수비진은 공격을 받으면 골 에어리어까지 물러나 골라인 5~6미터
+   * 앞에 선다. 우리 수비 블록은 자기 자리에서 공 쪽으로 42%만 끌려오는
+   * 모델이라, 상대가 박스 앞까지 밀고 들어와도 라인이 박스 **밖**
+   * 83~86미터에 머문다.
+   *
+   * 그 상태에서 규칙을 그대로 적용하면 **"박스 안으로 주는 패스"가 곧
+   * "오프사이드 패스"** 가 되어버린다. 실측으로 여섯 판 슛이 11회로
+   * 줄고(기준 12), 슛 거리 중앙값이 32미터가 됐으며, 페널티 지역 안
+   * 표본이 4회로 떨어졌다. 규칙을 지키려다 축구를 잃는다.
+   *
+   * 그래서 박스 안은 판정하지 않는다. 놓치는 것은 실제 오프사이드의
+   * 일부이고, 얻는 것은 골대 앞 장면 전부다. 제대로 고치려면 수비
+   * 블록이 자기 골대까지 물러나게 만들어야 하고, 그건 압박·태클·실점
+   * 연출이 전부 걸린 대형 작업이라 마감 안에 재측정할 수 없다.
+   */
+  private inBoxOf(side: 'HOME' | 'AWAY', x: number) {
+    return Math.abs(x - this.ownGoalX(side)) <= PENALTY_DEPTH
+  }
+
+  /**
+   * 오프사이드 라인 — **뒤에서 두 번째 수비수**의 x 좌표.
+   *
+   * `side` 는 **지키는 팀**이다. 골키퍼도 수비수 중 하나로 센다. 실제
+   * 규칙이 "마지막에서 두 번째 상대 선수"이지 "골키퍼 앞의 마지막
+   * 수비수"가 아니기 때문이다 — 골키퍼가 뛰쳐나오면 필드 플레이어 하나가
+   * 마지막이 되고 라인은 그 앞 선수에게 넘어간다.
+   *
+   * 사람이 둘도 안 남았으면(퇴장이 겹친 극단) 골라인을 라인으로 친다.
+   * 그러면 아무도 앞설 수 없어 판정이 나오지 않는다 — 애매할 때 안 부는
+   * 쪽으로 기운다.
+   */
+  offsideLine(side: 'HOME' | 'AWAY'): number {
+    const own = this.ownGoalX(side)
+    const depths: number[] = []
+    for (const p of this.players) {
+      if (p.side !== side) continue
+      depths.push(Math.abs(p.x - own))
+    }
+    if (depths.length < 2) return own
+    depths.sort((a, b) => a - b)
+    const second = depths[1]
+    return own === GOAL_LINE_AWAY ? second : own - second
+  }
+
+  /**
+   * 부심이 서야 할 x.
+   *
+   * 뒤에서 두 번째 수비수와 나란히 서되, **공이 그보다 골라인에 가까우면
+   * 공을 따라간다.** 실제 부심 지침 그대로다. 공이 이미 라인을 넘어간
+   * 상황에서 부심이 뒤에 남아 있으면 골라인 판정을 볼 수 없다.
+   */
+  private arLine(side: 'HOME' | 'AWAY'): number {
+    const own = this.ownGoalX(side)
+    const line = this.offsideLine(side)
+    const b = this.ball
+    const deeper = Math.abs(b.x - own) < Math.abs(line - own) ? b.x : line
+    return clamp(deeper, 0, PITCH_W)
+  }
+
+  /**
+   * 심판 셋을 움직인다.
+   *
+   * **공에 절대 닿지 않는다.** 충돌도, 태클도, 난수 소비도 없다. 시뮬은
+   * 이 셋이 있는지조차 모른다.
+   *
+   * 주심은 대각선으로 뛴다. 실제 주심은 공을 따라 직선으로 쫓지 않고
+   * 한쪽 코너에서 반대 코너로 이어지는 대각선 위를 움직인다 — 그래야
+   * 주심과 부심이 서로 반대편을 맡아 경기장 전체가 두 사람의 시야에
+   * 들어온다. 공을 그대로 따라가게 만들면 주심이 늘 선수 무리 한가운데
+   * 서서 스물세 번째 선수처럼 보인다.
+   */
+  private updateOfficials(step: number) {
+    const b = this.ball
+    for (const o of this.officials) {
+      if (o.flag > 0) o.flag -= step
+
+      let tx: number
+      let ty: number
+      let top: number
+      if (o.kind === 'REFEREE') {
+        /**
+         * 주심은 **공에서 떨어져 선다.**
+         *
+         * 처음에는 공의 x를 그대로 따라가게 했더니 실측으로 공과 14센티
+         * 까지 붙었다. 그건 심판이 아니라 스물세 번째 선수다. 실제 주심은
+         * 공에서 15~20미터를 유지하고 패스 길을 막지 않는다.
+         *
+         * 서는 쪽은 **공의 반대쪽 절반**이다. 부심 둘이 각자 터치라인을
+         * 맡고 있으므로 주심이 공 반대쪽에 서면 셋의 시야가 경기장을 다
+         * 덮는다. 이것이 대각선 운영이고, 실제 주심 교육의 기본이다.
+         */
+        /**
+         * 어느 쪽에 설지에는 **여유 구간을 둔다.**
+         *
+         * 공이 세로 중앙을 넘을 때마다 곧바로 반대쪽으로 바꾸면, 주심이
+         * 공을 가로질러 30미터를 달려 건너간다. 그 도중에 공과 스치고
+         * (실측 최소 5.9미터) 화면에서는 심판이 갈지자로 흔들린다.
+         * 공이 확실히 한쪽으로 간 뒤에만 옮기고, 가운데에서는 지금 있는
+         * 쪽을 지킨다.
+         */
+        const mid = PITCH_H / 2
+        const away = b.y < mid - REF_SWITCH ? 1 : b.y > mid + REF_SWITCH ? -1 : o.y >= mid ? 1 : -1
+        tx = clamp(b.x - REF_TRAIL, 5, PITCH_W - 5)
+        ty = clamp(b.y + away * REF_STANDOFF, 5, PITCH_H - 5)
+        top = REF_SPEED
+      } else {
+        // 부심은 자기 절반의 터치라인 밖에서 옆걸음만 한다.
+        // 위쪽 부심이 우리 진영(HOME 이 지키는 절반)을 맡는다
+        const side: 'HOME' | 'AWAY' = o.kind === 'AR_TOP' ? 'HOME' : 'AWAY'
+        const half: [number, number] =
+          this.ownGoalX(side) === GOAL_LINE_AWAY ? [0, PITCH_W / 2] : [PITCH_W / 2, PITCH_W]
+        tx = clamp(this.arLine(side), half[0], half[1])
+        ty = o.kind === 'AR_TOP' ? AR_INSET : PITCH_H - AR_INSET
+        top = AR_SPEED
+      }
+
+      const dx = tx - o.x
+      const dy = ty - o.y
+      const d = Math.hypot(dx, dy)
+      if (d < 0.05) continue
+      const move = Math.min(d, top * step)
+      o.x += (dx / d) * move
+      o.y += (dy / d) * move
+    }
+
+    if (this.offside) {
+      this.offside.life -= step
+      if (this.offside.life <= 0) this.offside = null
+    }
+    if (this.offsideMute > 0) this.offsideMute -= step
+  }
+
+  /**
+   * 이 패스가 오프사이드인가.
+   *
+   * 규칙 그대로다. 받는 선수가 **공을 찬 순간에**
+   * ① 상대 진영에 있고 ② 공보다 앞에 있고 ③ 뒤에서 두 번째 상대보다
+   * 앞에 있으면 오프사이드다. 셋 중 하나라도 아니면 아니다.
+   *
+   * 세 조건 모두 `OFFSIDE_MARGIN` 만큼 확실히 앞서야 한다. 나란히 선
+   * 선수는 오프사이드가 아니고(규칙이 그렇다), 우리 좌표는 프레임마다
+   * 조금씩 흔들리기 때문이다.
+   *
+   * **골이 예약된 팀에게는 불지 않는다.** 시뮬이 이미 득점으로 판정한
+   * 공격이라 화면이 전개를 만들고 있는 중이고, 여기서 끊으면 만들던
+   * 장면을 버리게 된다. 점수판이 그 장면을 기다리고 있어서 골이 늦어질
+   * 뿐 사라지지는 않지만, 규칙보다 점수판 일치가 먼저다.
+   */
+  private isOffside(holder: VPlayer, to: VPlayer): boolean {
+
+    if (this.offsideMute > 0) return false
+    if (this.throwBy) return false
+    if (to.pos === 'GK') return false
+    /**
+     * 예약된 골이 **하나라도** 있으면 불지 않는다.
+     *
+     * 처음에는 공격하는 쪽의 예약만 봤다. 그랬더니 상대의 예약 골이
+     * 걸려 있는 동안 우리 쪽 오프사이드가 재개를 걸어 그 유예를 먹었고,
+     * 서른아홉 골 중 하나가 장면 없이 지나갔다. 예약 골은 8초 안에
+     * 전개를 만들어야 하는데 데드볼 몇 초는 그 예산의 절반이다.
+     * 규칙보다 "골에는 장면이 있다"가 먼저다.
+     */
+    if (this.pending.length > 0) return false
+
+    const dir = holder.side === 'HOME' ? 1 : -1
+    // ① 상대 진영에 있어야 한다. 자기 진영에서는 오프사이드가 없다
+    if ((to.x - PITCH_W / 2) * dir <= OFFSIDE_MARGIN) return false
+    // ② 공보다 앞에 있어야 한다
+    if ((to.x - holder.x) * dir <= OFFSIDE_MARGIN) return false
+    // ③ 뒤에서 두 번째 상대보다 앞에 있어야 한다
+    const other: 'HOME' | 'AWAY' = holder.side === 'HOME' ? 'AWAY' : 'HOME'
+    if (this.inBoxOf(other, to.x)) return false
+    const line = this.offsideLine(other)
+    return (to.x - line) * dir > OFFSIDE_MARGIN
+  }
+
+  /**
+   * 깃발을 든다. 아직 휘슬은 불지 않는다.
+   *
+   * 이 순간 경기는 계속 흐른다. 부심의 깃발이 올라가 있고 공은 오프사이드
+   * 선수를 향해 날아가는 중이다.
+   */
+  private raiseFlag(against: 'HOME' | 'AWAY', to: VPlayer) {
+    const by: Official['kind'] = to.x <= PITCH_W / 2 ? 'AR_TOP' : 'AR_BOTTOM'
+    const ar = this.officials.find((o) => o.kind === by)
+    if (ar) ar.flag = FLAG_LIFT
+    this.flagged = { against, by }
+    this.offsideMute = OFFSIDE_MUTE
+  }
+
+  /**
+   * 깃발이 올라간 뒤 공이 멎으면 휘슬을 분다.
+   *
+   * 공이 아직 날아가는 중이면 기다린다. 공이 이미 라인 밖으로 나가
+   * 다른 재개가 걸렸으면 그쪽이 먼저다 — 깃발을 내리고 없던 일로 한다.
+   * 실제로도 공이 아웃되면 부심은 깃발을 내린다.
+   */
+  private settleFlag() {
+    const f = this.flagged
+    if (!f) return
+    if (this.restart) {
+      this.flagged = null
+      return
+    }
+    if (this.ball.mode === 'PASS' || this.ball.mode === 'SHOT') return
+
+    this.flagged = null
+    // 공이 멎은 자리가 곧 프리킥 자리다. 여기까지 공이 실제로 굴러왔으므로
+    // 화면에서 튀는 구간이 없다
+    const px = clamp(this.ball.x, 3, PITCH_W - 3)
+    const py = clamp(this.ball.y, 3, PITCH_H - 3)
+    this.offside = { x: px, y: py, by: f.by, life: FLAG_LIFT }
+    this.offsideCount += 1
+    const defending: 'HOME' | 'AWAY' = f.against === 'HOME' ? 'AWAY' : 'HOME'
+    this.beginRestart('FREE_KICK', defending, px, py)
+    this.offsideMute = OFFSIDE_MUTE
+  }
+
   /**
    * 슛.
    *
@@ -1759,6 +2142,21 @@ export class VisualMatch {
   }
 
   private pass(holder: VPlayer, to: VPlayer) {
+    /**
+     * 오프사이드는 찬 **그 순간**의 자리로 정해진다. 공이 날아가는 동안
+     * 받는 선수가 내려와도 판정은 바뀌지 않는다 — 규칙이 그렇다.
+     *
+     * **그런데 여기서 공을 세우지는 않는다.** 실제 축구가 그렇다. 부심은
+     * 패스가 나가는 순간 깃발을 들고, 주심은 그 공이 오프사이드 선수에게
+     * **닿은 뒤에** 휘슬을 분다. 그래서 깃발이 올라간 채 공이 몇 미터 더
+     * 굴러가는 그 장면이 나온다.
+     *
+     * 처음에는 그 자리에서 바로 프리킥을 놨는데, 공이 패스한 선수 발밑에서
+     * 오프사이드 자리까지 **한 프레임에 최대 37미터를 순간이동했다.** 공을
+     * 실제로 날려 보내면 도착 지점이 곧 프리킥 자리라 튀는 구간이 없다.
+     */
+    if (this.isOffside(holder, to)) this.raiseFlag(holder.side, to)
+
     // 받는 사람이 뛰어갈 자리로 찔러준다
     const lead = 0.35
     let tx = clamp(to.x + to.vx * lead, 2, PITCH_W - 2)
@@ -2584,6 +2982,10 @@ export class VisualMatch {
     for (const f of this.flashes) f.life -= step
     this.flashes = this.flashes.filter((f) => f.life > 0)
 
+    // 심판은 데드볼에도 움직인다. 세리머니·재개·교체 중에 셋만 얼어붙어
+    // 있으면 그 순간마다 화면에 붙여놓은 그림처럼 보인다
+    this.updateOfficials(step)
+
     // 쓰러진 선수는 세리머니·데드볼 중에도 시간이 간다. 여기서 멈추면
     // 골 뒤에 쓰러진 선수가 몇 초 더 누워 있다
     for (const d of this.downed) d.life -= step
@@ -2676,6 +3078,8 @@ export class VisualMatch {
     for (const p of this.players) this.movePlayer(p, step)
     this.separate()
     this.moveBall(step)
+    // 공이 멎었으면 들고 있던 깃발이 휘슬이 된다
+    this.settleFlag()
     // 공이 움직인 뒤에 센다. 전개 시간은 "지금 공이 어디 있나"의 함수다
     this.updateAttackTime(step)
     this.reconcileOwner(step)

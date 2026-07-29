@@ -1938,3 +1938,191 @@ describe('개별 지시가 화면에서 보인다', () => {
     expect(on.x, `평균 위치 ${off.x.toFixed(1)}m → ${on.x.toFixed(1)}m`).toBeLessThan(off.x - 5)
   })
 })
+
+/**
+ * 심판 셋과 오프사이드.
+ *
+ * 사용자가 지적했다 — "심판도 없고 라인 심도 없어. 그러니까 오프사이드도
+ * 없고 그냥 동그라미가 공차는 것만 보이잖아."
+ *
+ * 여기서 지키는 것은 두 가지다. **심판이 경기에 개입하지 않는다**(공에
+ * 닿지 않고 난수를 쓰지 않는다)와 **판정이 실제 축구의 빈도 안에 있다.**
+ */
+describe('심판 셋과 오프사이드', () => {
+  /** 심판 자리와 공을 함께 기록하며 한 판을 끝까지 본다 */
+  function watchOfficials(seed: number) {
+    const problem = { ...P, seed }
+    const rng = createRng(seed)
+    let s = createState(problem)
+    const vm = new VisualMatch(s, seed)
+    const rows: Array<{
+      officials: Array<{ kind: string; x: number; y: number; flag: number }>
+      ball: { x: number; y: number; mode: string }
+      restart: string | null
+      line: { home: number; away: number }
+    }> = []
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      s = tick(s, rng)
+      vm.sync(s)
+      for (let f = 0; f < 6; f++) vm.advance(s, 1 / 60)
+      rows.push({
+        officials: vm.officials.map((o) => ({ kind: o.kind, x: o.x, y: o.y, flag: o.flag })),
+        ball: { x: vm.ball.x, y: vm.ball.y, mode: vm.ball.mode },
+        restart: vm.restart ? vm.restart.kind : null,
+        line: { home: vm.offsideLine('HOME'), away: vm.offsideLine('AWAY') },
+      })
+    }
+    return { rows, vm }
+  }
+
+  const RUNS = [0, 1, 2, 3, 4, 5].map((i) => watchOfficials(P.seed + i))
+
+  it('주심 하나와 부심 둘이 언제나 경기장에 있다', () => {
+    for (const { rows } of RUNS) {
+      for (const r of rows) {
+        expect(r.officials).toHaveLength(3)
+        expect(r.officials.map((o) => o.kind).sort()).toEqual([
+          'AR_BOTTOM',
+          'AR_TOP',
+          'REFEREE',
+        ])
+      }
+    }
+  })
+
+  it('부심은 자기 터치라인을 벗어나지 않는다', () => {
+    // 부심이 경기장 안으로 들어오면 스물세 번째 선수로 보인다.
+    // 위쪽 부심은 위쪽 라인에, 아래쪽 부심은 아래쪽 라인에 붙어 있어야 한다
+    for (const { rows } of RUNS) {
+      for (const r of rows) {
+        const top = r.officials.find((o) => o.kind === 'AR_TOP')!
+        const bottom = r.officials.find((o) => o.kind === 'AR_BOTTOM')!
+        expect(top.y).toBeLessThan(PITCH_H * 0.1)
+        expect(bottom.y).toBeGreaterThan(PITCH_H * 0.9)
+        expect(top.x).toBeGreaterThanOrEqual(0)
+        expect(top.x).toBeLessThanOrEqual(PITCH_W)
+        expect(bottom.x).toBeGreaterThanOrEqual(0)
+        expect(bottom.x).toBeLessThanOrEqual(PITCH_W)
+      }
+    }
+  })
+
+  it('부심은 각자 자기 절반을 맡는다', () => {
+    // 실제 부심 둘은 서로 대각선으로 반대편 절반을 맡는다.
+    // 둘 다 같은 쪽에 서 있으면 반대편 골라인을 아무도 못 본다
+    for (const { rows } of RUNS) {
+      for (const r of rows) {
+        const top = r.officials.find((o) => o.kind === 'AR_TOP')!
+        const bottom = r.officials.find((o) => o.kind === 'AR_BOTTOM')!
+        expect(top.x).toBeLessThanOrEqual(PITCH_W / 2 + 0.001)
+        expect(bottom.x).toBeGreaterThanOrEqual(PITCH_W / 2 - 0.001)
+      }
+    }
+  })
+
+  it('부심이 오프사이드 라인을 따라간다', () => {
+    /**
+     * 부심의 자리는 장식이 아니라 정보다. 뒤에서 두 번째 수비수(또는
+     * 그보다 골라인에 가까운 공)와 나란히 서야 관전자가 선을 그리지
+     * 않고도 경계를 읽는다.
+     *
+     * 라인이 자기 절반 밖으로 나간 순간은 뺀다 — 그때는 부심이 자기
+     * 구역 끝에 서서 기다리는 것이 맞다.
+     */
+    let checked = 0
+    let close = 0
+    for (const { rows } of RUNS) {
+      for (const r of rows) {
+        const top = r.officials.find((o) => o.kind === 'AR_TOP')!
+        // 위쪽 부심은 우리(HOME)가 지키는 절반을 맡는다
+        const want = Math.min(r.line.home, r.ball.x <= r.line.home ? r.ball.x : r.line.home)
+        if (want > PITCH_W / 2) continue
+        checked += 1
+        if (Math.abs(top.x - want) < 6) close += 1
+      }
+    }
+    expect(checked).toBeGreaterThan(500)
+    // 부심도 사람이라 라인이 튀면 따라가는 데 시간이 걸린다.
+    // 늘 붙어 있는 것이 아니라 **따라간다**는 것이 기준이다
+    expect(close / checked, `라인 추종률 ${((close / checked) * 100).toFixed(1)}%`).toBeGreaterThan(0.8)
+  })
+
+  it('주심은 플레이에서 떨어져 있다', () => {
+    /**
+     * 최소 거리 하나로 잡으면 안 된다. 주심이 자리를 옮기는 도중 공이
+     * 그 앞을 스쳐 지나가는 순간이 반드시 생기고, 실제 축구에도 있다.
+     * 재보니 여섯 판에서 최소 1.3미터까지 붙는다.
+     *
+     * 봐야 할 것은 **평소에 떨어져 있는가**다. 실측 분포는 10미터 이상이
+     * 88%이고, 발밑 판정 거리(2.6미터) 안은 0.67%다. 비율로 고정한다
+     */
+    let held = 0
+    let far = 0
+    let touching = 0
+    for (const { rows } of RUNS) {
+      for (const r of rows) {
+        if (r.ball.mode !== 'HELD') continue
+        const ref = r.officials.find((o) => o.kind === 'REFEREE')!
+        const d = Math.hypot(ref.x - r.ball.x, ref.y - r.ball.y)
+        held += 1
+        if (d >= 10) far += 1
+        if (d < 2.6) touching += 1
+      }
+    }
+    expect(held).toBeGreaterThan(500)
+    // 대부분의 시간을 플레이 밖에서 본다
+    expect(far / held, `10m 이상 ${((far / held) * 100).toFixed(1)}%`).toBeGreaterThan(0.7)
+    // 공 가진 선수로 오해될 만큼 붙는 일은 거의 없다
+    expect(touching / held, `발밑 거리 ${((touching / held) * 100).toFixed(2)}%`).toBeLessThan(0.03)
+  })
+
+  it('오프사이드 빈도가 실제 축구 범위 안이다', () => {
+    /**
+     * 실제 축구는 90분에 양 팀 합쳐 4~6회다. 이 화면은 15분 구간이므로
+     * 판당 0.7~1.0회가 된다.
+     *
+     * **숫자를 박지 않고 범위로 쓴다.** 위쪽이 중요하다 — 판정이 잦으면
+     * 데드볼이 늘어 75초짜리 관전에서 볼 것이 사라진다. 아래쪽은 0을
+     * 막기만 한다. 애매하면 안 부는 쪽이 맞기 때문이다
+     */
+    const wide = Array.from({ length: 24 }, (_, i) => watchOfficials(P.seed + 900 + i * 31).vm)
+    const total = wide.reduce((a, vm) => a + vm.offsideCount, 0)
+    const per = total / wide.length
+    expect(per, `판당 ${per.toFixed(2)}회`).toBeLessThan(2.5)
+    expect(total, `스물네 판에서 ${total}회`).toBeGreaterThan(0)
+  })
+
+  it('오프사이드를 불어도 공이 순간이동하지 않는다', () => {
+    /**
+     * 부심은 패스가 나가는 순간 깃발을 들고, 휘슬은 공이 멎은 뒤에
+     * 분다. 그래서 프리킥 자리는 공이 실제로 굴러온 자리다.
+     *
+     * 처음에는 오프사이드였던 선수 자리에 공을 바로 놓았는데, 공이 한
+     * 프레임에 최대 37미터를 건너뛰었다. 규칙상으로는 그 자리가 맞지만
+     * 화면에서는 고장으로 보인다
+     */
+    for (const { rows } of RUNS) {
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i - 1].ball.mode !== 'HELD' || rows[i].ball.mode !== 'HELD') continue
+        const d = Math.hypot(
+          rows[i].ball.x - rows[i - 1].ball.x,
+          rows[i].ball.y - rows[i - 1].ball.y,
+        )
+        expect(d).toBeLessThan(7)
+      }
+    }
+  })
+
+  it('재개를 기다리는 동안 공이 그 자리에 있다', () => {
+    for (const { rows } of RUNS) {
+      for (let i = 1; i < rows.length; i++) {
+        if (!rows[i].restart || !rows[i - 1].restart) continue
+        const d = Math.hypot(
+          rows[i].ball.x - rows[i - 1].ball.x,
+          rows[i].ball.y - rows[i - 1].ball.y,
+        )
+        expect(d).toBeLessThan(0.01)
+      }
+    }
+  })
+})

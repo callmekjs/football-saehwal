@@ -5,6 +5,7 @@ import {
   PITCH_W,
   type Downed,
   type Leaving,
+  type Official,
   type VisualMatch,
   type VPlayer,
 } from './visual'
@@ -42,6 +43,14 @@ export const COLORS = {
   /** 수비라인 안내선. 팀 색과 겹치지 않는 하늘색 */
   lineMarker: '#7cd4ec',
   holder: '#ffffff',
+  /**
+   * 심판 옷. 두 팀 어느 색과도 겹치지 않아야 한다 — 실제 축구 규정이다.
+   * 우리 팀은 초록, 상대는 붉은색이라 검정이 남는다.
+   */
+  official: '#15171c',
+  officialTrim: 'rgba(255,255,255,0.72)',
+  /** 부심 깃발. 실제 깃발과 같은 노랑-빨강 계열 */
+  flag: '#f5c518',
 }
 
 /**
@@ -410,6 +419,69 @@ function drawDowned(
   ctx.restore()
 }
 
+/**
+ * 심판 한 명.
+ *
+ * 선수와 **섞이면 안 된다.** 색이 같은 계열이면 스물세 번째 선수로
+ * 읽히고, 크기가 같으면 등번호 없는 선수로 읽힌다. 그래서 셋 다
+ * 검정에 가깝고 선수보다 작다. 실제 중계에서도 심판은 두 팀 어느
+ * 색과도 겹치지 않는 옷을 입는다 — 그게 규정이다.
+ *
+ * 부심은 깃발을 든다. 내려져 있을 때는 몸을 따라 아래로 늘어뜨리고,
+ * 판정할 때만 위로 올린다. **깃발이 올라가는 것이 판정 그 자체다** —
+ * 축구에서 부심은 말이 아니라 깃발로 말한다.
+ */
+function drawOfficial(
+  ctx: CanvasRenderingContext2D,
+  o: Official,
+  r: number,
+  X: (v: number) => number,
+  Y: (v: number) => number,
+) {
+  const cx = X(o.x)
+  const cy = Y(o.y)
+  // 선수보다 확실히 작다. 같은 크기면 등번호 없는 선수로 보인다
+  const rr = r * 0.62
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, rr, 0, Math.PI * 2)
+  ctx.fillStyle = COLORS.official
+  ctx.fill()
+  ctx.lineWidth = 1.2
+  ctx.strokeStyle = COLORS.officialTrim
+  ctx.stroke()
+  ctx.restore()
+
+  if (o.kind === 'REFEREE') return
+
+  // 깃발 — 위쪽 부심은 위로, 아래쪽 부심은 아래로 든다.
+  // 각자 자기 터치라인 바깥쪽이라 경기장 안을 가리지 않는다
+  const up = o.kind === 'AR_TOP' ? -1 : 1
+  const raised = o.flag > 0
+  const len = rr * (raised ? 3.4 : 1.9)
+  const tipY = cy + up * len
+  ctx.save()
+  ctx.strokeStyle = COLORS.officialTrim
+  ctx.lineWidth = Math.max(1.2, rr * 0.28)
+  ctx.beginPath()
+  ctx.moveTo(cx, cy)
+  ctx.lineTo(cx, tipY)
+  ctx.stroke()
+  if (raised) {
+    // 노랑-빨강 체크 깃발. 실제 부심 깃발의 색이다
+    const s = rr * 1.5
+    ctx.beginPath()
+    ctx.moveTo(cx, tipY)
+    ctx.lineTo(cx + s, tipY - up * s * 0.2)
+    ctx.lineTo(cx, tipY - up * s * 0.85)
+    ctx.closePath()
+    ctx.fillStyle = COLORS.flag
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
 export function drawPitch(
   ctx: CanvasRenderingContext2D,
   vm: VisualMatch,
@@ -439,6 +511,12 @@ export function drawPitch(
     ctx.lineTo(X(b.x), Y(b.y))
     ctx.stroke()
     ctx.restore()
+  }
+
+  // 심판을 선수보다 먼저 그린다. 겹치면 선수가 위로 지나가야 한다 —
+  // 심판이 선수를 가리면 그 순간 화면의 주인공이 바뀐다
+  for (const o of vm.officials) {
+    drawOfficial(ctx, o, r, X, Y)
   }
 
   // 쓰러진 선수와 나가는 선수를 먼저 그린다. 뛰는 선수가 그 위를 지나간다
@@ -504,6 +582,40 @@ export function drawPitch(
     ctx.font = `400 ${Math.round(h * 0.045)}px system-ui, sans-serif`
     ctx.fillStyle = 'rgba(255,255,255,0.85)'
     ctx.fillText(c.side === 'HOME' ? '우리 팀이 넣었다' : '상대가 넣었다', w / 2, h * 0.56)
+    ctx.restore()
+  }
+
+  /**
+   * 오프사이드 — 깃발만으로는 못 읽는다.
+   *
+   * 부심 깃발은 화면 가장자리의 작은 삼각형이라, 처음 보는 사람은 그게
+   * 올라간 것을 알아채지 못한다. 판정이 난 자리에 점을 찍고 글자를
+   * 붙여서, 왜 공이 갑자기 저기 놓였는지가 설명되게 한다.
+   */
+  if (vm.offside) {
+    const off = vm.offside
+    const k = Math.min(1, off.life / 1.8)
+    ctx.save()
+    ctx.globalAlpha = k
+    ctx.strokeStyle = COLORS.flag
+    ctx.lineWidth = 2
+    ctx.setLineDash([sx * 1.1, sx * 1.1])
+    // 판정이 난 자리를 가로지르는 세로선. 여기가 오프사이드 라인이었다
+    ctx.beginPath()
+    ctx.moveTo(X(off.x), Y(0))
+    ctx.lineTo(X(off.x), Y(PITCH_H))
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    ctx.fillStyle = COLORS.flag
+    ctx.beginPath()
+    ctx.arc(X(off.x), Y(off.y), r * 0.5, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.font = `600 ${Math.max(12, Math.round(h * 0.05))}px system-ui, sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('오프사이드', w / 2, h * 0.16)
     ctx.restore()
   }
 
