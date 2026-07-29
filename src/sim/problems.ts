@@ -52,6 +52,9 @@ export function toProblem(p: (typeof raw)[number]): Problem {
     id: p.id,
     title: p.title,
     order: p.order,
+    // 화면 표시 전용. 국면마다 JSON 에 적으므로 화면에 표를 둘 필요가 없다
+    kickoff: p.kickoff,
+    summary: p.summary,
     seed: p.seed,
     subsLeft: p.subsLeft,
     awayCount: p.awayCount,

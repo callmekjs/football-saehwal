@@ -12,33 +12,6 @@ interface Entry {
   summary: string
 }
 
-/**
- * 국면이 시작하는 후반 분.
- *
- * 축구 후반은 90분에 끝나지 않는다. 90분을 채우고 주심이 정한 추가시간을
- * 더 뛰고 끝난다. 전에는 70분에 시작해 85분에 끝났는데, 85분은 축구에서
- * 아무 의미가 없는 시각이라 "왜 여기서 끝나지?"가 된다.
- *
- * 이 화면은 15분 구간을 다루므로, 끝나는 시각이 90분 + 추가시간(1~5분)이
- * 되도록 시작 분을 잡는다. 국면마다 추가시간이 다르다 — 추가시간은
- * 주심이 그 경기의 지연을 보고 정하는 것이지 고정값이 아니다.
- *
- * 시작 분은 **화면 표시에만 쓰인다.** 경기 길이는 750틱으로 고정이고
- * 이 숫자를 바꿔도 확률과 밸런스는 움직이지 않는다.
- */
-const KICKOFF: Record<string, number> = {
-  p01: 78, // → 93:00 = 90 + 3
-  p02: 77, // → 92:00 = 90 + 2
-  p04: 80, // → 95:00 = 90 + 5
-}
-
-const SUMMARY: Record<string, string> = {
-  p01: '0-1로 지고 있다. 상대는 골문 앞에 사람을 모았다',
-  p02: '1-0으로 이기고 있다. 앞 감독이 전부 잠가놓았다',
-  p04: '1-0으로 이기는데 한 명이 퇴장당했다',
-}
-
-
 function FixtureCard({
   entry,
   n,
@@ -92,10 +65,12 @@ export function App() {
       raw
         .map(toProblem)
         .sort((a, b) => a.order - b.order)
+        // 시작 분과 한 줄 요약은 국면 데이터에서 온다. 화면에 국면 id 별
+        // 표를 두면 국면을 하나 넣을 때마다 이 파일을 고쳐야 한다
         .map((problem) => ({
           problem,
-          kickoff: KICKOFF[problem.id] ?? 70,
-          summary: SUMMARY[problem.id] ?? '',
+          kickoff: problem.kickoff ?? 70,
+          summary: problem.summary ?? '',
         })),
     [],
   )
