@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   DRAG_START,
+  ORDER_DRAG_DISTANCE,
   SWAP_RADIUS,
   ZONE_RATIO,
+  displayDepth,
   dropHint,
+  openLane,
   resolveDrop,
   swapSeats,
   type CardPoint,
@@ -89,6 +92,20 @@ describe('위아래 구역', () => {
     expect(resolveDrop(MF_L, { x: 220, y: H / 2 }, H, ALL)).toEqual({ kind: 'NONE' })
   })
 
+  it('판 끝까지 가지 않아도 분명히 위아래로 끌면 지시가 걸린다', () => {
+    expect(resolveDrop(MF_L, { x: MF_L.x, y: MF_L.y - ORDER_DRAG_DISTANCE }, H, ALL))
+      .toEqual({ kind: 'ORDER', order: 'PUSH_UP' })
+    expect(resolveDrop(MF_L, { x: MF_L.x, y: MF_L.y + ORDER_DRAG_DISTANCE }, H, ALL))
+      .toEqual({ kind: 'ORDER', order: 'DROP_BACK' })
+  })
+
+  it('작은 흔들림과 가로 끌기는 지시가 아니다', () => {
+    expect(resolveDrop(MF_L, { x: MF_L.x, y: MF_L.y + DRAG_START + 2 }, H, ALL))
+      .toEqual({ kind: 'NONE' })
+    expect(resolveDrop(MF_L, { x: MF_L.x + 80, y: MF_L.y + 20 }, H, ALL))
+      .toEqual({ kind: 'NONE' })
+  })
+
   it('위아래가 뒤집히지 않는다', () => {
     const up = resolveDrop(MF_L, { x: 230, y: 5 }, H, ALL)
     const down = resolveDrop(MF_L, { x: 230, y: H - 5 }, H, ALL)
@@ -98,6 +115,24 @@ describe('위아래 구역', () => {
 
   it('판 높이를 못 재면 아무 일도 하지 않는다', () => {
     expect(resolveDrop(MF_L, { x: 10, y: 10 }, 0, [])).toEqual({ kind: 'NONE' })
+  })
+})
+
+describe('지시 뒤 카드 위치', () => {
+  it('올라가라는 위로, 내려서라는 아래로 이동하고 다른 지시는 자리를 지킨다', () => {
+    const base = 42
+    expect(displayDepth(base, 'PUSH_UP')).toBeGreaterThan(base)
+    expect(displayDepth(base, 'DROP_BACK')).toBeLessThan(base)
+    expect(displayDepth(base, 'CONSERVE')).toBe(base)
+  })
+
+  it('새 줄의 기존 카드 사이에서 가장 넓은 빈칸을 고른다', () => {
+    const defenders = [7, 36, 64, 93]
+    const defenderLane = openLane(38, defenders)
+    expect(Math.min(...defenders.map((lane) => Math.abs(defenderLane - lane))))
+      .toBeGreaterThan(13)
+    expect(openLane(62, [38, 62])).toBe(92)
+    expect(openLane(50, [])).toBe(50)
   })
 })
 

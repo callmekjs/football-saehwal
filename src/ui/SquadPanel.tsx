@@ -7,12 +7,14 @@ import {
   type FormationId,
   type Slot,
 } from '../sim/formations'
-import { getPlayer } from '../sim/squad'
+import { effectivePos, getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkOrder } from '../sim/engine'
 import {
   DRAG_START,
   ZONE_RATIO,
+  displayDepth,
   dropHint,
+  openLane,
   resolveDrop,
   swapSeats,
   type CardPoint,
@@ -187,6 +189,8 @@ export function SquadPanel({
 
   const fieldRef = useRef<HTMLDivElement>(null)
   const pressRef = useRef<Press | null>(null)
+  /** 카드 밖으로 나간 포인터도 끝까지 받는 창 단위 추적을 해제한다 */
+  const pointerCleanupRef = useRef<(() => void) | null>(null)
   /** 끌고 난 뒤에 따라오는 click 을 한 번 삼킨다. 안 그러면 지시창이 같이 열린다 */
   const clickGuard = useRef(false)
   const [drag, setDrag] = useState<DragView | null>(null)
@@ -207,9 +211,18 @@ export function SquadPanel({
   useEffect(() => {
     if (!locked) return
     setPicked(null)
+    pointerCleanupRef.current?.()
+    pointerCleanupRef.current = null
     pressRef.current = null
     setDrag(null)
   }, [locked])
+
+  useEffect(
+    () => () => {
+      pointerCleanupRef.current?.()
+    },
+    [],
+  )
 
   /**
    * `Esc` 로 취소.
@@ -251,6 +264,29 @@ export function SquadPanel({
   const shape = shapeOf(state.formation)
 
   /**
+   * 앞뒤 줄을 옮긴 카드는 새 줄의 가장 넓은 빈칸에 세운다.
+   *
+   * `PUSH_UP`·`DROP_BACK`은 경기장에서도 선수를 실제로 앞뒤로 옮긴다.
+   * 전술판 카드도 같은 방향으로 남되, 이미 그 줄에 있는 카드를 가리지
+   * 않도록 좌우 빈칸만 화면에서 자동으로 잡는다.
+   */
+  const displayPositions = new Map(
+    placed.map(({ s, slot }) => [
+      s.id,
+      { depth: displayDepth(slot.x, s.order), lane: slotLeft(slot.y) },
+    ]),
+  )
+  for (const { s } of placed) {
+    if (s.order !== 'PUSH_UP' && s.order !== 'DROP_BACK') continue
+    const mine = displayPositions.get(s.id)!
+    const line = effectivePos(s)
+    const occupied = placed
+      .filter(({ s: other }) => other.id !== s.id && effectivePos(other) === line)
+      .map(({ s: other }) => displayPositions.get(other.id)!.lane)
+    displayPositions.set(s.id, { ...mine, lane: openLane(mine.lane, occupied) })
+  }
+
+  /**
    * 카드 중심의 실제 픽셀 좌표.
    *
    * 카드 열한 장을 DOM 에서 재지 않고 자리 좌표에서 바로 계산한다. 화면에
@@ -263,13 +299,16 @@ export function SquadPanel({
   const pointsOf = (box: DOMRect): CardPoint[] =>
     placed
       .filter(({ slot }) => slot.pos !== 'GK')
-      .map(({ s, slot }) => ({
-        id: s.id,
-        x: (slotLeft(slot.y) / 100) * box.width,
-        y: (slotTop(slot.x) / 100) * box.height,
-        depth: slot.x,
-        line: slot.pos,
-      }))
+      .map(({ s }) => {
+        const { depth, lane } = displayPositions.get(s.id)!
+        return {
+          id: s.id,
+          x: (lane / 100) * box.width,
+          y: (slotTop(depth) / 100) * box.height,
+          depth,
+          line: effectivePos(s),
+        }
+      })
 
   const numOf = (id: string) => getPlayer(id).num
 
@@ -323,30 +362,7 @@ export function SquadPanel({
     }, 0)
   }
 
-  const startPress = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
-    // 손가락은 지금 그대로 탭 두 단계를 쓴다. 카드 위에서 페이지가 안
-    // 내려가면 좁은 화면에서 되던 것이 안 되게 된다
-    if (e.pointerType !== 'mouse' || e.button !== 0 || locked) return
-    clickGuard.current = false
-    pressRef.current = {
-      id,
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      moved: false,
-      cancelled: false,
-      drop: null,
-    }
-    // 판 밖으로 끌고 나가도 놓는 순간을 놓치지 않는다.
-    // 붙잡기를 못 하는 환경이 있어도 드래그 자체는 그대로 돌아간다
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      /* 붙잡을 수 없으면 붙잡지 않는다 */
-    }
-  }
-
-  const movePress = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const movePress = (e: Pick<PointerEvent, 'pointerId' | 'clientX' | 'clientY'>) => {
     const pr = pressRef.current
     if (!pr || pr.pointerId !== e.pointerId || pr.cancelled) return
     const field = fieldRef.current
@@ -373,7 +389,7 @@ export function SquadPanel({
     setDrag({ id: pr.id, dx, dy, target, blocked })
   }
 
-  const endPress = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const endPress = (e: Pick<PointerEvent, 'pointerId'>) => {
     const pr = pressRef.current
     if (!pr || pr.pointerId !== e.pointerId) return
     pressRef.current = null
@@ -392,6 +408,52 @@ export function SquadPanel({
   const cancelPress = () => {
     pressRef.current = null
     setDrag(null)
+  }
+
+  const clearPointerListeners = () => {
+    pointerCleanupRef.current?.()
+    pointerCleanupRef.current = null
+  }
+
+  const startPress = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
+    // 손가락은 지금 그대로 탭 두 단계를 쓴다. 카드 위에서 페이지가 안
+    // 내려가면 좁은 화면에서 되던 것이 안 되게 된다
+    if (e.pointerType !== 'mouse' || e.button !== 0 || locked) return
+    clearPointerListeners()
+    clickGuard.current = false
+    pressRef.current = {
+      id,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+      cancelled: false,
+      drop: null,
+    }
+
+    /**
+     * 카드에만 `pointermove`를 붙이면 포인터 캡처를 지원하지 않거나 놓친
+     * 브라우저에서 카드 경계를 벗어난 순간 추적이 끝난다. 위아래 구역은
+     * 카드 밖에 있으므로 그 환경에서는 드래그가 원리적으로 성립하지 않았다.
+     * 창에서 끝까지 받아 캡처 지원 여부와 무관하게 같은 동작을 보장한다.
+     */
+    const onMove = (event: PointerEvent) => movePress(event)
+    const onUp = (event: PointerEvent) => {
+      clearPointerListeners()
+      endPress(event)
+    }
+    const onCancel = () => {
+      clearPointerListeners()
+      cancelPress()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    pointerCleanupRef.current = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+    }
   }
 
   /** 드래그 중에는 지시 줄이 지금 무슨 일이 일어날지 말한다 */
@@ -465,7 +527,7 @@ export function SquadPanel({
             </>
           )}
 
-          {placed.map(({ s, slot }) => {
+          {placed.map(({ s }) => {
             const p = getPlayer(s.id)
             const warn = alertOf(s, state.tactics.press)
             const tag = s.order !== 'NONE' ? ORDER_TAG[s.order] : (warn?.tag ?? p.pos)
@@ -493,8 +555,8 @@ export function SquadPanel({
                     : `${detail} · 눌러서 지시하거나 위아래로 끌어 옮긴다`
                 }
                 style={{
-                  top: `${slotTop(slot.x)}%`,
-                  left: `${slotLeft(slot.y)}%`,
+                  top: `${slotTop(displayPositions.get(s.id)!.depth)}%`,
+                  left: `${displayPositions.get(s.id)!.lane}%`,
                   ...(held
                     ? {
                         transform: `translate(-50%, -50%) translate(${drag.dx}px, ${drag.dy}px) scale(1.1)`,
@@ -502,9 +564,6 @@ export function SquadPanel({
                     : null),
                 }}
                 onPointerDown={(e) => startPress(e, s.id)}
-                onPointerMove={movePress}
-                onPointerUp={endPress}
-                onPointerCancel={cancelPress}
                 onClick={() => {
                   // 방금 끌어서 놓은 것이면 지시창까지 같이 열지 않는다
                   if (clickGuard.current) {
@@ -571,7 +630,7 @@ export function SquadPanel({
             <span className="squad-orders-head">
               {locked
                 ? '경기가 끝났습니다'
-                : '선수를 누르면 지시합니다 · 마우스로 위아래로 끌어도 됩니다'}
+                : '이 배치판의 선수를 누르거나 위아래로 끌어 위치를 바꿉니다'}
             </span>
             <div className="squad-order-list">
               {active.length === 0 ? (

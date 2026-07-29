@@ -31,6 +31,12 @@ export const ZONE_RATIO = 0.15
  */
 export const DRAG_START = 6
 
+/** 이만큼 세로로 옮기면 줄을 바꾸려는 뜻으로 본다(px) */
+export const ORDER_DRAG_DISTANCE = 32
+
+/** 경기장 연출에서 개별 지시로 전진·후퇴하는 거리와 같은 값(m) */
+export const ORDER_DEPTH_SHIFT = 22
+
 export type DropTarget =
   /** 두 사람의 화면상 자리를 맞바꾼다 */
   | { kind: 'SWAP'; id: string }
@@ -50,6 +56,41 @@ export interface CardPoint {
   line: Position
 }
 
+/** 지시가 걸린 뒤 카드와 경기장 선수가 함께 머무를 앞뒤 위치 */
+export function displayDepth(depth: number, order: PlayerOrder): number {
+  if (order === 'PUSH_UP') return depth + ORDER_DEPTH_SHIFT
+  if (order === 'DROP_BACK') return depth - ORDER_DEPTH_SHIFT
+  return depth
+}
+
+/**
+ * 새 줄의 카드 사이에서 가장 넓은 빈칸을 고른다.
+ *
+ * 양 끝 카드는 판 밖으로 반쯤 나가지 않게 8~92% 안에 둔다. 같은 너비의
+ * 카드가 늘어서므로 기존 카드 사이 중점을 후보로 보면 겹치지 않는 자리를
+ * 별도 좌표 저장 없이 재현할 수 있다.
+ */
+export function openLane(preferred: number, occupied: number[]): number {
+  if (occupied.length === 0) return Math.max(8, Math.min(92, preferred))
+  const sorted = [...occupied].sort((a, b) => a - b)
+  const candidates = [
+    Math.max(8, Math.min(92, preferred)),
+    8,
+    92,
+    ...sorted.slice(0, -1).map((lane, i) => (lane + sorted[i + 1]) / 2),
+  ]
+  let best = candidates[0]
+  let bestGap = -1
+  for (const candidate of candidates) {
+    const gap = Math.min(...sorted.map((lane) => Math.abs(candidate - lane)))
+    if (gap > bestGap || (gap === bestGap && Math.abs(candidate - preferred) < Math.abs(best - preferred))) {
+      best = candidate
+      bestGap = gap
+    }
+  }
+  return best
+}
+
 /**
  * 끌어다 놓은 지점이 무엇을 뜻하는가.
  *
@@ -63,9 +104,10 @@ export interface CardPoint {
  *    - 다른 줄이면 **지시**다. 뒤쪽 줄로 끌었으면 내려서라, 앞쪽 줄로
  *      끌었으면 올라가라. 이쪽이 사람이 기대하는 것이고 실제로 확률에
  *      걸린다.
- * 2. 카드에서 멀면 **위아래 구역**을 본다. 위는 상대 골문, 아래는 우리
- *    골문이다.
- * 3. 둘 다 아니면 아무 일도 없다. 잘못 놓았을 때 되돌아가는 길이다.
+ * 2. 카드에서 멀면 **시작점에서 움직인 방향**을 본다. 위는 상대 골문,
+ *    아래는 우리 골문이다. 판 끝까지 끌 필요는 없다.
+ * 3. 세로 이동이 작거나 가로 이동이면 아무 일도 없다. 잘못 놓았을 때
+ *    되돌아가는 길이다.
  */
 export function resolveDrop(
   from: CardPoint,
@@ -90,6 +132,11 @@ export function resolveDrop(
   }
 
   if (fieldHeight <= 0) return { kind: 'NONE' }
+  const dx = point.x - from.x
+  const dy = point.y - from.y
+  if (Math.abs(dy) >= ORDER_DRAG_DISTANCE && Math.abs(dy) > Math.abs(dx)) {
+    return { kind: 'ORDER', order: dy < 0 ? 'PUSH_UP' : 'DROP_BACK' }
+  }
   const t = point.y / fieldHeight
   if (t <= ZONE_RATIO) return { kind: 'ORDER', order: 'PUSH_UP' }
   if (t >= 1 - ZONE_RATIO) return { kind: 'ORDER', order: 'DROP_BACK' }
