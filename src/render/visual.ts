@@ -1793,16 +1793,23 @@ export class VisualMatch {
    * **우리 팀이든 상대든 같은 기준을 쓴다** — 공을 가진 쪽이 팀과 무관하게
    * 이 함수를 거치므로 갈릴 여지가 없다.
    *
-   * 8m 92% · 12m 82% · 16.5m 57% · 20m 38% · 25m 10% · 27m 이상 0%
+   * 박스 안은 수비가 붙어도 84% 이상을 유지한다. 슛을 한 번 포기한 뒤의
+   * 판단이 거의 항상 패스(압박 시 96%)라, 예전의 45% 감점은 문전일수록
+   * 백패스가 늘어나는 역전 현상을 만들었다.
+   *
+   * 8m 98% · 16.5m 96% · 20m 59% · 25m 9% · 26m 이상 0%
    */
   private shotWant(p: VPlayer, nearest: number): number {
     const gx = this.goalX(p.side)
     const gd = Math.hypot(gx - p.x, GOAL_MID - p.y)
     // 각이 닫혀 있으면 못 쏜다. 골라인 옆 코너에서 때리는 것은 축구가 아니다
     if (Math.abs(p.y - GOAL_MID) > 7 + gd * 0.7) return 0
-    let want = clamp(1.15 - (gd - 6) * 0.055, 0, 0.92)
-    // 코앞에 몸을 던지면 쏠 각이 없다. 이때는 내주는 것이 정답이다
-    if (nearest < 1.7) want *= 0.45
+    let want = gd <= 16.5
+      ? clamp(1.04 - gd * 0.005, 0.94, 0.98)
+      : clamp(0.94 - (gd - 16.5) * 0.1, 0, 0.94)
+    // 수비가 발앞에 있어도 문전에서는 슛이 우선이다. 완전히 같은 확률로
+    // 두면 압박이 무의미해지므로 막힐 여지만 작게 남긴다
+    if (nearest < 1.7) want *= 0.88
     return want
   }
 

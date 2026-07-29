@@ -110,9 +110,9 @@ const MULTI = SEEDS.map((seed) => watch({ ...P, seed }).frames)
  *
  * 골·골킥·박스 안 슛은 한 판에 한두 번뿐이다. 여섯 판으로 비율을 재면
  * 한 번의 차이로 판정이 뒤집혀, 밸런싱과 무관한 변경에도 테스트가 깨진다.
- * 이 열네 판은 그런 사건에만 쓴다.
+ * 이 서른여섯 판은 그런 사건에만 쓴다.
  */
-const WIDE = Array.from({ length: 24 }, (_, i) => watch({ ...P, seed: P.seed + 500 + i * 13 }).frames)
+const WIDE = Array.from({ length: 36 }, (_, i) => watch({ ...P, seed: P.seed + 500 + i * 13 }).frames)
 
 describe('공과 선수의 연결 — 출시 기준', () => {
   const { frames } = watch()
@@ -556,7 +556,7 @@ describe('슛 — 거리가 멀수록 빗나간다', () => {
   /**
    * 모든 슛에서 (거리, 빗나감, 득점 여부)를 뽑는다.
    *
-   * **드문 사건 표본(24판)을 쓴다.** 판당 슛이 세 번 안팎이고 여기서
+   * **드문 사건 표본(36판)을 쓴다.** 판당 슛이 세 번 안팎이고 여기서
    * 다시 득점/무득점과 원/근거리로 네 칸으로 쪼개므로, 여섯 판으로는
    * 한 칸에 한두 개만 남아 비교가 성립하지 않는다.
    */
@@ -978,15 +978,14 @@ describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
     expect(kicks.length).toBeGreaterThan(400)
   })
 
-  it('박스 안에서는 슛이 패스보다 많다', () => {
-    // 실제 축구다. 골라인 16.5미터 안에서 각이 열려 있으면 대부분 슛이다.
-    // 고치기 전에는 박스 안에서 패스 26회 대 슛 7회였다
+  it('박스 안에서는 네 번 중 세 번 이상 슛한다', () => {
+    // 실제 축구다. 골라인 16.5미터 안에서 각이 열려 있으면 슛이 우선이다.
+    // 단순히 패스보다 한 번만 많게 두면 문전 백패스가 계속 눈에 띌 수 있다.
     const box = kicks.filter((k) => k.goalDist <= 16.5)
     expect(box.length, '박스 안 표본').toBeGreaterThan(5)
     const shots = box.filter((k) => k.kind === 'SHOT').length
-    expect(shots, `박스 안 슛 ${shots} vs 패스 ${box.length - shots}`).toBeGreaterThan(
-      box.length - shots,
-    )
+    expect(shots / box.length, `박스 안 슛 ${shots} vs 패스 ${box.length - shots}`)
+      .toBeGreaterThanOrEqual(0.75)
   })
 
   it('먼 데서는 패스가 슛보다 많다', () => {
@@ -1006,12 +1005,17 @@ describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
     expect(rate(16.5, 25)).toBeGreaterThan(rate(25, 40))
   })
 
-  it('우리 팀과 상대가 같은 기준으로 쏜다', () => {
-    // 사용자 요구다 — "컴퓨터든 우리팀이든". 한쪽만 슛을 쏘면 안 된다
+  it('우리 팀과 상대 모두 박스 안에서는 슛이 우선이다', () => {
+    // 사용자 요구다 — "컴퓨터든 우리팀이든". 존재만 확인하면 한쪽이
+    // 문전에서 계속 패스하는 회귀를 잡지 못하므로 팀별 비율까지 고정한다.
     for (const side of ['H', 'A']) {
-      const box = kicks.filter((k) => k.side === side && k.goalDist <= 20)
+      const box = kicks.filter((k) => k.side === side && k.goalDist <= 16.5)
       const shots = box.filter((k) => k.kind === 'SHOT').length
-      expect(shots, `${side} 팀의 골대 20m 안 슛 ${shots}회`).toBeGreaterThan(0)
+      expect(box.length, `${side} 팀의 박스 안 판단 표본`).toBeGreaterThan(2)
+      expect(
+        shots / box.length,
+        `${side} 팀의 박스 안 슛 ${shots} vs 패스 ${box.length - shots}`,
+      ).toBeGreaterThanOrEqual(0.75)
     }
   })
 
