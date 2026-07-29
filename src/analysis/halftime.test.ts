@@ -110,6 +110,17 @@ describe('하프타임 주장 정리', () => {
     }
   })
 
+  it('작은 회복도 고장으로 오해하지 않게 많이 뛴 선수의 한계를 말한다', () => {
+    for (const problem of FIRST_HALF) {
+      const h = buildHalftime(problem, playOut(problem))
+      const recovery = h.lines.find((line) => line.id === 'recovery')
+      expect(recovery).toBeDefined()
+      expect(recovery!.text).toContain('체력을 많이 쓴 선수')
+      expect(recovery!.text).toContain('쉬어도 많이 돌아오지 않습니다')
+      expect(recovery!.text).toContain('후반 교체')
+    }
+  })
+
   it('같은 시드는 같은 정리를 만든다', () => {
     for (const problem of FIRST_HALF) {
       const a = buildHalftime(problem, playOut(problem))

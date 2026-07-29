@@ -1,4 +1,5 @@
 import { getPlayer } from '../sim/squad'
+import { HALFTIME_RECOVERY } from '../sim/constants'
 import { withJosa } from './josa'
 import type { MatchState, Problem } from '../sim/types'
 
@@ -163,6 +164,21 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
         ? `${worst.num}번 체력이 ${worst.stamina}까지 떨어졌습니다.`
         : `${tired.length}명이 체력 45 아래입니다. 가장 낮은 건 ${worst.num}번 ${worst.stamina}입니다.`,
       'BAD',
+    )
+  }
+
+  /**
+   * 회복 폭이 작은 선수를 보고 "기능이 고장 났다"고 읽지 않게 먼저
+   * 설명한다. 수동 휴식은 일부 피로를 덜지만 전반에 많이 소모한 체력까지
+   * 되돌리지는 못하고, 후반 초 경기력 저하도 남는다는 연구 방향에 맞춘다.
+   *
+   * 되돌림 스위치를 0으로 둔 빌드에서는 실제 회복이 없으므로 이 줄도
+   * 숨긴다.
+   */
+  if (HALFTIME_RECOVERY.rate > 0) {
+    say(
+      'recovery',
+      '숨을 고를 시간은 있지만, 전반에 체력을 많이 쓴 선수는 쉬어도 많이 돌아오지 않습니다. 후반 교체를 고민할 만합니다.',
     )
   }
 

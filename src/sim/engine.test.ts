@@ -511,13 +511,139 @@ describe('전반에서 후반으로 이어진다', () => {
     expect(outAfter).toEqual(outBefore)
   })
 
-  it('하프타임에 체력이 회복되지 않는다', () => {
-    // 15분 쉰다고 90분치 체력이 돌아오지는 않는다
+  it('하프타임에는 전반을 뛰고 후반에도 남은 선수만 조금 회복한다', () => {
     const first = simulate(P, [])
     const next = carryToNextHalf(first.final)
     for (const before of first.final.players) {
       const after = next.players.find((p) => p.id === before.id)!
-      expect(after.stamina).toBe(before.stamina)
+      if (before.onPitch && !before.out) {
+        expect(after.stamina).toBeGreaterThanOrEqual(before.stamina)
+      } else {
+        // 퇴장·부상 선수와 벤치는 전반을 끝까지 뛴 선수가 아니다
+        expect(after.stamina).toBe(before.stamina)
+      }
+    }
+    expect(next.awayStamina).toBeGreaterThan(first.final.awayStamina)
+  })
+
+  it('하프타임 교체 선수와 퇴장·부상·벤치 선수에게 회복을 잘못 주지 않는다', () => {
+    const base = createState(P)
+    const goalkeeper = HOME_XI.find((player) => player.pos === 'GK')!
+    const outgoing = HOME_XI.find((player) => player.pos === 'DF')!
+    const removed = HOME_XI.find(
+      (player) => player.id !== outgoing.id && player.pos === 'DF',
+    )!
+    const incoming = BENCH.find((player) => player.pos === outgoing.pos)!
+    const unusedBench = BENCH.find((player) => player.id !== incoming.id)!
+    const stamina = new Map<string, number>([
+      [goalkeeper.id, 40],
+      [outgoing.id, 35],
+      [removed.id, 20],
+      [incoming.id, 70],
+      [unusedBench.id, 65],
+    ])
+    const before = {
+      ...base,
+      players: base.players.map((player) => {
+        const value = stamina.get(player.id)
+        if (player.id === removed.id) {
+          return { ...player, stamina: value!, onPitch: false, out: true }
+        }
+        return value === undefined ? player : { ...player, stamina: value }
+      }),
+      pendingSubs: [
+        { out: outgoing.id, in: incoming.id, atTick: TOTAL_TICKS },
+      ],
+      awayStamina: 60,
+    }
+    const after = carryToNextHalf(before)
+    const of = (id: string) => after.players.find((player) => player.id === id)!
+
+    // 골키퍼도 전반을 뛴 우리 선수이므로 회복한다
+    expect(of(goalkeeper.id).stamina).toBeGreaterThan(stamina.get(goalkeeper.id)!)
+    // 하프타임에 나간 선수와 막 들어온 선수 둘 다 회복 대상이 아니다
+    expect(of(outgoing.id).onPitch).toBe(false)
+    expect(of(outgoing.id).stamina).toBe(stamina.get(outgoing.id))
+    expect(of(incoming.id).onPitch).toBe(true)
+    expect(of(incoming.id).stamina).toBe(stamina.get(incoming.id))
+    // 퇴장·부상 이탈자와 아직 안 뛴 후반 교체 후보도 그대로다
+    expect(of(removed.id).stamina).toBe(stamina.get(removed.id))
+    expect(of(unusedBench.id).stamina).toBe(stamina.get(unusedBench.id))
+    // 상대는 개인 명단이 아니라 팀 체력 하나지만 같은 휴식을 받는다
+    expect(after.awayStamina).toBeGreaterThan(before.awayStamina)
+  })
+
+  it('단일 되돌림 값을 0으로 두면 우리와 상대 체력이 모두 그대로다', () => {
+    const halftime = simulate(P, []).final
+    const next = carryToNextHalf(halftime, 0)
+    for (const before of halftime.players) {
+      expect(
+        next.players.find((player) => player.id === before.id)!.stamina,
+      ).toBe(before.stamina)
+    }
+    expect(next.awayStamina).toBe(halftime.awayStamina)
+  })
+
+  it('쉬고 나서도 후반 킥오프 체력은 전반 킥오프보다 낮다', () => {
+    /**
+     * 회복이 전반의 소모를 지워버리면 후반이 더 힘들지 않다. 고정된
+     * 숫자를 비교하지 않고, 실제 다섯 국면의 같은 선수와 상대 팀이
+     * 전반 시작 때보다 덜 남았는지만 본다.
+     */
+    for (const problem of PROBLEMS) {
+      for (let seed = 0; seed < 10; seed++) {
+        const replay = { ...problem, seed: problem.seed + seed }
+        const firstKickoff = createState(replay)
+        const halftime = simulate(replay, []).final
+        const secondKickoff = carryToNextHalf(halftime)
+        for (const after of secondKickoff.players.filter(
+          (player) => player.onPitch && !player.out,
+        )) {
+          const before = firstKickoff.players.find(
+            (player) => player.id === after.id,
+          )
+          if (before?.onPitch && !before.out) {
+            expect(after.stamina, `${problem.id} / ${after.id}`).toBeLessThan(
+              before.stamina,
+            )
+          }
+        }
+        expect(
+          secondKickoff.awayStamina,
+          `${problem.id} / 상대`,
+        ).toBeLessThan(firstKickoff.awayStamina)
+      }
+    }
+  })
+
+  it('실제 전반 데이터 100명 이상에서도 지친 선수가 더 많이 회복하지 않는다', () => {
+    const observed: Array<{ stamina: number; recovery: number }> = []
+    for (const problem of PROBLEMS) {
+      // 다섯 국면 × 시드 30개라 실제 피치 위 선수 1,500명 이상을 본다.
+      for (let seed = 0; seed < 30; seed++) {
+        const halftime = simulate(
+          { ...problem, seed: problem.seed + seed },
+          [],
+        ).final
+        const second = carryToNextHalf(halftime)
+        for (const before of halftime.players.filter(
+          (player) => player.onPitch && !player.out,
+        )) {
+          const after = second.players.find((player) => player.id === before.id)!
+          observed.push({
+            stamina: before.stamina,
+            recovery: after.stamina - before.stamina,
+          })
+        }
+      }
+    }
+    expect(observed.length).toBeGreaterThan(100)
+    observed.sort((a, b) => a.stamina - b.stamina)
+    for (let index = 1; index < observed.length; index++) {
+      expect(
+        observed[index].recovery + Number.EPSILON,
+        `체력 ${observed[index - 1].stamina.toFixed(2)} → ${observed[index].stamina.toFixed(2)}`,
+      ).toBeGreaterThanOrEqual(observed[index - 1].recovery)
     }
   })
 

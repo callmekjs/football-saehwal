@@ -9,8 +9,8 @@ import {
 import { drawTick, resolveAttacks, type TickDraws } from './attack'
 import type { Coefficients } from './tactics'
 import { resolveEvents } from './events'
-import { drainTick, effectiveFactor } from './stamina'
-import { AWAY_FATIGUE, STAMINA } from './constants'
+import { drainTick, effectiveFactor, recoverAtHalftime } from './stamina'
+import { AWAY_FATIGUE, HALFTIME_RECOVERY, STAMINA } from './constants'
 import { shiftAwayShape } from './awayShape'
 import {
   bestFinishing,
@@ -477,9 +477,10 @@ export function judge(state: MatchState, objective: Problem['objective']): boole
  * 사용자가 지적했다 — *"전반전이 끝나면 후반전으로 넘어가야지 계속
  * 전반전에만 있어."* 전반을 고르면 전반만 뛰고 끝나 있었다.
  *
- * **경기는 이어진다.** 점수·체력·경고·퇴장·남은 교체 카드·포메이션·전술·
- * 걸어둔 지시가 그대로 후반으로 넘어간다. 하프타임에 회복되는 것은 없다 —
- * 실제 축구도 15분 쉰다고 체력이 돌아오지 않는다.
+ * **경기는 이어진다.** 점수·경고·퇴장·남은 교체 카드·포메이션·전술·
+ * 걸어둔 지시가 그대로 후반으로 넘어간다. 체력만 하프타임 휴식분을
+ * 조금 되찾는다. 완전 회복이 아니라, 많이 소모한 선수일수록 회복 폭도
+ * 작다.
  *
  * **초기화하는 것:** 시계(0틱), 그 반의 통계, 사건 기록, 그리고 대기 중이던
  * 교체다. 통계와 기록을 이어붙이면 후반 화면이 전반 숫자까지 합쳐 보여줘
@@ -492,7 +493,23 @@ export function judge(state: MatchState, objective: Problem['objective']): boole
  *
  * **순수 함수다.** 난수를 쓰지 않으므로 매 틱 18개의 수열과 무관하다.
  */
-export function carryToNextHalf(state: MatchState): MatchState {
+export function carryToNextHalf(
+  state: MatchState,
+  recoveryRate: number = HALFTIME_RECOVERY.rate,
+): MatchState {
+  /**
+   * 전반을 실제로 뛴 선수만 회복 후보로 기억한다.
+   *
+   * 퇴장·부상 선수와 벤치는 빠진다. 아래에서 하프타임 교체를 먼저 끝낸
+   * 뒤에도 피치에 남은 후보만 회복하므로, 막 들어온 교체 선수와 막 나간
+   * 선수 어느 쪽에도 휴식 보너스가 붙지 않는다.
+   */
+  const recoveryEligible = new Set(
+    state.players
+      .filter((player) => player.onPitch && !player.out)
+      .map((player) => player.id),
+  )
+
   // 대기 중이던 교체를 먼저 성사시킨다
   let players = state.players
   for (const p of state.pendingSubs) {
@@ -504,6 +521,11 @@ export function carryToNextHalf(state: MatchState): MatchState {
           : s,
     )
   }
+  players = players.map((player) =>
+    recoveryEligible.has(player.id) && player.onPitch && !player.out
+      ? { ...player, stamina: recoverAtHalftime(player.stamina, recoveryRate) }
+      : player,
+  )
 
   return {
     ...state,
@@ -540,6 +562,9 @@ export function carryToNextHalf(state: MatchState): MatchState {
         state.score[0] * 11 + state.score[1] * 17 + 3,
       ),
     },
+    // 상대는 개인별 상태가 아니라 팀 체력 하나로 추적한다. 우리와 같은
+    // 회복식을 써야 한쪽만 라커룸에서 쉬는 경기가 되지 않는다.
+    awayStamina: recoverAtHalftime(state.awayStamina, recoveryRate),
   }
 }
 
