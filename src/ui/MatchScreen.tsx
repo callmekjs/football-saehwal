@@ -6,6 +6,8 @@ import { judge } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
+import { PRESETS, presetOf } from '../analysis/presets'
+import { buildBriefing, type Briefing } from '../analysis/briefing'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
@@ -37,26 +39,56 @@ const inAddedTime = (tick: number, kickoff: number) =>
 export const addedTimeOf = (kickoff: number) => kickoff + 15 - 90
 
 /**
- * 이름 붙은 전술 — 레버 세 개를 한 번에 세운다.
+ * 급수 타임에 주장이 전하는 상황.
  *
- * 레버를 따로 만지면 스물일곱 조합이 나오는데, 실측으로 그중 열한에서
- * 열다섯 개가 1위와 구분되지 않는다. 선택지는 많은데 뜻이 있는 것은 몇
- * 개뿐이라는 말이다. 게다가 75초짜리 경기에서 세 번 탭할 여유가 없다.
+ * 감독은 벤치에서 판을 다 볼 수 없다. 실제로도 이 시간에 안에서 뛴
+ * 선수가 와서 무엇이 벌어지고 있는지 말해준다. 그 순간을 화면으로
+ * 옮긴 것이다.
  *
- * 실제 축구가 전술을 부르는 방식이 이미 그렇다 — "역습으로 간다"고 하지
- * "라인 낮음 압박 약 폭 보통으로 간다"고 하지 않는다. 이름이 붙으면
- * 무엇을 하려는지가 화면에서 읽히고, 한 번의 탭으로 도달한다.
+ * **문장은 전부 실제 값에서 나온다**(`src/analysis/briefing.ts`).
+ * 지어낸 말이 아니라 명단·국면 데이터·확률 상수를 읽은 결과다.
  *
- * 레버를 없애지는 않았다. 프리셋으로 뼈대를 세우고 레버로 다듬는 것이
- * 감독이 실제로 하는 일이다.
+ * 할 말이 열 줄을 넘을 수 있어서 **급한 넷만 세워두고 나머지는 접는다.**
+ * 오른쪽 열은 세로가 넉넉하지 않고, 열네 줄을 한꺼번에 펴면 벽처럼 보여
+ * 한 줄도 안 읽힌다.
  */
-const PRESETS: Array<{ name: string; hint: string; v: [Level, Level, Level] }> = [
-  { name: '균형', hint: '어느 쪽으로도 치우치지 않는다', v: [1, 1, 1] },
-  { name: '역습', hint: '내려서서 공을 내주고 전환으로 찌른다', v: [0, 0, 1] },
-  { name: '측면 공략', hint: '넓게 벌려 바깥으로 길을 낸다', v: [1, 1, 2] },
-  { name: '전방 압박', hint: '높이 올라가 상대 진영에서 뺏는다', v: [2, 2, 1] },
-  { name: '밀집 수비', hint: '중앙을 촘촘히 닫는다. 대신 바깥이 열린다', v: [1, 2, 0] },
-]
+function CaptainBrief({ briefing }: { briefing: Briefing }) {
+  return (
+    <div className="captain-brief">
+      <p className="captain-who">
+        <span className="captain-num" aria-hidden>
+          {briefing.speaker}
+        </span>
+        <span>
+          <b>{briefing.speaker}번</b> 주장이 상황을 전합니다
+        </span>
+      </p>
+
+      <ul className="captain-lines">
+        {briefing.core.map((line) => (
+          <li key={line.id} data-tone={line.tone === 'ALERT' ? 'alert' : undefined}>
+            <span className="captain-topic">{line.topic}</span>
+            {line.text}
+          </li>
+        ))}
+      </ul>
+
+      {briefing.more.length > 0 && (
+        <details className="captain-more">
+          <summary>더 듣기 · {briefing.more.length}줄</summary>
+          <ul className="captain-lines">
+            {briefing.more.map((line) => (
+              <li key={line.id} data-tone={line.tone === 'ALERT' ? 'alert' : undefined}>
+                <span className="captain-topic">{line.topic}</span>
+                {line.text}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  )
+}
 
 function Levers({
   tactics,
@@ -71,8 +103,7 @@ function Levers({
     ['WIDTH', '수비 폭', tactics.width],
   ] as const
 
-  const current = [tactics.line, tactics.press, tactics.width]
-  const matched = PRESETS.find((p) => p.v.every((x, i) => x === current[i]))
+  const matched = presetOf(tactics)
 
   return (
     <section className="panel tactics-panel">
@@ -354,12 +385,7 @@ export function MatchScreen({
   }, [phase])
 
   const passed = judge(state, problem.objective)
-  const activePreset = PRESETS.find(
-    (preset) =>
-      preset.v[0] === state.tactics.line &&
-      preset.v[1] === state.tactics.press &&
-      preset.v[2] === state.tactics.width,
-  )
+  const activePreset = presetOf(state.tactics)
   const setup = `${state.formation} · ${activePreset?.name ?? '직접 맞춤'}`
   const orderCount = state.players.filter((s) => s.onPitch && !s.out && s.order !== 'NONE').length
 
@@ -476,19 +502,20 @@ export function MatchScreen({
           */}
           {phase === 'READY' && (
             <section className="panel side-note">
-              <h2>급수 타임</h2>
+              <h2>
+                급수 타임
+                <span style={{ color: 'var(--dim)', fontWeight: 400 }}>
+                  {' '}
+                  · 후반 {kickoff}분 · 시계 정지
+                </span>
+              </h2>
+              {/*
+                목표도 시작 시각도 이미 점수판에 떠 있다. 같은 말을 여기
+                다시 적으면 그만큼 주장의 말이 화면 밖으로 밀려난다.
+              */}
               <div className="side-note-body">
                 <strong>{problem.title}</strong>
-                <span>{objective}</span>
-                <p className="hydration-note">
-                  지금은 <b>시계가 멈춰</b> 있습니다. 왼쪽 전술판에서 선수 지시와 포메이션을,
-                  가운데에서 전술을 모두 걸어두고 나가세요. 휘슬이 울리면{' '}
-                  <b>75초 동안 멈추지 않습니다.</b>
-                </p>
-                <small>
-                  후반 {kickoff}분 시작 · 추가시간 {addedTimeOf(kickoff)}분 · 앞 감독이 걸어둔
-                  지시를 물려받았습니다
-                </small>
+                <CaptainBrief briefing={buildBriefing(problem, state)} />
                 <button
                   className="kickoff-button"
                   onClick={() => {

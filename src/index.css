@@ -847,6 +847,21 @@ button {
 .squad-stamina i { display: block; height: 100%; background: var(--accent); }
 .squad-stamina i[data-low='on'] { background: var(--away); }
 
+/*
+ * 상대 판은 우리 판만큼 높을 이유가 없다.
+ *
+ * 위의 356px 은 **44px 손가락 표적**이 세로로 겹치지 않는 최소치다.
+ * 상대 카드는 누를 수 없어서 38px 이고, 상대 대형에서 세로로 가장
+ * 빡빡한 자리(수비 x84 와 미드필더 x66)는 정의역 64 에서 18 만큼,
+ * 즉 안쪽 높이의 28% 떨어져 있다. 38px 을 확보하는 데 필요한 안쪽은
+ * 136px 이고 위아래 여백 52px 을 더해도 188px 이다. 240px 이면 세로
+ * 간격이 52px 로 벌어져 여유가 있다.
+ *
+ * 이 116px 이 급수 타임에 주장이 말할 자리가 된다. 상대 배치는 읽기만
+ * 하는 것이고, 주장이 전하는 상황은 지금 판단에 직접 쓰인다.
+ */
+.squad-shape.away { min-height: 240px; }
+
 /* 상대 카드는 누를 수 없다. 표적이 아니므로 작아도 된다 */
 .away .squad-card,
 .squad-card.away {
@@ -1029,8 +1044,8 @@ button {
 
 .side-note-body {
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 7px;
+  padding: 10px;
 }
 
 .side-note-body > strong { font-size: 15px; }
@@ -1080,25 +1095,131 @@ button {
 .side-orders li.dim { background: var(--panel-2); color: var(--dim); }
 
 /*
- * 급수 타임 안내.
+ * 급수 타임 — 주장이 상황을 전한다.
  *
  * 킥오프 전 화면이 "설정 메뉴"가 아니라 "경기 안의 한 장면"으로 읽혀야
- * 한다. 감독이 선수들을 불러 모아 지시하는 시간이라는 것을 한 줄로
- * 말해주면, 왜 지금은 다 만질 수 있고 왜 휘슬 뒤에는 시계가 안 멈추는지가
- * 함께 설명된다.
+ * 한다. 안내문 대신 안에서 뛴 선수가 말을 걸면, 왜 지금은 다 만질 수
+ * 있고 왜 휘슬 뒤에는 시계가 안 멈추는지가 장면 안에서 설명된다.
+ *
+ * 할 말이 열 줄을 넘을 수 있어서 급한 넷만 세워두고 나머지는 접었다.
+ * 오른쪽 열은 세로가 넉넉하지 않고, 열네 줄을 한꺼번에 펴면 벽처럼
+ * 보여서 한 줄도 안 읽힌다.
  */
-.hydration-note {
-  margin: 0;
-  padding: 10px 11px;
+.captain-brief {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
   border-radius: 8px;
   border-left: 3px solid var(--accent);
   background: var(--panel-2);
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.65;
 }
 
-.hydration-note b { color: var(--accent); font-weight: 600; }
+.captain-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--dim);
+  font-size: 10.5px;
+}
+
+.captain-who b { color: var(--text); font-weight: 650; }
+
+/* 등번호만 있는 명단이라 말하는 사람도 등번호로 세운다 */
+.captain-num {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #08271a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.captain-lines {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.captain-lines li {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/*
+ * 급한 줄은 색만으로 구분하지 않는다. 왼쪽 띠라는 **모양**이 함께 붙어야
+ * 색을 구분하기 어려운 사람도 같은 것을 읽는다.
+ */
+.captain-lines li[data-tone='alert'] {
+  border-left: 3px solid var(--warn);
+  color: var(--text);
+}
+
+/* 무엇에 대한 말인지. 접힌 목록에서 눈이 먼저 잡는 표식이다 */
+.captain-topic {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+
+.captain-more > summary {
+  /* 손가락 표적. 접는 줄도 버튼과 같은 크기여야 한다 */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.captain-more > summary::-webkit-details-marker { display: none; }
+
+/* 펼침 표시는 색이 아니라 모양이다. 열리면 화살표가 돌아간다 */
+.captain-more > summary::before {
+  content: '▸';
+  font-size: 10px;
+  transition: transform 0.12s;
+}
+
+.captain-more[open] > summary::before { transform: rotate(90deg); }
+
+.captain-more[open] > summary { margin-bottom: 5px; }
+
+/*
+ * 펼친 부분은 안에서 굴린다.
+ *
+ * 안 그러면 "더 듣기"를 누르는 순간 오른쪽 열이 열 줄만큼 길어지고,
+ * 세 열이 같은 높이에서 끝난다는 약속이 깨진다. 무엇보다 아래에 있는
+ * 경기 재개 버튼이 화면 밖으로 밀려난다.
+ */
+.captain-more .captain-lines {
+  max-height: 208px;
+  overflow-y: auto;
+}
 
 .kickoff-button {
   min-height: 56px;
