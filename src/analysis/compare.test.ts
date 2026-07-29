@@ -1,24 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../data/problems.json' with { type: 'json' }
-import type { FormationId } from '../sim/formations'
-import type { Level, Problem } from '../sim/types'
+import { toProblem } from '../sim/problems'
+import type { Problem } from '../sim/types'
 import { compareDecisions } from './compare'
 
 function problemAt(index: number): Problem {
-  const p = raw[index]
-  return {
-    ...p,
-    score: [p.score[0], p.score[1]],
-    initialFormation: p.initialFormation as FormationId,
-    initialTactics: p.initialTactics as { line: Level; press: Level; width: Level },
-    objective: p.objective as Problem['objective'],
-    recommendation: {
-      ...p.recommendation,
-      formation: p.recommendation.formation as FormationId,
-      tactics: p.recommendation.tactics as { line: Level; press: Level; width: Level },
-    },
-    staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
-  }
+  return toProblem(raw[index])
 }
 
 describe('경기 분석', () => {

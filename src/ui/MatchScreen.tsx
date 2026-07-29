@@ -416,10 +416,19 @@ export function MatchScreen({
   problem,
   kickoff,
   onExit,
+  onRetry,
 }: {
   problem: Problem
   kickoff: number
   onExit: () => void
+  /**
+   * 다시 도전. 없으면 **같은 시작 조건으로** 처음부터 다시 한다.
+   *
+   * 시작 조건(체력·경고·앞 감독이 걸어둔 지시와 전술)은 국면 시드에서
+   * 뽑으므로, 같은 시드로 다시 시작하면 방금 본 것과 똑같은 판이 나온다.
+   * 새 판을 받으려면 바깥에서 시드를 바꿔줘야 한다.
+   */
+  onRetry?: () => void
 }) {
   const { state, phase, start, reset, setLever, setFormation, substitute, setOrder, decisions } =
     useMatch(problem)
@@ -671,12 +680,13 @@ export function MatchScreen({
                 <button
                   className="kickoff-button"
                   onClick={() => {
-                    reset()
                     setActiveTab('TACTICS')
+                    if (onRetry) onRetry()
+                    else reset()
                   }}
                 >
                   다시 도전
-                  <small>같은 국면을 처음부터</small>
+                  <small>같은 국면 · 새로운 시작 조건</small>
                 </button>
               </div>
             </section>

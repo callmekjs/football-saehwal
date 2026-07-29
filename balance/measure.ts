@@ -8,58 +8,10 @@ import raw from '../src/data/problems.json' with { type: 'json' }
 import { simulate } from '../src/sim/engine'
 import { FORMATION_IDS, type FormationId } from '../src/sim/formations'
 import { getPlayer, initialPlayers } from '../src/sim/squad'
-import type { Decision, Level, Objective, PlayerOrder, Problem } from '../src/sim/types'
+import { toProblem } from '../src/sim/problems'
+import type { Decision, Level, PlayerOrder, Problem } from '../src/sim/types'
 
-/**
- * JSON 을 Problem 으로 좁힌다.
- *
- * JSON 모듈은 score 를 number[] 로, line 을 number 로 읽으므로 그대로는
- * 튜플과 Level 에 맞지 않는다. 통째로 캐스팅하면 국면 데이터에 오타가
- * 있어도 조용히 통과하므로, 필드마다 명시적으로 옮기면서 검사한다.
- */
-export function toProblem(p: (typeof raw)[number]): Problem {
-  const level = (v: number, field: string): Level => {
-    if (v !== 0 && v !== 1 && v !== 2) {
-      throw new Error(`${p.id}: ${field} 는 0·1·2 중 하나여야 하는데 ${v} 다`)
-    }
-    return v
-  }
-  if (p.score.length !== 2) throw new Error(`${p.id}: score 는 두 개여야 한다`)
-  if (p.objective.type !== 'SURVIVE' && p.objective.type !== 'EQUALIZE') {
-    throw new Error(`${p.id}: objective.type 이 ${p.objective.type} 다`)
-  }
-
-  return {
-    id: p.id,
-    title: p.title,
-    order: p.order,
-    seed: p.seed,
-    subsLeft: p.subsLeft,
-    awayCount: p.awayCount,
-    booked: [...p.booked],
-    unavailable: [...p.unavailable],
-    // JSON 은 국면마다 키가 달라 유니온으로 읽힌다. 명시적으로 좁힌다
-    staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
-    initialFormation: p.initialFormation as FormationId,
-    score: [p.score[0], p.score[1]],
-    initialTactics: {
-      line: level(p.initialTactics.line, 'line'),
-      press: level(p.initialTactics.press, 'press'),
-      width: level(p.initialTactics.width, 'width'),
-    },
-    recommendation: {
-      formation: p.recommendation.formation as FormationId,
-      tactics: {
-        line: level(p.recommendation.tactics.line, 'recommendation.line'),
-        press: level(p.recommendation.tactics.press, 'recommendation.press'),
-        width: level(p.recommendation.tactics.width, 'recommendation.width'),
-      },
-      explanation: p.recommendation.explanation,
-    },
-    objective: p.objective as Objective,
-  }
-}
-
+/** 국면 파싱은 `src/sim/problems.ts` 한 자리에만 둔다 */
 export const problems = raw.map(toProblem)
 
 /**

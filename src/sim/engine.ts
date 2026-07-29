@@ -13,6 +13,7 @@ import {
   minDefenderSpeed,
   onPitchCount,
 } from './squad'
+import { rollSetup } from './setup'
 import { EVENTS, TOTAL_TICKS } from './constants'
 import type {
   Decision,
@@ -37,12 +38,19 @@ export function mentalityOf(score: [number, number]): Mentality {
 }
 
 export function createState(problem: Problem): MatchState {
-  const players = initialPlayers(problem)
+  /**
+   * 시작 조건은 국면 시드에서 뽑는다.
+   *
+   * 경기용 난수와 **분리된 스트림**을 쓰고 여기서 한 번만 소비한다.
+   * 매 틱 18개를 뽑는 `drawTick()` 의 수열은 한 톨도 안 바뀐다.
+   */
+  const rolled = rollSetup(problem, initialPlayers(problem))
+  const players = rolled.players
   return {
     tick: 0,
     score: [...problem.score] as [number, number],
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
-    tactics: { ...problem.initialTactics },
+    tactics: rolled.tactics,
     formation: problem.initialFormation,
     ball: { x: 0.5, y: 0.5, owner: 'HOME', tilt: 0 },
     stats: { homeAttempt: 0, awayAttempt: 0, homeShot: 0, awayShot: 0, setPiece: 0, behind: 0 },

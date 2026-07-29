@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import raw from './data/problems.json' with { type: 'json' }
+import { toProblem } from './sim/problems'
 import { Backdrop } from './ui/Backdrop'
 import { MatchScreen, addedTimeOf } from './ui/MatchScreen'
-import type { FormationId } from './sim/formations'
-import type { Level, Objective, Problem } from './sim/types'
+import type { Problem } from './sim/types'
 
 /** 국면 카드에 띄울 정보. 국면 데이터에서 파생한다 */
 interface Entry {
@@ -38,40 +38,6 @@ const SUMMARY: Record<string, string> = {
   p04: '1-0으로 이기는데 한 명이 퇴장당했다',
 }
 
-function toProblem(p: (typeof raw)[number]): Problem {
-  const level = (v: number): Level => {
-    if (v !== 0 && v !== 1 && v !== 2) throw new Error(`${p.id}: 레버 값이 0·1·2가 아니다`)
-    return v
-  }
-  return {
-    id: p.id,
-    title: p.title,
-    order: p.order,
-    seed: p.seed,
-    subsLeft: p.subsLeft,
-    awayCount: p.awayCount,
-    booked: [...p.booked],
-    unavailable: [...p.unavailable],
-    staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
-    initialFormation: p.initialFormation as FormationId,
-    score: [p.score[0], p.score[1]],
-    initialTactics: {
-      line: level(p.initialTactics.line),
-      press: level(p.initialTactics.press),
-      width: level(p.initialTactics.width),
-    },
-    recommendation: {
-      formation: p.recommendation.formation as FormationId,
-      tactics: {
-        line: level(p.recommendation.tactics.line),
-        press: level(p.recommendation.tactics.press),
-        width: level(p.recommendation.tactics.width),
-      },
-      explanation: p.recommendation.explanation,
-    },
-    objective: p.objective as Objective,
-  }
-}
 
 function FixtureCard({
   entry,
@@ -135,14 +101,28 @@ export function App() {
   )
 
   const [picked, setPicked] = useState<Entry | null>(null)
+  /**
+   * 몇 번째 도전인가.
+   *
+   * 시작 조건(체력·경고·앞 감독이 걸어둔 지시와 전술)은 국면 시드에서
+   * 뽑는다. 시드를 고정해두면 같은 국면을 몇 번을 해도 **완전히 같은
+   * 판**이 나와, 한 번 푼 뒤로는 같은 답을 다시 입력하는 것이 된다.
+   * 도전할 때마다 시드를 옮겨 새 판을 받는다.
+   *
+   * 옮기는 폭이 큰 소수인 이유: 시드를 1씩 더하면 이웃한 판끼리 난수가
+   * 비슷해 보일 수 있다. 멀리 떨어뜨리면 그럴 일이 없다.
+   */
+  const [attempt, setAttempt] = useState(0)
 
   if (picked) {
+    const problem = { ...picked.problem, seed: picked.problem.seed + attempt * 7919 }
     return (
       <MatchScreen
-        key={picked.problem.id}
-        problem={picked.problem}
+        key={`${picked.problem.id}#${attempt}`}
+        problem={problem}
         kickoff={picked.kickoff}
         onExit={() => setPicked(null)}
+        onRetry={() => setAttempt((n) => n + 1)}
       />
     )
   }
@@ -176,7 +156,13 @@ export function App() {
             시계는 멈추지 않고, 내린 결정은 되돌릴 수 없다.
           </p>
           <div className="hero-cta">
-            <button className="cta" onClick={() => setPicked(entries[0])}>
+            <button
+              className="cta"
+              onClick={() => {
+                setPicked(entries[0])
+                setAttempt((n) => n + 1)
+              }}
+            >
               바로 킥오프
             </button>
             <a className="cta ghost" href="#fixtures">
@@ -193,7 +179,12 @@ export function App() {
         </div>
         <div className="fixtures">
           {entries.map((e, i) => (
-            <FixtureCard key={e.problem.id} entry={e} n={i + 1} onPick={() => setPicked(e)} />
+            <FixtureCard key={e.problem.id} entry={e} n={i + 1} onPick={() => {
+                setPicked(e)
+                // 들어갈 때마다 새 판이다. 나갔다 다시 들어와서 똑같은
+                // 경기가 나오면 흔들어둔 의미가 없다
+                setAttempt((n) => n + 1)
+              }} />
           ))}
         </div>
       </section>

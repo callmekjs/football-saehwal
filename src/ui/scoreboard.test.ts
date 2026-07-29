@@ -5,8 +5,8 @@ import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
 import { TOTAL_TICKS } from '../sim/constants'
 import raw from '../data/problems.json' with { type: 'json' }
-import type { FormationId } from '../sim/formations'
-import type { Level, Problem } from '../sim/types'
+import { problemById } from '../sim/problems'
+import type { Problem } from '../sim/types'
 
 /**
  * 실제 국면 데이터를 그대로 쓴다.
@@ -16,29 +16,7 @@ import type { Level, Problem } from '../sim/types'
  * 재현하려면 화면이 읽는 것과 같은 데이터를 읽어야 한다.
  */
 function problemOf(id: string): Problem {
-  const p = raw.find((x) => x.id === id)!
-  return {
-    id: p.id,
-    title: p.title,
-    order: p.order,
-    seed: p.seed,
-    subsLeft: p.subsLeft,
-    awayCount: p.awayCount,
-    booked: [...p.booked],
-    unavailable: [...p.unavailable],
-    staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
-    initialFormation: p.initialFormation as FormationId,
-    score: [p.score[0], p.score[1]],
-    initialTactics: {
-      line: p.initialTactics.line as Level,
-      press: p.initialTactics.press as Level,
-      width: p.initialTactics.width as Level,
-    },
-    objective: {
-      type: p.objective.type as 'SURVIVE' | 'EQUALIZE',
-      bonusOnWin: p.objective.bonusOnWin,
-    },
-  }
+  return problemById(id)
 }
 
 describe('점수판 — 끝났을 때 반드시 시뮬과 같다', () => {

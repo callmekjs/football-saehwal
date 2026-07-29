@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import raw from '../data/problems.json' with { type: 'json' }
 import { createState } from '../sim/engine'
 import { EVENTS } from '../sim/constants'
 import { AWAY_XI, BENCH, HOME_SQUAD, getPlayer, minDefenderSpeed } from '../sim/squad'
 import type { MatchState, Problem } from '../sim/types'
+import { PROBLEMS } from '../sim/problems'
 import { CORE_BRIEFING_LINES, buildBriefing, captainOf } from './briefing'
 
-const PROBLEMS = raw as unknown as Problem[]
 const byId = (id: string): Problem => PROBLEMS.find((p) => p.id === id)!
 
 const stateOf = (id: string): MatchState => createState(byId(id))
@@ -72,16 +71,31 @@ describe('주장 브리핑', () => {
   })
 
   it('경고 보유자가 없으면 경고·퇴장 이야기를 아예 하지 않는다', () => {
+    /**
+     * 경고 보유자는 이제 **판마다 다르다**(시작 조건을 시드에서 뽑는다).
+     * 그래서 국면 데이터의 `booked` 가 비었다는 것으로는 아무것도 알 수
+     * 없고, 지금 이 경기 상태에 경고 보유자가 있는지를 봐야 한다.
+     */
     const p = byId('p01')
-    expect(p.booked).toHaveLength(0)
-    const ids = idsOf(stateOf('p01'), p)
+    const clean = {
+      ...stateOf('p01'),
+      players: stateOf('p01').players.map((s) => ({ ...s, booked: false })),
+    }
+    expect(clean.players.every((s) => !s.booked)).toBe(true)
+    const ids = idsOf(clean, p)
     expect(ids).not.toContain('booked')
     expect(ids).not.toContain('send-off-risk')
   })
 
   it('강 압박에서만 퇴장 위험을 말하고, 그 아래에서는 꺼져 있다고 말한다', () => {
     const p = byId('p02')
-    const calm = stateOf('p02')
+    const base = stateOf('p02')
+    // 경고 보유자는 판마다 다르다. 이 테스트가 보는 것은 "경고가 있을 때
+    // 압박에 따라 말이 달라지는가"이므로 한 명을 확실히 세워둔다
+    const calm = {
+      ...withPlayer(base, 'MF06', { booked: true }),
+      tactics: { ...base.tactics, press: 0 as const },
+    }
     expect(idsOf(calm, p)).toContain('booked')
     expect(idsOf(calm, p)).not.toContain('send-off-risk')
 
@@ -91,8 +105,13 @@ describe('주장 브리핑', () => {
   })
 
   it('체력이 다 멀쩡하면 부상 이야기를 하지 않는다', () => {
+    // 체력도 판마다 흔들린다. 전원을 확실히 채워놓고 본다
     const p = byId('p01')
-    const ids = idsOf(stateOf('p01'), p)
+    const fresh = {
+      ...stateOf('p01'),
+      players: stateOf('p01').players.map((s) => ({ ...s, stamina: 90 })),
+    }
+    const ids = idsOf(fresh, p)
     expect(ids).not.toContain('stamina')
     expect(ids).not.toContain('injury-now')
   })

@@ -1,25 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../data/problems.json' with { type: 'json' }
+import { toProblem } from '../sim/problems'
 import { createState } from '../sim/engine'
-import type { FormationId } from '../sim/formations'
-import type { Level, MatchState, Problem } from '../sim/types'
+import type { MatchState, Problem } from '../sim/types'
 import { buildCoachReport, type CoachMetrics, type OutcomeProfile } from './coach'
 
 function problemAt(index = 1): Problem {
-  const p = raw[index]
-  return {
-    ...p,
-    score: [p.score[0], p.score[1]],
-    initialFormation: p.initialFormation as FormationId,
-    initialTactics: p.initialTactics as { line: Level; press: Level; width: Level },
-    objective: p.objective as Problem['objective'],
-    recommendation: {
-      ...p.recommendation,
-      formation: p.recommendation.formation as FormationId,
-      tactics: p.recommendation.tactics as { line: Level; press: Level; width: Level },
-    },
-    staminaOverrides: { ...p.staminaOverrides } as Record<string, number>,
-  }
+  return toProblem(raw[index])
 }
 
 const profile = (overrides: Partial<OutcomeProfile> = {}): OutcomeProfile => ({
