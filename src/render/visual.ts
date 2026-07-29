@@ -37,6 +37,96 @@ const WALK = 1.4
 const ACCEL = 8.5
 
 /**
+ * 휘슬이 울리면 공도 사람도 선다.
+ *
+ * 사용자가 지적했다 — *"프리킥, 파울 혹은 선수 교체 할때는 모두가 멈춰야
+ * 해."* 맞다. 전에는 재개를 기다리는 동안에도 스물두 명 전원이 계속
+ * 자리를 잡으러 뛰었다. 실측으로 **차는 선수를 뺀 21명 중 15.0명이 초속
+ * 0.5미터를 넘게 움직였고**, 한 판에 348미터를 데드볼 중에 이동했다.
+ * 공만 멈추고 사람은 계속 뛰는 화면은 경기가 멈췄다는 것 자체를 지운다.
+ *
+ * **급정거는 아니다.** 초속 7미터로 뛰던 선수가 한 프레임에 서면 그건
+ * 사람이 아니라 정지 버튼이다. 이 감속도면 전력에서 정지까지 0.6초다.
+ */
+const DEAD_BALL_BRAKE = 12
+/**
+ * 휘슬 뒤 이만큼은 **전원이 완전히 선다**(초).
+ *
+ * 그 뒤로는 걷는다. 실제 축구의 데드볼이 그렇다 — 휘슬에 플레이가 딱
+ * 멎고, 그다음 선수들이 **걸어서** 자리를 잡는다. 끝까지 얼려두면 대형이
+ * 휘슬 순간 모양 그대로 굳어, 재개 뒤 공격이 시작될 자리가 없어진다.
+ * 걷기(초속 1.5m)와 뛰기(초속 4~7m)는 화면에서 확실히 구분된다.
+ */
+const DEAD_BALL_FREEZE = 0.9
+
+/**
+ * 프리킥 벽.
+ *
+ * 경기 규칙 13조다 — **상대 선수는 공에서 9.15미터(10야드) 밖에** 서야
+ * 한다. 화면에서 이 규칙이 보이는 방법은 벽 하나뿐이다. 벽이 없으면
+ * 프리킥이 "공이 잠깐 섰다가 다시 굴러가는 것"과 구분되지 않는다.
+ */
+const WALL_DISTANCE = 9.15
+/**
+ * 벽에 서는 인원은 **골대까지의 거리**가 정한다.
+ *
+ * 실제 축구가 그렇다. 하프라인 근처의 프리킥에는 아무도 벽을 세우지 않고
+ * 라인을 올려 잡는다. 박스 앞이면 서너 명이 어깨를 붙인다. 인원을 늘 같게
+ * 두면 미드필드 반칙에도 네 명이 줄을 서는 이상한 그림이 된다.
+ */
+const wallSize = (toGoal: number): number => (toGoal > 34 ? 0 : toGoal > 24 ? 2 : 3)
+/**
+ * 벽에 선 선수 사이의 간격(미터).
+ *
+ * 실제 벽은 어깨를 붙여 0.5미터쯤이다. 여기서 1.5미터인 이유는 `separate`
+ * 가 **모든 선수에게 1.4미터의 개인 공간**을 강제하기 때문이다. 그보다
+ * 좁게 세우면 벽이 매 프레임 밀려나 흔들린다.
+ */
+const WALL_GAP = 1.5
+
+/**
+ * 상대가 반칙하는 조건과 빈도.
+ *
+ * 시뮬은 **우리 반칙만** 센다 — 경고와 퇴장이 우리 쪽에만 걸리기 때문이다.
+ * 그래서 화면에서 프리킥은 언제나 상대 것이었고, 우리가 프리킥을 얻는
+ * 장면이 한 판에 한 번도 없었다. 실제 축구는 양 팀이 비슷하게 반칙한다
+ * (90분에 팀당 10~12회 → 15분 구간에 1.8회).
+ *
+ * **왜 태클 성공에 걸지 않았는가.** 처음에는 상대의 태클이 성공하는
+ * 순간에 걸었는데, 실측으로 여섯 판에 1~3번뿐이었다. 상대는 레버가 없어
+ * 성향으로 압박하고, 버스를 세운 상대는 5.5미터 밖에 서 있어 발끝이 닿는
+ * 거리(1.7m)까지 오는 시간이 판당 0.1초였다. 반칙이 판당 0.17회밖에 안
+ * 나왔다.
+ *
+ * 지금은 **경합 시간**에 건다. 우리가 공을 가졌고 상대 수비수가 6미터
+ * 안에 붙어 있는 시간이 판당 8초쯤이고, 그동안 초당 이 비율로 반칙이
+ * 난다. 실제 축구의 반칙도 "붙어 있는 시간"에 비례한다.
+ *
+ * 여기서 만드는 것은 **상대의 반칙뿐**이다. 우리 반칙은 `syncFouls` 가
+ * 시뮬 기록에서 옮기므로, 여기서 또 만들면 우리 반칙이 두 배가 된다.
+ * 경기 결과·점수·시뮬 난수는 건드리지 않는다 — 연출 전용 난수다.
+ */
+const FOUL_RANGE = 6
+const FOUL_RATE = 0.11
+/**
+ * 재개 뒤 이 시간 동안은 반칙을 불지 않는다(초).
+ *
+ * 규칙상 상대는 9.15미터 밖에 서 있으므로 공을 다시 넣는 선수가 곧바로
+ * 반칙을 당할 수 없다. 이게 없으면 재개가 끝나자마자 다음 반칙이 걸려
+ * 공이 두 자리 사이를 왔다 갔다 한다.
+ */
+const FOUL_MUTE = 1.5
+/**
+ * 반칙한 상대 선수가 경고를 받는 비율.
+ *
+ * 실제 축구에서 반칙 열 번에 경고 한두 번이다. **상대에게 퇴장은 주지
+ * 않는다** — 시뮬이 상대 인원(`awayCount`)을 자기 기록으로 들고 있어서,
+ * 화면이 마음대로 한 명을 빼면 점수판·브리핑·감독 보고서가 서로 다른
+ * 인원을 말하게 된다.
+ */
+const AWAY_CARD = 0.18
+
+/**
  * 지금 무엇을 하는 중인가 — 노력 단계.
  *
  * 전에는 이 단계가 없었다. 목표까지 5미터를 넘으면 **예외 없이 최고
@@ -471,6 +561,13 @@ export interface Restart {
   takerId: string | null
   /** 재개가 끝나지 않고 늘어지는 것을 막는 보호 시간 */
   age: number
+  /**
+   * 벽에 서는 선수와 각자 설 자리.
+   *
+   * 프리킥에만 있다. 휘슬 직후 전원이 선 뒤, 움직여도 되는 사람은 공을
+   * 놓으러 가는 선수와 이 벽뿐이다.
+   */
+  wall: Array<{ id: string; x: number; y: number }>
 }
 
 export interface Flash {
@@ -777,6 +874,11 @@ export class VisualMatch {
   private flagged: { against: 'HOME' | 'AWAY'; by: Official['kind'] } | null = null
   /** 이 경기에서 분 오프사이드 횟수. 빈도를 재는 데 쓴다 */
   offsideCount = 0
+  /** 상대가 범한 반칙과 그 때문에 나온 경고. 빈도를 재는 데 쓴다 */
+  awayFouls = 0
+  awayCards = 0
+  /** 재개 직후 이 시간 동안은 반칙을 불지 않는다(초). `FOUL_MUTE` 참조 */
+  private foulMute = 0
 
   constructor(state: MatchState, seed: number) {
     this.rng = createRng((seed ^ 0x5bf03635) >>> 0)
@@ -1425,6 +1527,13 @@ export class VisualMatch {
      * 유예를 잡으면 미뤄둔 골이 화면에 영영 안 나오고 점수판만 끝에서
      * 훌쩍 뛴다. 세리머니 1.5초까지 감안해 2.5초를 남긴다
      */
+    /**
+     * 골이 예약됐는데 프리킥을 기다리는 중이면 **빨리 찬다.**
+     *
+     * 벽을 다 세우는 시간이 골 장면을 만들 예산을 먹는다. 실제 축구에서도
+     * 급한 팀은 벽을 기다리지 않고 빨리 재개한다.
+     */
+    if (willScore && this.restart) this.restart.wait = Math.min(this.restart.wait, 0.2)
     const left = (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
     const life = willScore ? clamp(Math.min(GOAL_RUNWAY, left), 0, GOAL_RUNWAY) : 1.8
     this.pending.push({ side, willScore, life, extra: willScore ? GOAL_EXTRA : 0 })
@@ -1787,9 +1896,23 @@ export class VisualMatch {
     this.stopBall()
     this.ball.x = px
     this.ball.y = py
-    this.restart = { kind, side, x: px, y: py, wait: 0.35, takerId: taker?.id ?? null, age: 0 }
+    const wall = kind === 'FREE_KICK' ? this.buildWall(side, px, py) : []
+    /**
+     * 정지 시간은 재개 종류가 정한다.
+     *
+     * 실제 축구가 그렇다. 스로인은 10초 안에 끝나지만 벽을 세우는
+     * 프리킥은 20~40초가 걸린다. 이 화면은 15분을 75초로 압축하므로
+     * 12분의 1이다. **벽이 다 서기 전에 공이 나가면 벽을 세운 의미가
+     * 없다** — 걸어서 5미터를 가는 데 그만큼 걸린다.
+     *
+     * 데드볼 총량은 늘지 않았다. 재개 중 스무 명이 계속 뛰던 것을 멈춰
+     * 세우니 공을 가지러 가는 선수의 길이 열려 재개 자체가 빨라졌다.
+     */
+    const wait = kind !== 'FREE_KICK' ? 0.35 : wall.length > 0 ? 0.95 : 0.5
+    this.restart = { kind, side, x: px, y: py, wait, takerId: taker?.id ?? null, age: 0, wall }
     // 재개에서 직접 받는 공은 오프사이드가 아니다. 규칙이다
     this.offsideMute = OFFSIDE_MUTE
+    this.foulMute = FOUL_MUTE
     /**
      * 누가 신호하는가.
      *
@@ -1805,11 +1928,84 @@ export class VisualMatch {
   }
 
   /**
+   * 프리킥 벽을 세운다.
+   *
+   * 경기 규칙 13조 그대로다. 벽은 **공과 자기 골문 중앙을 잇는 선 위**,
+   * 공에서 9.15미터 지점에 그 선과 직각으로 선다. 골키퍼는 벽에 서지
+   * 않는다 — 벽을 세우는 이유가 골문의 한쪽을 덮는 것인데 골키퍼가 나가
+   * 서면 덮을 사람이 없다.
+   */
+  private buildWall(
+    side: 'HOME' | 'AWAY',
+    x: number,
+    y: number,
+  ): Array<{ id: string; x: number; y: number }> {
+    const defending: 'HOME' | 'AWAY' = side === 'HOME' ? 'AWAY' : 'HOME'
+    const goal = this.ownGoalX(defending)
+    const toGoal = Math.hypot(goal - x, GOAL_MID - y) || 1
+    const n = wallSize(toGoal)
+    if (n <= 0) return []
+    const ux = (goal - x) / toGoal
+    const uy = (GOAL_MID - y) / toGoal
+    const cx = x + ux * WALL_DISTANCE
+    const cy = y + uy * WALL_DISTANCE
+    return this.players
+      .filter((p) => p.side === defending && p.pos !== 'GK')
+      .sort((a, b) => dist(a, { x: cx, y: cy }) - dist(b, { x: cx, y: cy }))
+      .slice(0, n)
+      .map((p, i, arr) => {
+        // 어깨를 붙이고 공-골문 선에 직각으로 늘어선다
+        const off = (i - (arr.length - 1) / 2) * WALL_GAP
+        return {
+          id: p.id,
+          x: clamp(cx - uy * off, 1, PITCH_W - 1),
+          y: clamp(cy + ux * off, 1, PITCH_H - 1),
+        }
+      })
+  }
+
+  /**
+   * 데드볼에 선수를 세운다.
+   *
+   * 급정거가 아니라 감속이다. 멈춘 뒤에는 지금 서 있는 자리를 자기
+   * 목표로 삼아, 재개될 때 몸이 홱 꺾이지 않고 다시 출발한다.
+   */
+  private stand(p: VPlayer, dt: number) {
+    const v = Math.hypot(p.vx, p.vy)
+    if (v > 0.01) {
+      const k = Math.max(0, v - DEAD_BALL_BRAKE * dt) / v
+      p.vx *= k
+      p.vy *= k
+      p.x = clamp(p.x + p.vx * dt, 1, PITCH_W - 1)
+      p.y = clamp(p.y + p.vy * dt, 1, PITCH_H - 1)
+    } else {
+      p.vx = 0
+      p.vy = 0
+    }
+    p.effort = 'WALK'
+    p.settled = true
+    p.tx = p.x
+    p.ty = p.y
+    p.stx = p.x
+    p.sty = p.y
+  }
+
+  /**
    * 재개를 진행한다.
    *
-   * 차는 선수가 공까지 걸어가고, 나머지는 각자 자리를 잡는다. 공이 나간
-   * 순간 전원이 얼어붙으면 정지 화면이 되고, 아무도 안 멈추면 공이 밖에
-   * 나갔다는 것 자체가 안 보인다.
+   * **휘슬이 울리면 먼저 모두가 선다**(`DEAD_BALL_FREEZE`). 그 뒤에도
+   * 뛰는 사람은 공을 놓으러 가는 선수와 벽을 세우는 최소 인원, 그리고
+   * 규칙상 9.15미터 밖으로 물러나야 하는 선수뿐이고, 나머지는 **걸어서**
+   * 자리를 잡는다. 실제 축구의 데드볼이 그 모양이다.
+   *
+   * 전에는 재개를 기다리는 동안에도 전원에게 `setTargets` 와 `movePlayer`
+   * 를 돌렸다. 실측으로 21명 중 15.0명이 계속 뛰었고 한 판에 348미터를
+   * 데드볼 중에 이동했다 — 공만 멈추고 사람은 안 멈추니 경기가 멈췄다는
+   * 것 자체가 화면에서 지워졌다.
+   *
+   * **끝까지 얼려두지는 않는다.** 대형이 휘슬 순간 모양 그대로 굳으면
+   * 재개 뒤에 공격이 시작될 자리가 없어진다. 실측으로 우리 팀의 박스 안
+   * 판단이 36판에 7회에서 0회로 사라졌다.
    */
   private updateRestart(state: MatchState, step: number) {
     const r = this.restart
@@ -1818,6 +2014,18 @@ export class VisualMatch {
     r.age += step
 
     this.setTargets(state)
+    /**
+     * 골이 예약돼 있으면 **빨리 재개한다.**
+     *
+     * 화면은 골을 예약해두고 진짜 공격을 만든 뒤에 보여주는데, 데드볼
+     * 동안에는 그 예약의 시계가 멈춘다(그래야 재개를 기다리던 공이
+     * 골망으로 순간이동하지 않는다). 반칙이 늘면 그 멈춘 시간이 쌓여
+     * 골 장면이 25초 창을 넘겨 사라진다 — 실측으로 서른아홉 골 중
+     * 둘이 그렇게 없어졌다. 실제 축구에서도 급한 팀은 벽을 안 기다린다.
+     */
+    const hurry = this.pending.some((q) => q.willScore)
+    if (hurry) r.wait = Math.min(r.wait, 0.1)
+    const moving = new Set<string>()
     const taker = this.byId(r.takerId)
     if (taker) {
       taker.tx = r.x
@@ -1825,10 +2033,60 @@ export class VisualMatch {
       taker.stx = r.x
       taker.sty = r.y
       // 공을 주우러 가는 길이다. 여기서 멈춰 서면 재개가 걸린다
-      taker.effort = 'RUN'
+      taker.effort = hurry ? 'SPRINT' : 'RUN'
       taker.settled = false
+      moving.add(taker.id)
     }
-    for (const p of this.players) this.movePlayer(p, step)
+    for (const w of r.wall) {
+      const p = this.byId(w.id)
+      if (!p || moving.has(p.id)) continue
+      p.tx = w.x
+      p.ty = w.y
+      p.stx = w.x
+      p.sty = w.y
+      // 벽은 뛰어가서 서는 것이 아니라 걸어가서 줄을 맞춘다
+      p.effort = 'JOG'
+      p.settled = false
+      moving.add(p.id)
+    }
+    /**
+     * 9.15미터 안에 남은 상대는 물러난다.
+     *
+     * 벽에 서지 않은 선수도 규칙상 그 안에 있을 수 없다. 공이 라인을
+     * 넘어 나간 스로인·골킥에는 이 거리가 없다.
+     */
+    if (r.kind === 'FREE_KICK') {
+      const defending: 'HOME' | 'AWAY' = r.side === 'HOME' ? 'AWAY' : 'HOME'
+      for (const p of this.players) {
+        if (p.side !== defending || p.pos === 'GK' || moving.has(p.id)) continue
+        const d = dist(p, r)
+        if (d >= WALL_DISTANCE) continue
+        const ux = (p.x - r.x) / (d || 1)
+        const uy = (p.y - r.y) / (d || 1)
+        p.tx = clamp(r.x + ux * WALL_DISTANCE, 1, PITCH_W - 1)
+        p.ty = clamp(r.y + uy * WALL_DISTANCE, 1, PITCH_H - 1)
+        p.stx = p.tx
+        p.sty = p.ty
+        p.effort = 'JOG'
+        p.settled = false
+        moving.add(p.id)
+      }
+    }
+
+    /**
+     * **휘슬이 울린 재개에서만 전원이 선다.**
+     *
+     * 사용자가 이름을 댄 것이 프리킥·파울·교체다. 스로인·골킥·코너킥은
+     * 애초에 휘슬이 없고(부심이 깃발로 방향만 준다) 실제 축구에서도 그
+     * 사이에 선수들이 계속 자리를 잡는다. 여기까지 얼리면 데드볼이
+     * 경기의 흐름을 통째로 지운다 — 실측으로 우리 팀의 페널티 지역 안
+     * 공격 판단이 150판에 25회에서 6회로 사라졌다.
+     */
+    const frozen = !hurry && r.kind === 'FREE_KICK' && r.age < DEAD_BALL_FREEZE
+    for (const p of this.players) {
+      if (moving.has(p.id) || !frozen) this.movePlayer(p, step)
+      else this.stand(p, step)
+    }
     this.separate()
 
     this.ball.x = r.x
@@ -1838,11 +2096,11 @@ export class VisualMatch {
     if (r.wait > 0) return
     // 차는 선수가 공에 닿아야 재개된다. 아무도 못 가면(퇴장 등) 오래
     // 붙잡혀 있을 수 없으므로 보호 시간을 둔다
-    if (taker && dist(taker, r) < 2.6) {
+    if (taker && dist(taker, r) < (hurry ? 6 : 2.6)) {
       this.restart = null
       this.giveTo(taker)
       this.armThrow(r.kind, taker)
-    } else if (r.age > 4) {
+    } else if (r.age > (hurry ? 1.6 : 4)) {
       const alt = this.nearestOf(r.side, r) ?? taker
       this.restart = null
       if (alt) {
@@ -2113,6 +2371,7 @@ export class VisualMatch {
       if (this.whistle.life <= 0) this.whistle = null
     }
     if (this.offsideMute > 0) this.offsideMute -= step
+    if (this.foulMute > 0) this.foulMute -= step
   }
 
   /**
@@ -2532,6 +2791,22 @@ export class VisualMatch {
       if (d < 3.2) crowd += 1
     }
 
+    /**
+     * 붙어 있는 수비수가 공이 아니라 사람을 맞힌다 — 상대의 반칙.
+     *
+     * 태클이 성공하는 순간이 아니라 **경합하는 시간**에 건다. 이유는
+     * `FOUL_RATE` 주석에 있다.
+     */
+    if (
+      holder.side === 'HOME' &&
+      taker &&
+      nearest < FOUL_RANGE &&
+      this.rng.next() < dt * FOUL_RATE &&
+      this.tackleFoul(taker, holder)
+    ) {
+      return
+    }
+
     // 발끝이 닿는 거리면 터치하는 순간을 노린 태클이 바로 나올 수 있다
     if (taker && nearest < 1.7 && this.rng.next() < dt * 3.2) {
       this.flash('TACKLE', this.ball.x, this.ball.y)
@@ -2549,6 +2824,37 @@ export class VisualMatch {
       holder.recover = 0.55
       this.giveTo(taker)
     }
+  }
+
+  /**
+   * 늦게 들어간 태클이 반칙이 된다.
+   *
+   * **여기서 만드는 것은 상대의 반칙뿐이다.** 근거와 빈도는 `FOUL_RATE`
+   * 주석에 적었다. 상대에게 퇴장은 주지 않는다 — 시뮬이 상대 인원을 자기
+   * 기록으로 들고 있어 화면이 한 명을 빼면 점수판·브리핑·감독 보고서가
+   * 서로 다른 인원을 말하게 된다. 경고까지가 이 계층이 만들 수 있는
+   * 전부다.
+   */
+  private tackleFoul(tackler: VPlayer, victim: VPlayer): boolean {
+    if (tackler.side !== 'AWAY') return false
+    // 이미 죽어 있는 공에는 반칙이 없다. 예약된 골이 있으면 끊지 않는다 —
+    // 골 장면은 8초 안에 전개를 만들어야 하고 데드볼 몇 초가 그 절반이다
+    if (this.restart || this.pending.length > 0 || this.foulMute > 0) return false
+    const card = this.rng.next() < AWAY_CARD && !tackler.booked
+    this.awayFouls += 1
+    this.beginRestart(
+      'FREE_KICK',
+      'HOME',
+      clamp(victim.x, 2, PITCH_W - 2),
+      clamp(victim.y, 2, PITCH_H - 2),
+    )
+    if (card) {
+      tackler.booked = true
+      this.awayCards += 1
+      // 주심이 그 선수 앞까지 가서 카드를 든다. 휘슬은 이미 불었다
+      this.blowWhistle('CARD', tackler.x, tackler.y, false)
+    }
+    return true
   }
 
   /** 각 선수가 지금 가려는 곳을 정한다 */
@@ -3178,6 +3484,8 @@ export class VisualMatch {
      * 없으면 선수가 그 자리에서 소리 없이 다른 사람으로 바뀐다.
      *
      * 들어오는 선수만 움직인다 — 터치라인에서 자기 자리로 뛰어 들어간다.
+     * **나머지 스물한 명은 선다.** 교체는 주심이 경기를 멈추고 진행하는
+     * 것이라 그동안 다른 선수가 자리를 옮기지 않는다.
      */
     // 공이 날아가는 중이면 도착할 때까지 기다렸다 멈춘다. 공중에서
     // 얼어붙은 공은 고장난 화면과 구분되지 않는다
@@ -3186,7 +3494,10 @@ export class VisualMatch {
       this.subPause -= step
       this.setTargets(state)
       for (const p of this.players) {
-        if (p.side !== 'HOME' || !this.entering.includes(p.num)) continue
+        if (p.side !== 'HOME' || !this.entering.includes(p.num)) {
+          this.stand(p, step)
+          continue
+        }
         p.stx += (p.tx - p.stx) * Math.min(1, step * 5)
         p.sty += (p.ty - p.sty) * Math.min(1, step * 5)
         this.movePlayer(p, step)
@@ -3241,6 +3552,9 @@ export class VisualMatch {
     const holder = this.byId(this.ball.holder)
     if (holder && this.ball.mode === 'HELD') {
       this.updatePressure(holder, step)
+      // 휘슬이 불렸으면 이 프레임은 여기서 끝이다. 아래로 내려가면 이미
+      // 놓아둔 공을 `moveBall` 이 다시 굴리고 `tryPendingShot` 이 집어간다
+      if (this.restart) return
       // 방금 태클로 주인이 바뀌었을 수 있다
       const now = this.byId(this.ball.holder)
       if (now && this.ball.mode === 'HELD') this.decide(now, step)
