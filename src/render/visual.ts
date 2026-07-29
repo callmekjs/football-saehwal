@@ -31,7 +31,64 @@ export const GOAL_MID = PITCH_H / 2
 
 const WALK = 1.4
 const ACCEL = 8.5
-const ARRIVE = 1.1
+
+/**
+ * 지금 무엇을 하는 중인가 — 노력 단계.
+ *
+ * 전에는 이 단계가 없었다. 목표까지 5미터를 넘으면 **예외 없이 최고
+ * 속도**였고, 실측으로 목표까지 평균 13.4미터·5미터 초과가 75.4%였다.
+ * 그래서 골키퍼를 뺀 전 프레임의 **29.1%가 초속 6.5미터를 넘는 전력질주**
+ * 였다. 실제 축구는 1~2%다. 스물두 명이 75초 내내 전력으로 뛰는 화면은
+ * 축구가 아니라 술래잡기다.
+ *
+ * 사람은 목적에 맞는 속도로 움직인다. 자리를 잡을 때는 조깅하고, 공을
+ * 쫓을 때만 전력으로 뛴다. 단계는 **거리가 아니라 지금 하는 일**이 정한다.
+ */
+export type Effort = 'WALK' | 'JOG' | 'RUN' | 'SPRINT'
+const EFFORT: Record<Effort, number> = { WALK: 0.2, JOG: 0.45, RUN: 0.72, SPRINT: 1 }
+const TIERS: Effort[] = ['WALK', 'JOG', 'RUN', 'SPRINT']
+const raise = (e: Effort): Effort => TIERS[Math.min(TIERS.length - 1, TIERS.indexOf(e) + 1)]
+const lower = (e: Effort): Effort => TIERS[Math.max(0, TIERS.indexOf(e) - 1)]
+
+/** 목표에 다가가며 속도를 줄이기 시작하는 거리. 빨리 뛸수록 멀리서부터 줄인다 */
+const SLOW_FROM: Record<Effort, number> = { WALK: 1.5, JOG: 2.5, RUN: 4, SPRINT: 6 }
+
+/**
+ * 목표 근처에서 멈추는 거리와 다시 출발하는 거리.
+ *
+ * 하나의 문턱만 두면 그 값 근처에서 섰다 갔다를 반복해 제자리 진동이
+ * 된다. 멈추는 문턱을 안쪽에, 출발하는 문턱을 바깥쪽에 둔다.
+ *
+ * **문턱은 하는 일에 따라 다르다.** 자리를 잡으러 조깅하는 선수는 3미터면
+ * 다 온 것이고 거기서 더 미세조정하지 않는다. 공을 쫓아 전력으로 뛰는
+ * 선수에게 3미터는 다 온 것이 아니다 — 그 거리에서 멈추면 아무도 공에
+ * 닿지 못한다.
+ */
+const STOP_GAP: Record<Effort, number> = { WALK: 3, JOG: 2.6, RUN: 1.4, SPRINT: 1 }
+const RESTART_GAP: Record<Effort, number> = { WALK: 4.2, JOG: 3.6, RUN: 2.2, SPRINT: 1.6 }
+/** 이 안에 들어오면 한 단 낮춰 마무리한다 */
+const EASE_GAP = 3.4
+/**
+ * 자기 목표에서 이만큼 뒤처지면 한 단 올린다 — 회복 주행.
+ *
+ * 이게 없으면 노력 단계를 넣은 결과가 "몰려다닌다"에서 "늘어져서 못
+ * 따라온다"로 바뀔 뿐이다. 대형이 무너진 선수는 실제로 전력으로 복귀한다.
+ */
+const RECOVER_GAP = 20
+
+/**
+ * 골키퍼는 자기 자리까지 남은 거리로 단계를 정한다.
+ *
+ * 문턱이 필드 선수보다 훨씬 촘촘하다. 골문이 7.32미터인데 2미터를 "다
+ * 왔다"고 치면 골대 한쪽이 통째로 빈다. 상대가 박스로 들어오면 골키퍼는
+ * 8미터를 물러나야 하는데, 그 8미터를 조깅으로 가면 그동안 골문이 비어
+ * 있다 — 골키퍼 위치를 고쳐놓은 작업이 그대로 회귀한다.
+ */
+const gkEffort = (gap: number): Effort =>
+  gap > 5 ? 'SPRINT' : gap > 2 ? 'RUN' : gap > 0.8 ? 'JOG' : 'WALK'
+/** 골키퍼가 "다 왔다"고 치는 거리. 미터 단위로 자리를 잡는다 */
+const GK_STOP = 0.5
+const GK_RESTART = 0.9
 
 /**
  * 공의 물리.
@@ -157,9 +214,6 @@ const TACKLE_REACH = 4.5
  */
 const HOLD_RANGE = 22
 
-/** "아껴 뛰어라" 를 받은 선수의 최고 속도 배수. 혼자 걸어서 자리를 잡는다 */
-const CONSERVE_SPEED = 0.9
-
 export interface VPlayer {
   id: string
   num: number
@@ -203,6 +257,10 @@ export interface VPlayer {
   order: PlayerOrder
   /** 방금 태클을 시도해 몸이 무너진 상태. 잠깐 못 움직인다 */
   recover: number
+  /** 지금 무엇을 하는 중인가. 최고 속도에 곱한다 */
+  effort: Effort
+  /** 자리를 잡고 멈춰 선 상태. 다시 출발하려면 목표가 더 멀어져야 한다 */
+  settled: boolean
 }
 
 export type BallMode = 'HELD' | 'PASS' | 'SHOT' | 'LOOSE'
@@ -589,6 +647,8 @@ export class VisualMatch {
         booked: s.booked,
         order: s.order,
         recover: prev?.recover ?? 0,
+        effort: prev?.effort ?? 'JOG',
+        settled: prev?.settled ?? false,
       })
     })
 
@@ -619,6 +679,8 @@ export class VisualMatch {
         // 지시는 우리 팀에게만 내린다
         order: 'NONE',
         recover: prev?.recover ?? 0,
+        effort: prev?.effort ?? 'JOG',
+        settled: prev?.settled ?? false,
       })
     })
 
@@ -1440,6 +1502,9 @@ export class VisualMatch {
       taker.ty = r.y
       taker.stx = r.x
       taker.sty = r.y
+      // 공을 주우러 가는 길이다. 여기서 멈춰 서면 재개가 걸린다
+      taker.effort = 'RUN'
+      taker.settled = false
     }
     for (const p of this.players) this.movePlayer(p, step)
     this.separate()
@@ -1862,6 +1927,16 @@ export class VisualMatch {
       y: clamp(this.ball.y + this.ball.vy * 0.4, 0, PITCH_H),
     }
 
+    /**
+     * 무조건 전력으로 뛰는 선수 — 아래 보정에서 제외한다.
+     *
+     * 패스를 받으러 가는 선수와, 골이 예약된 팀에서 공을 몰고 있는 선수다.
+     * 리드 패스는 받는 선수가 **계속 달릴 것**을 전제로 공을 앞에 놓고,
+     * 골 연출은 8초 안에 50미터를 밀고 올라가야 장면이 된다. 여기서 한 단
+     * 내려가면 공이 사람을 지나쳐 흐르고 골 장면이 깨진다.
+     */
+    const locked = new Set<string>()
+
     for (const p of this.players) {
       if (p.pos === 'GK') {
         // 골키퍼가 공을 잡았으면 그 자리에서 찬다. 여기서 골라인으로
@@ -1869,6 +1944,8 @@ export class VisualMatch {
         if (holder?.id === p.id) {
           p.tx = p.x
           p.ty = p.y
+          p.effort = 'WALK'
+          locked.add(p.id)
           continue
         }
         /**
@@ -1891,6 +1968,18 @@ export class VisualMatch {
         // 골문 중앙-공 연결선 위의 점. 앞으로 나온 만큼만 옆으로 간다
         const off = ((this.ball.y - GOAL_MID) * out) / Math.max(out, toBall)
         p.ty = clamp(GOAL_MID + off, GOAL_MID - (GOAL_HALF + 2.5), GOAL_MID + (GOAL_HALF + 2.5))
+        /**
+         * 골키퍼의 노력 단계는 **공이 어디 있나가 아니라 자기 자리까지
+         * 얼마나 남았나**로 정한다.
+         *
+         * 공 위치로 정하면 상대 역습이 시작된 순간 골키퍼가 "공이 머니까
+         * 천천히"로 판정되어, 정작 골문으로 물러나야 할 때 걸어서 돌아온다.
+         * 골문을 비운 채 실점하는 그림이 되고, 골키퍼 위치를 고쳐놓은
+         * 작업이 통째로 되돌아간다.
+         */
+        p.effort = gkEffort(Math.hypot(p.tx - p.x, p.ty - p.y))
+        // 아래 보정에서 뺀다. 골키퍼의 단계는 이 한 줄로만 정해진다
+        locked.add(p.id)
         continue
       }
 
@@ -1902,6 +1991,8 @@ export class VisualMatch {
       if (this.ball.mode === 'PASS' && this.ball.targetId === p.id) {
         p.tx = clamp(this.ball.toX, 3, PITCH_W - 3)
         p.ty = clamp(this.ball.toY, 3, PITCH_H - 3)
+        p.effort = 'SPRINT'
+        locked.add(p.id)
         continue
       }
 
@@ -1925,6 +2016,16 @@ export class VisualMatch {
         const run = boxed >= 2 ? 5 : 13
         p.tx = clamp(p.x + (ex / m) * run, 4, PITCH_W - 4)
         p.ty = clamp(p.y + (ey / m) * run, 4, PITCH_H - 4)
+        // 골이 예약된 팀은 공을 몰고 올라갈 시간이 8초뿐이다. 여기서
+        // 속도를 늦추면 골대 앞까지 못 가 골 장면 자체가 사라진다
+        if (this.pending[0]?.willScore && this.pending[0].side === p.side) {
+          p.effort = 'SPRINT'
+          locked.add(p.id)
+        } else {
+          // 몰고 뛰는 것은 빈 몸으로 뛰는 것보다 느리다(별도로 ×0.76).
+          // 갇히면 몸으로 지키며 내줄 곳을 찾는다 — 그때는 뛰지 않는다
+          p.effort = boxed >= 2 ? 'JOG' : 'RUN'
+        }
         continue
       }
 
@@ -1944,9 +2045,23 @@ export class VisualMatch {
          */
         const chasing = this.pending[0]?.willScore && this.pending[0].side === p.side
         const surge = chasing && p.pos !== 'DF' ? 14 : 0
-        const push = (p.pos === 'FW' ? 22 : p.pos === 'MF' ? 30 : 32) + surge
+        /**
+         * 물러서라고 한 선수는 공격에도 안 올라간다.
+         *
+         * 전에는 이 지시가 수비할 때만 걸렸다. 공격 전환 때는 그 선수도
+         * 남들과 똑같이 30미터를 밀고 올라갔고, 열두 시드로 평균 위치를
+         * 재보니 지시가 있을 때와 없을 때가 **53.6m 대 53.7m** 였다 —
+         * 화면에서 구분이 안 됐다는 뜻이다. 뒤에 남으라는 지시는 공격
+         * 전환에서 가장 눈에 띄어야 한다. 열 명이 올라갈 때 혼자 남는다
+         */
+        const hold = p.order === 'BACK_OFF' ? 0.3 : 1
+        const push = ((p.pos === 'FW' ? 22 : p.pos === 'MF' ? 30 : 32) + surge) * hold
         let tx = p.homeX + push * dir
         let ty = p.homeY
+        // 공 없이 자리를 잡는 동안은 조깅이다. 실제 축구에서 공을 안 가진
+        // 아홉 명이 전력으로 뛰는 순간은 역습과 침투뿐이다.
+        // 골이 예약된 팀의 앞선은 그 역습을 하는 중이다
+        p.effort = chasing ? (p.pos === 'DF' ? 'RUN' : 'SPRINT') : 'JOG'
 
         if (holder) {
           // 공 있는 쪽으로 팀이 쏠리되 **폭 자체는 유지한다.**
@@ -1961,7 +2076,8 @@ export class VisualMatch {
           ty = PITCH_H / 2 + (p.homeY - PITCH_H / 2) * 0.98 + shift
 
           const d = dist(p, holder)
-          if (d < 24 && p.pos !== 'DF') {
+          // 물러서라고 한 선수는 받으러 나오지도 않는다
+          if (d < 24 && p.pos !== 'DF' && p.order !== 'BACK_OFF') {
             // 가까우면 받을 각을 만든다 — 겹치지 않게 벌려 선다
             const away = p.y > holder.y ? 1 : -1
             ty = clamp(holder.y + away * (8 + (p.pos === 'FW' ? 4 : 0)), 4, PITCH_H - 4)
@@ -1977,6 +2093,8 @@ export class VisualMatch {
              */
             const floor = p.homeX - (p.pos === 'FW' ? 8 : 20) * dir
             tx = dir > 0 ? Math.max(short, floor) : Math.min(short, floor)
+            // 받을 자리로 들어가는 움직임이다. 여기만 뛴다
+            p.effort = 'RUN'
           }
           // 수비라인은 공보다 너무 뒤처지지 않는다. 압축된 블록을 유지한다
           if (p.pos === 'DF') {
@@ -1999,14 +2117,20 @@ export class VisualMatch {
         if (rank === 0) {
           p.tx = px
           p.ty = py
+          // 가장 가까운 한 명만 공을 향해 전력으로 달려든다
+          p.effort = 'SPRINT'
         } else if (rank === 1) {
           // 두 번째는 뒤를 받친다 — 제쳐져도 바로 다음이 붙는다
           p.tx = px - 4 * dir
           p.ty = py + (p.y > py ? 5 : -5)
+          p.effort = 'RUN'
         } else if (rank === 2) {
           p.tx = px - 9 * dir
           p.ty = py + (p.y > py ? 8 : -8)
+          p.effort = 'RUN'
         } else {
+          // 블록을 옮기는 여덟 명은 뛰지 않는다. 수비 대형은 걸어서 밀린다
+          p.effort = 'JOG'
           // 나머지는 블록을 유지한 채 공 쪽으로 통째로 이동한다.
           // 이게 헐거우면 패스 한 번에 압박이 풀려 아무도 안 붙는 화면이
           // 된다. 실제 수비 블록은 공에서 20미터 안쪽에 모여 있다.
@@ -2052,6 +2176,25 @@ export class VisualMatch {
         p.tx = own === GOAL_LINE_AWAY ? Math.min(p.tx, far) : Math.max(p.tx, far)
       }
     }
+
+    /**
+     * 노력 단계 보정 — 자리까지 남은 거리와 감독 지시.
+     *
+     * 단계 자체는 "지금 무엇을 하는 중인가"가 정하고, 여기서는 그것을
+     * 상황에 맞게 한 단씩만 올리고 내린다.
+     */
+    for (const p of this.players) {
+      if (locked.has(p.id)) continue
+      const gap = Math.hypot(p.tx - p.x, p.ty - p.y)
+      // 회복 주행 — 대형에서 크게 뒤처졌으면 한 단 올려 따라붙는다
+      if (gap > RECOVER_GAP) p.effort = raise(p.effort)
+      // 아껴 뛰어라 — 한 단 내린다. 최고 속도에 따로 배수를 곱하면
+      // 단계와 이중으로 곱해져 그 선수만 눈에 띄게 굼떠진다
+      if (p.order === 'CONSERVE') p.effort = lower(p.effort)
+      // 거의 다 왔으면 한 단 낮춰 마무리한다. 여기서 전원을 걷게 만들면
+      // 공을 향해 달려들던 선수까지 3미터 앞에서 걸어 압박이 죽는다
+      if (gap < EASE_GAP) p.effort = lower(p.effort)
+    }
     void state
   }
 
@@ -2093,16 +2236,36 @@ export class VisualMatch {
     // 공을 몰고 뛰는 선수는 빈 몸으로 뛰는 선수보다 느리다.
     // 이것 때문에 수비수가 따라붙을 수 있고, 압박이 실제로 작동한다
     const carrying = this.ball.mode === 'HELD' && this.ball.holder === p.id
-    // 아껴 뛰라고 한 선수는 전력으로 뛰지 않는다. 세 지시 중 화면에서
-    // 가장 알아보기 쉬운 것 — 열 명이 달려드는데 한 명만 걸어서 자리를 잡는다
-    const pace = p.order === 'CONSERVE' ? CONSERVE_SPEED : 1
+    /**
+     * 지금 하는 일이 속도 상한을 정한다.
+     *
+     * 전에는 이 항이 없어서 목표가 5미터만 넘으면 예외 없이 최고 속도로
+     * 뛰었다 — 목표까지 평균 13미터였으니 사실상 전원이 늘 전력질주였다.
+     */
     const top =
-      p.top * (0.62 + 0.38 * clamp(p.stamina, 0, 100) / 100) * (carrying ? 0.76 : 1) * pace
+      p.top * (0.62 + 0.38 * clamp(p.stamina, 0, 100) / 100) * (carrying ? 0.76 : 1) * EFFORT[p.effort]
+
+    /**
+     * 멈추는 문턱과 다시 출발하는 문턱을 따로 둔다(히스테리시스).
+     *
+     * 하나로 두면 그 값 근처에서 매 프레임 섰다 갔다를 반복해 제자리에서
+     * 떠는 그림이 된다.
+     */
+    const stop = p.pos === 'GK' ? GK_STOP : STOP_GAP[p.effort]
+    const go = p.pos === 'GK' ? GK_RESTART : RESTART_GAP[p.effort]
+    if (p.settled) {
+      if (d > go) p.settled = false
+    } else if (d < stop) {
+      p.settled = true
+    }
 
     let wx = 0
     let wy = 0
-    if (d > ARRIVE) {
-      const speed = d < 5 ? WALK + (d / 5) * (top - WALK) : top
+    if (!p.settled) {
+      // 빨리 뛰던 선수일수록 멀리서부터 속도를 줄인다
+      const slow = SLOW_FROM[p.effort]
+      const floor = Math.min(WALK, top)
+      const speed = d < slow ? floor + (d / slow) * (top - floor) : top
       wx = (dx / d) * speed
       wy = (dy / d) * speed
     }
@@ -2369,6 +2532,8 @@ export class VisualMatch {
         p.ty = p.homeY
         p.stx = p.homeX
         p.sty = p.homeY
+        // 킥오프 자리로 돌아가는 길이다. 여기서 전력으로 뛰는 사람은 없다
+        p.effort = 'JOG'
         this.movePlayer(p, step)
       }
       this.ball.x = this.celebration.x

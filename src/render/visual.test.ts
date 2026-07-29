@@ -553,9 +553,15 @@ describe('압박 — 둘러싸이면 공을 잃는다', () => {
 })
 
 describe('슛 — 거리가 멀수록 빗나간다', () => {
-  /** 세 판의 모든 슛에서 (거리, 빗나감, 득점 여부)를 뽑는다 */
+  /**
+   * 모든 슛에서 (거리, 빗나감, 득점 여부)를 뽑는다.
+   *
+   * **드문 사건 표본(24판)을 쓴다.** 판당 슛이 세 번 안팎이고 여기서
+   * 다시 득점/무득점과 원/근거리로 네 칸으로 쪼개므로, 여섯 판으로는
+   * 한 칸에 한두 개만 남아 비교가 성립하지 않는다.
+   */
   const shots: Array<{ d: number; wide: boolean; score: boolean }> = []
-  for (const fs of MULTI) {
+  for (const fs of WIDE) {
     for (let i = 1; i < fs.length; i++) {
       const f = fs[i]
       if (f.mode !== 'SHOT' || fs[i - 1].mode === 'SHOT') continue
@@ -1519,24 +1525,52 @@ describe('시뮬레이션과의 일치', () => {
   })
 
   it('시뮬이 골이라고 하면 화면에서도 골이 들어간다', () => {
-    // 시뮬 점수가 오른 뒤 세리머니까지 이어져야 한다.
-    // 숫자만 바뀌고 화면은 그대로면 골이 사건으로 보이지 않는다
-    const { frames } = watch()
-    let scoredAt = -1
-    for (let i = 1; i < frames.length; i++) {
-      const before = frames[i - 1].state.score
-      const now = frames[i].state.score
-      if (now[0] + now[1] !== before[0] + before[1]) {
-        scoredAt = i
-        break
+    /**
+     * 시뮬 점수가 오른 뒤 세리머니까지 이어져야 한다. 숫자만 바뀌고
+     * 화면은 그대로면 골이 사건으로 보이지 않는다.
+     *
+     * **한 판의 첫 골 하나로 재지 않는다.** 화면은 골을 예약해두고 진짜
+     * 공격을 만든 뒤에 보여주므로 지연이 골마다 크게 다르다(중앙값
+     * 5.5초, 90분위 12.6초). 한 골만 보면 그 골이 빠른 골이었는지를
+     * 재는 셈이라, 연출 품질과 무관하게 앞뒷면이 뒤집힌다.
+     */
+    const delays: number[] = []
+    let goals = 0
+    let missed = 0
+    for (const fs of WIDE) {
+      for (let i = 1; i < fs.length; i++) {
+        const before = fs[i - 1].state.score
+        const now = fs[i].state.score
+        if (now[0] + now[1] === before[0] + before[1]) continue
+        /**
+         * 종료 직전의 골은 여기서 세지 않는다.
+         *
+         * 화면은 골을 예약해두고 진짜 공격을 만든 다음에 보여주는데,
+         * 750틱이 끝나면 화면도 멈추므로 전개를 만들 시간이 **구조적으로**
+         * 없다. 연출 품질의 문제가 아니라 시간이 없는 것이다. 그때는
+         * 점수가 맞는 쪽을 택한다(종료 휘슬 일치는 다른 테스트가 지킨다).
+         */
+        if (fs.length - i < 80) continue
+        goals += 1
+        // 유예 11초 + 전개 연장 4초 안에는 반드시 장면이 나온다
+        let at = -1
+        for (let k = i; k < Math.min(fs.length, i + 150); k++) {
+          if (fs[k].celebrating && !fs[k - 1].celebrating) {
+            at = k
+            break
+          }
+        }
+        if (at < 0) missed += 1
+        else delays.push((at - i) * 0.1)
       }
     }
-    expect(scoredAt, '골이 한 번도 안 났다').toBeGreaterThan(0)
-
-    // 득점 직후 골망에 도달하고 세리머니가 뜬다. 공이 그 팀에게 없으면
-    // 잡을 때까지 최대 2.5초 기다렸다 쏘므로 창은 그만큼 넉넉해야 한다
-    const window = frames.slice(scoredAt, scoredAt + 40)
-    expect(window.some((f) => f.celebrating), '세리머니가 뜨지 않았다').toBe(true)
+    expect(goals, '시간이 남은 골 표본').toBeGreaterThan(10)
+    expect(missed, `장면 없이 지나간 골 ${missed}/${goals}`).toBe(0)
+    const sorted = [...delays].sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
+    // 중앙값이 유예의 절반을 넘으면 대부분의 골이 만료 직전에 억지로
+    // 터진다는 뜻이다 — 전개가 아니라 시간 초과가 골을 만든 것이다
+    expect(median, `골 장면 지연 중앙값 ${median.toFixed(1)}초`).toBeLessThan(7.5)
   })
 })
 
@@ -1682,30 +1716,36 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
 
   it('아웃 재개 중에는 예약된 골이 갑자기 실행되지 않는다', () => {
     /**
-     * 이 시드는 시뮬이 실점을 예약한 뒤 화면의 공이 먼저 골라인 밖으로
-     * 나가 골킥을 준비한다. 예전에는 예약 시간이 데드볼 중에도 줄어,
-     * 골킥을 기다리는 공이 골망으로 순간이동하며 점수판이 올랐다.
+     * 시뮬이 실점을 예약한 뒤 화면의 공이 먼저 라인 밖으로 나가 재개를
+     * 준비하는 상황이다. 예전에는 예약 시간이 데드볼 중에도 줄어, 스로인을
+     * 기다리던 공이 골망으로 순간이동하며 점수판이 올랐다.
+     *
+     * **한 시드로 재지 않는다.** 예약 골과 데드볼이 겹치는 것은 드물어
+     * 마흔 시드 중 여섯에서만 나온다. 한 판을 찍어두면 연출을 조금만
+     * 손봐도 그 판에서 상황이 사라져 표본 0이 된다.
      */
-    const fs = watch({
-      ...P,
-      seed: 40739,
-      initialTactics: { line: 0, press: 0, width: 0 },
-    }).frames
-    const waiting = fs.filter(
-      (f) =>
-        f.restart &&
-        (f.state.score[0] !== f.shown[0] || f.state.score[1] !== f.shown[1]),
+    const all = Array.from({ length: 12 }, (_, i) =>
+      watch({ ...P, seed: 40712 + i, initialTactics: { line: 0, press: 0, width: 0 } }).frames,
+    )
+    const waiting = all.flatMap((fs) =>
+      fs.filter(
+        (f) =>
+          f.restart &&
+          (f.state.score[0] !== f.shown[0] || f.state.score[1] !== f.shown[1]),
+      ),
     )
     expect(waiting.length, '예약된 골을 보존한 데드볼 표본').toBeGreaterThan(0)
     for (const f of waiting) {
       expect(f.celebrating, `${f.restart?.kind} 중 세리머니가 시작됐다`).toBe(false)
     }
 
-    for (let i = 1; i < fs.length; i++) {
-      const scoreChanged = fs[i].shown[0] !== fs[i - 1].shown[0] ||
-        fs[i].shown[1] !== fs[i - 1].shown[1]
-      if (!scoreChanged) continue
-      expect(fs[i].restart, '아웃 재개 중 점수판이 바뀌었다').toBeNull()
+    for (const fs of all) {
+      for (let i = 1; i < fs.length; i++) {
+        const scoreChanged = fs[i].shown[0] !== fs[i - 1].shown[0] ||
+          fs[i].shown[1] !== fs[i - 1].shown[1]
+        if (!scoreChanged) continue
+        expect(fs[i].restart, '아웃 재개 중 점수판이 바뀌었다').toBeNull()
+      }
     }
   })
 
@@ -1782,10 +1822,9 @@ describe('개별 지시가 화면에서 보인다', () => {
    * 한다. 화면에서 아무 일도 안 일어나면 감독은 자기가 무엇을 시켰는지
    * 확인할 방법이 없고, 그러면 지시는 조작이 아니라 설정이 된다.
    */
-  function watchWithOrders(orders: Array<[string, PlayerOrder]>, ticks = 400) {
-    const seed = P.seed
+  function watchWithOrders(orders: Array<[string, PlayerOrder]>, seed = P.seed, ticks = 400) {
     const rng = createRng(seed)
-    let s = createState(P)
+    let s = createState({ ...P, seed })
     s = {
       ...s,
       players: s.players.map((x) => {
@@ -1813,45 +1852,74 @@ describe('개별 지시가 화면에서 보인다', () => {
   const numOf = (id: string) => getPlayer(id).num
   const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length
 
+  /**
+   * 지시 효과는 **세 판을 합쳐서** 잰다.
+   *
+   * 화면 연출은 서로 얽힌 스물두 명의 움직임이라, 한 명을 늦추면 그 판의
+   * 전개 자체가 달라진다. 한 판만 재면 그 판이 어떻게 흘렀는지를 재는
+   * 셈이 되어, 지시가 실제로 보이는지와 무관하게 값이 뒤집힌다. 실제로
+   * "물러서라"는 한 판 기준으로 지시 전 47m·지시 후 49m 였지만, 열두 판
+   * 평균은 57.9m → 48.3m 였다.
+   */
+  const ORDER_SEEDS = [P.seed, P.seed + 1, P.seed + 2]
+  function trackAcross(orders: Array<[string, PlayerOrder]>, num: number) {
+    const xs: number[] = []
+    const vs: number[] = []
+    const others: number[] = []
+    for (const seed of ORDER_SEEDS) {
+      const t = watchWithOrders(orders, seed)
+      for (const f of t.get(num)!) {
+        xs.push(f.x)
+        vs.push(f.v)
+      }
+      for (const [n, list] of t) {
+        if (n === num) continue
+        for (const f of list) others.push(f.v)
+      }
+    }
+    return { x: mean(xs), v: mean(vs), otherV: mean(others) }
+  }
+
   it('골문 앞을 지키라고 하면 우리 골대 앞을 안 떠난다', () => {
     /**
      * 우리 골대는 x=0 이다. 지시를 받은 수비수는 팀이 올라가도 남는다.
      * 공을 직접 몰거나 받으러 갈 때는 나갈 수 있으므로 최댓값이 아니라
      * **평균 위치**로 본다 — 말뚝이 아니라 자리를 지키는 것이 목표다
      */
-    const off = watchWithOrders([])
-    const on = watchWithOrders([['DF04', 'HOLD']])
     const n = numOf('DF04')
-    const before = mean(off.get(n)!.map((f) => f.x))
-    const after = mean(on.get(n)!.map((f) => f.x))
-    expect(after, `평균 위치 ${before.toFixed(1)}m → ${after.toFixed(1)}m`).toBeLessThan(before)
+    const off = trackAcross([], n)
+    const on = trackAcross([['DF04', 'HOLD']], n)
+    expect(on.x, `평균 위치 ${off.x.toFixed(1)}m → ${on.x.toFixed(1)}m`).toBeLessThan(off.x - 5)
     // 페널티 지역 언저리에 머문다. 하프라인 근처면 지시가 안 보인다
-    expect(after).toBeLessThan(PITCH_W / 2)
+    expect(on.x).toBeLessThan(PITCH_W / 2)
   })
 
   it('아껴 뛰라고 하면 그 선수만 느려진다', () => {
-    const off = watchWithOrders([])
-    const on = watchWithOrders([['MF06', 'CONSERVE']])
+    /**
+     * **최고 속도가 아니라 평균 속도로 잰다.** 최고 속도는 400틱 중 한
+     * 프레임의 값이라, 그 선수가 마침 리드 패스를 받으러 달렸는지 아닌지에
+     * 좌우된다. 지시가 걸렸는지는 경기 내내의 평균이 말해준다.
+     */
     const n = numOf('MF06')
-    const before = Math.max(...off.get(n)!.map((f) => f.v))
-    const after = Math.max(...on.get(n)!.map((f) => f.v))
-    expect(after, `최고 속도 ${before.toFixed(1)} → ${after.toFixed(1)} m/s`).toBeLessThan(before)
+    const off = trackAcross([], n)
+    const on = trackAcross([['MF06', 'CONSERVE']], n)
+    expect(on.v, `평균 속도 ${off.v.toFixed(2)} → ${on.v.toFixed(2)} m/s`).toBeLessThan(off.v * 0.85)
 
     // 다른 선수는 그대로 뛴다. 한 명에게 내린 지시가 팀 전체에 걸리면
-    // 화면에서 누구에게 시켰는지 구분할 수가 없다
-    const other = numOf('FW09')
-    expect(Math.max(...on.get(other)!.map((f) => f.v))).toBeCloseTo(
-      Math.max(...off.get(other)!.map((f) => f.v)),
-      1,
-    )
+    // 화면에서 누구에게 시켰는지 구분할 수가 없다. 스물두 명이 서로
+    // 얽혀 움직이므로 완전히 같을 수는 없고, 본인이 받은 만큼 느려지면
+    // 그건 팀에 걸린 것이다
+    expect(
+      Math.abs(on.otherV - off.otherV) / off.otherV,
+      `나머지 평균 속도 ${off.otherV.toFixed(2)} → ${on.otherV.toFixed(2)} m/s`,
+    ).toBeLessThan(0.08)
   })
 
   it('물러서라고 하면 뒤에 남는다', () => {
-    const off = watchWithOrders([])
-    const on = watchWithOrders([['MF06', 'BACK_OFF']])
     const n = numOf('MF06')
-    const before = mean(off.get(n)!.map((f) => f.x))
-    const after = mean(on.get(n)!.map((f) => f.x))
-    expect(after, `평균 위치 ${before.toFixed(1)}m → ${after.toFixed(1)}m`).toBeLessThan(before)
+    const off = trackAcross([], n)
+    const on = trackAcross([['MF06', 'BACK_OFF']], n)
+    // 화면에서 알아볼 수 있어야 한다. 1미터 차이는 안 보인다
+    expect(on.x, `평균 위치 ${off.x.toFixed(1)}m → ${on.x.toFixed(1)}m`).toBeLessThan(off.x - 5)
   })
 })
