@@ -152,3 +152,38 @@ export function awaySlots(id: AwayFormationId, count: number): readonly AwaySlot
   }
   return kept
 }
+
+/**
+ * 성향이 바뀌면 상대도 대형을 바꾼다.
+ *
+ * 사용자가 정했다 — *"상대 포메이션도 전반전 후반전 그리고 실시간으로
+ * 변하게 만들어줘. 그래야 거기에 대응할 수 있게."*
+ *
+ * 실제 축구가 그렇다. 지고 있는 팀은 수비수를 빼고 앞을 늘리고, 앞선
+ * 팀은 뒤를 두껍게 한다. 그 변화가 **화면에 보여야** 감독이 대응할 수
+ * 있다.
+ *
+ * ★ **이게 장식이 아닌 이유.** 대형 자체는 확률에 안 들어간다. 확률을
+ * 정하는 것은 성향(`MENTALITY`)이고 그 계수는 이미 큰 차이다 — 전면
+ * 공세의 상대 공격량은 버스를 세운 팀의 **1.9배**다. 대형은 그 성향의
+ * **눈에 보이는 신호**다. 상대가 4-3-3으로 올라오는 것을 보고 대응하는
+ * 것은 실제로 늘어난 위험에 대응하는 것이다.
+ *
+ * ★ **난수를 쓰지 않는다.** `salt` 로 결정론적으로 고른다. 매 틱 18개의
+ * 수열을 건드리면 저장된 모든 시드가 죽는다.
+ *
+ * 되도록 **지금과 다른 대형**을 고른다. 같은 것이 다시 나오면 감독은
+ * 아무 일도 없었다고 읽는다. 새 성향에 어울리는 것이 지금 것 하나뿐일
+ * 때만 그대로 둔다.
+ */
+export function shiftAwayShape(
+  current: AwayFormationId,
+  mood: keyof typeof AWAY_SHAPE_BY_MOOD,
+  salt: number,
+): AwayFormationId {
+  const pool = AWAY_SHAPE_BY_MOOD[mood]
+  const others = pool.filter((id) => id !== current)
+  const pick = others.length > 0 ? others : pool
+  const index = Math.abs(Math.trunc(salt)) % pick.length
+  return pick[index]
+}

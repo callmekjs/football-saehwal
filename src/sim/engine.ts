@@ -11,6 +11,7 @@ import type { Coefficients } from './tactics'
 import { resolveEvents } from './events'
 import { drainTick, effectiveFactor } from './stamina'
 import { AWAY_FATIGUE, STAMINA } from './constants'
+import { shiftAwayShape } from './awayShape'
 import {
   bestFinishing,
   effectivePos,
@@ -403,6 +404,10 @@ export function tick(state: MatchState, rng: Rng): MatchState {
   const ball = nextBall(state.ball, draws, c, attacks.homeGoals > 0, attacks.awayGoals > 0)
 
   const s = state.stats
+  /** 이번 틱에 점수가 움직였으면 성향을 다시 읽는다 */
+  const nextMood =
+    attacks.homeGoals || attacks.awayGoals || ev.awayGoals ? mentalityOf(score) : state.opponent
+
   return {
     ...state,
     tick: state.tick + 1,
@@ -423,8 +428,28 @@ export function tick(state: MatchState, rng: Rng): MatchState {
     homeCount: onPitchCount(players),
     // 부상은 계획에 없던 교체를 강제한다. 남은 카드가 줄어든다
     subsLeft: ev.forcedSub ? Math.max(0, state.subsLeft - 1) : state.subsLeft,
-    opponent:
-      attacks.homeGoals || attacks.awayGoals || ev.awayGoals ? mentalityOf(score) : state.opponent,
+    opponent: nextMood,
+    /**
+     * 성향이 바뀌면 상대도 대형을 바꾼다.
+     *
+     * 지고 있는 팀은 수비수를 빼고 앞을 늘리고, 앞선 팀은 뒤를 두껍게
+     * 한다. 골이 들어간 그 순간이 실제 축구에서도 벤치가 움직이는
+     * 때다. 감독은 오른쪽 상대 패널에서 그 변화를 보고 대응한다.
+     *
+     * `salt` 는 지금 틱과 점수에서 만든다 — 난수를 쓰지 않으므로 매 틱
+     * 18개의 수열과 무관하고, 같은 시드는 언제나 같은 변화를 낸다.
+     */
+    away:
+      nextMood === state.opponent
+        ? state.away
+        : {
+            ...state.away,
+            formation: shiftAwayShape(
+              state.away.formation,
+              nextMood,
+              state.tick + score[0] * 7 + score[1] * 13,
+            ),
+          },
   }
 }
 
@@ -497,6 +522,24 @@ export function carryToNextHalf(state: MatchState): MatchState {
     // 후반은 킥오프로 다시 시작한다. 전반이 끝난 순간의 공 위치를 물려주면
     // 그 자리에서 경기가 이어지는 것처럼 보인다
     ball: { x: 0.5, y: 0.5, owner: 'AWAY', tilt: 0 },
+    /**
+     * **상대도 하프타임에 대형을 바꾼다.**
+     *
+     * 라커룸은 감독이 판을 다시 짜는 자리다. 우리만 바꾸고 상대는 전반
+     * 그대로 나오면, 후반 급수 타임에 걸어둔 대응이 언제나 맞아떨어진다.
+     * 저쪽도 15분 동안 생각하고 나온다.
+     *
+     * 점수로 성향을 다시 읽고 그에 어울리는 대형을 고른다. 난수를 쓰지
+     * 않으므로 같은 경기는 언제나 같은 후반 상대를 낸다.
+     */
+    away: {
+      ...state.away,
+      formation: shiftAwayShape(
+        state.away.formation,
+        mentalityOf(state.score),
+        state.score[0] * 11 + state.score[1] * 17 + 3,
+      ),
+    },
   }
 }
 
