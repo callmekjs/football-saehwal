@@ -10,6 +10,7 @@ import { PRESETS, presetOf } from '../analysis/presets'
 import { buildBriefing, type Briefing } from '../analysis/briefing'
 import { useVoice, type VoiceHandle } from './useVoice'
 import { applyCommand, parseCommand } from './voice'
+import { scoreboardScore } from './scoreboard'
 import type { Level, MatchState, PlayerOrder, Problem } from '../sim/types'
 
 const LEVER_LABELS = {
@@ -445,17 +446,22 @@ export function MatchScreen({
   })
 
   /**
-   * 점수판에 띄우는 점수.
+   * 연출이 지금까지 실제로 보여준 골.
    *
    * 시뮬은 확률로 득점을 정하는데, 그 순간의 경기 상황이 골을 그릴 수
    * 있는 상황이 아닌 경우가 절반이 넘는다. 그래서 연출은 골을 예약해두고
    * 공격 장면을 만든 다음 보여주고, 점수판은 그 장면에 맞춰 오른다.
    *
-   * **승패 판정은 이 값을 쓰지 않는다.** 아래 `judge(state, ...)` 는
+   * **이 값을 그대로 점수판에 쓰지 않는다.** 아래 `scoreboardScore` 가
+   * 종료 휘슬 뒤에는 시뮬 값으로 바꿔치기한다 — 장면을 못 만든 채
+   * 경기가 끝나면 이 값이 영영 안 오르기 때문이다.
+   *
+   * **승패 판정은 어느 쪽도 쓰지 않는다.** 아래 `judge(state, ...)` 는
    * 시뮬의 점수를 그대로 읽는다.
    */
-  const [shown, setShown] = useState<[number, number]>(problem.score)
-  useEffect(() => setShown(problem.score), [problem])
+  const [scene, setScene] = useState<[number, number]>(problem.score)
+  useEffect(() => setScene(problem.score), [problem])
+  const shown = scoreboardScore(phase === 'DONE', state.score, scene)
   // 휘슬이 울리면 마이크를 놓는다. 급수 타임 밖에서는 듣지 않는다
   const releaseVoice = voice.release
   useEffect(() => {
@@ -562,7 +568,7 @@ export function MatchScreen({
           </div>
 
           <div className="panel pitch-card">
-            <Pitch state={state} seed={problem.seed} live={phase === 'RUNNING'} onScore={setShown} />
+            <Pitch state={state} seed={problem.seed} live={phase === 'RUNNING'} onScore={setScene} />
           </div>
 
           <div className="pane" data-pane="TACTICS">
