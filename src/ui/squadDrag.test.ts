@@ -1,222 +1,153 @@
 import { describe, expect, it } from 'vitest'
+import { FREE_POSITION } from '../sim/constants'
 import {
+  CARD_GAP,
+  CARD_SIZE,
   DRAG_START,
-  ORDER_DRAG_DISTANCE,
-  SWAP_RADIUS,
-  ZONE_RATIO,
+  POSITION_CHOICES,
+  boardPointOf,
   displayDepth,
   dropHint,
-  openLane,
+  isDragMovement,
+  positionZone,
   resolveDrop,
-  swapSeats,
-  type CardPoint,
 } from './squadDrag'
 
-/** 세로로 세운 판. 위가 상대 골문이라 y 가 작을수록 depth 가 크다 */
-const H = 300
+const SIZE = { width: 300, height: 420 }
 
-const card = (id: string, x: number, y: number, depth: number, line: CardPoint['line']) =>
-  ({ id, x, y, depth, line }) as CardPoint
+const placedAt = (x: number, y: number, occupied = [] as Array<{ x: number; y: number }>) => {
+  const target = resolveDrop({ x, y }, SIZE, occupied)
+  expect(target.kind).toBe('PLACE')
+  if (target.kind !== 'PLACE') throw new Error('놓기 좌표가 필요하다')
+  return target.position
+}
 
-const DF_L = card('dfL', 40, 240, 22, 'DF')
-const DF_R = card('dfR', 160, 240, 22, 'DF')
-const MF_L = card('mfL', 40, 150, 45, 'MF')
-const FW = card('fw', 100, 40, 70, 'FW')
-const ALL = [DF_L, DF_R, MF_L, FW]
-
-describe('다른 카드 위에 놓기', () => {
-  it('같은 줄이면 자리를 바꾼다', () => {
-    expect(resolveDrop(DF_L, { x: 160, y: 240 }, H, ALL)).toEqual({ kind: 'SWAP', id: 'dfR' })
+describe('어느 방향으로든 자유 위치 놓기', () => {
+  it('6px 이상 가로·세로·대각선 이동은 모두 드래그다', () => {
+    expect(isDragMovement(DRAG_START, 0)).toBe(true)
+    expect(isDragMovement(0, -DRAG_START)).toBe(true)
+    expect(isDragMovement(5, 5)).toBe(true)
+    expect(isDragMovement(DRAG_START - 1, 0)).toBe(false)
   })
 
-  it('조금 빗나가도 카드 위로 친다', () => {
-    const near = { x: 160 + SWAP_RADIUS - 2, y: 240 }
-    expect(resolveDrop(DF_L, near, H, ALL)).toEqual({ kind: 'SWAP', id: 'dfR' })
+  it('빈 공간에 놓은 실제 지점을 피치 미터로 바꾼다', () => {
+    const centre = placedAt(SIZE.width / 2, SIZE.height / 2)
+    expect(centre.x).toBeCloseTo(FREE_POSITION.pitch.centreX)
+    expect(centre.y).toBeCloseTo(FREE_POSITION.pitch.centreY)
   })
 
-  it('많이 빗나가면 카드 위가 아니다', () => {
-    const far = { x: 160 + SWAP_RADIUS + 10, y: 240 }
-    expect(resolveDrop(DF_L, far, H, ALL).kind).not.toBe('SWAP')
+  it('가로로만 옮겨도 좌우 위치가 달라진다', () => {
+    const left = placedAt(70, 210)
+    const right = placedAt(230, 210)
+    expect(left.x).toBeCloseTo(right.x)
+    expect(left.y).toBeLessThan(right.y)
   })
 
-  it('겹쳐 보이면 더 가까운 카드를 고른다', () => {
-    const between = { x: 150, y: 240 }
-    expect(resolveDrop(MF_L, between, H, ALL)).toEqual({
-      kind: 'ORDER',
-      order: 'DROP_BACK',
-    })
+  it('세로로만 옮겨도 수비·공격 위치가 달라진다', () => {
+    const top = placedAt(150, 80)
+    const bottom = placedAt(150, 340)
+    expect(top.x).toBeGreaterThan(bottom.x)
+    expect(top.y).toBeCloseTo(bottom.y)
   })
 
-  it('앞쪽 줄 선수 위에 놓으면 올라가라가 걸린다', () => {
-    expect(resolveDrop(MF_L, { x: 100, y: 40 }, H, ALL)).toEqual({
-      kind: 'ORDER',
-      order: 'PUSH_UP',
-    })
+  it('대각선으로 옮기면 앞뒤와 좌우가 함께 달라진다', () => {
+    const first = placedAt(80, 330)
+    const second = placedAt(220, 90)
+    expect(second.x).toBeGreaterThan(first.x)
+    expect(second.y).toBeGreaterThan(first.y)
   })
 
-  it('뒤쪽 줄 선수 위에 놓으면 내려서라가 걸린다', () => {
-    expect(resolveDrop(MF_L, { x: 40, y: 240 }, H, ALL)).toEqual({
-      kind: 'ORDER',
-      order: 'DROP_BACK',
-    })
-  })
-
-  it('자기 자신 위에 놓아도 아무 일이 없다', () => {
-    expect(resolveDrop(MF_L, { x: 40, y: 150 }, H, ALL)).toEqual({ kind: 'NONE' })
-  })
-})
-
-describe('위아래 구역', () => {
-  it('위쪽 끝은 상대 골문 — 올라가라', () => {
-    expect(resolveDrop(MF_L, { x: 200, y: H * (ZONE_RATIO - 0.02) }, H, ALL)).toEqual({
-      kind: 'ORDER',
-      order: 'PUSH_UP',
-    })
-  })
-
-  it('아래쪽 끝은 우리 골문 — 내려서라', () => {
-    expect(resolveDrop(MF_L, { x: 200, y: H * (1 - ZONE_RATIO + 0.02) }, H, ALL)).toEqual({
-      kind: 'ORDER',
-      order: 'DROP_BACK',
-    })
-  })
-
-  it('판 밖으로 끌어 올려도 올라가라로 친다', () => {
-    expect(resolveDrop(MF_L, { x: 200, y: -40 }, H, ALL)).toEqual({
-      kind: 'ORDER',
-      order: 'PUSH_UP',
-    })
-  })
-
-  it('가운데는 아무것도 아니다 — 잘못 놓으면 되돌아간다', () => {
-    expect(resolveDrop(MF_L, { x: 220, y: H / 2 }, H, ALL)).toEqual({ kind: 'NONE' })
-  })
-
-  it('판 끝까지 가지 않아도 분명히 위아래로 끌면 지시가 걸린다', () => {
-    expect(resolveDrop(MF_L, { x: MF_L.x, y: MF_L.y - ORDER_DRAG_DISTANCE }, H, ALL))
-      .toEqual({ kind: 'ORDER', order: 'PUSH_UP' })
-    expect(resolveDrop(MF_L, { x: MF_L.x, y: MF_L.y + ORDER_DRAG_DISTANCE }, H, ALL))
-      .toEqual({ kind: 'ORDER', order: 'DROP_BACK' })
-  })
-
-  it('작은 흔들림과 가로 끌기는 지시가 아니다', () => {
-    expect(resolveDrop(MF_L, { x: MF_L.x, y: MF_L.y + DRAG_START + 2 }, H, ALL))
-      .toEqual({ kind: 'NONE' })
-    expect(resolveDrop(MF_L, { x: MF_L.x + 80, y: MF_L.y + 20 }, H, ALL))
-      .toEqual({ kind: 'NONE' })
-  })
-
-  it('위아래가 뒤집히지 않는다', () => {
-    const up = resolveDrop(MF_L, { x: 230, y: 5 }, H, ALL)
-    const down = resolveDrop(MF_L, { x: 230, y: H - 5 }, H, ALL)
-    expect(up).not.toEqual(down)
-    expect(up).toEqual({ kind: 'ORDER', order: 'PUSH_UP' })
-  })
-
-  it('판 높이를 못 재면 아무 일도 하지 않는다', () => {
-    expect(resolveDrop(MF_L, { x: 10, y: 10 }, 0, [])).toEqual({ kind: 'NONE' })
+  it('같은 줄이나 다른 카드 위도 SWAP이 아니라 실제 PLACE다', () => {
+    const occupied = [{ x: 52.5, y: 34 }]
+    const point = boardPointOf(occupied[0], SIZE)
+    const target = resolveDrop(point, SIZE, occupied)
+    expect(target.kind).toBe('PLACE')
+    expect(target).not.toHaveProperty('id')
+    expect(target).not.toHaveProperty('order')
   })
 })
 
-describe('지시 뒤 카드 위치', () => {
-  it('올라가라는 위로, 내려서라는 아래로 이동하고 다른 지시는 자리를 지킨다', () => {
-    const base = 42
-    expect(displayDepth(base, 'PUSH_UP')).toBeGreaterThan(base)
-    expect(displayDepth(base, 'DROP_BACK')).toBeLessThan(base)
-    expect(displayDepth(base, 'CONSERVE')).toBe(base)
+describe('경계와 카드 겹침', () => {
+  it('판 밖에 놓아도 경계 안으로 제한하고 카드 전체가 보인다', () => {
+    const position = placedAt(-999, 999)
+    const p = FREE_POSITION.pitch
+    expect(position.x).toBeGreaterThanOrEqual(p.minX)
+    expect(position.x).toBeLessThanOrEqual(p.maxX)
+    expect(position.y).toBeGreaterThanOrEqual(p.minY)
+    expect(position.y).toBeLessThanOrEqual(p.maxY)
+
+    const point = boardPointOf(position, SIZE)
+    expect(point.x).toBeGreaterThanOrEqual(CARD_SIZE / 2)
+    expect(point.y).toBeLessThanOrEqual(SIZE.height - CARD_SIZE / 2)
   })
 
-  it('새 줄의 기존 카드 사이에서 가장 넓은 빈칸을 고른다', () => {
-    const defenders = [7, 36, 64, 93]
-    const defenderLane = openLane(38, defenders)
-    expect(Math.min(...defenders.map((lane) => Math.abs(defenderLane - lane))))
-      .toBeGreaterThan(13)
-    expect(openLane(62, [38, 62])).toBe(92)
-    expect(openLane(50, [])).toBe(50)
-  })
-})
+  it('다른 카드와 겹치면 가장 가까운 빈자리로 최소 보정한다', () => {
+    const occupied = [{ x: 52.5, y: 34 }]
+    const point = boardPointOf(occupied[0], SIZE)
+    const placed = placedAt(point.x, point.y, occupied)
+    const corrected = boardPointOf(placed, SIZE)
+    const existing = boardPointOf(occupied[0], SIZE)
+    const gap = Math.hypot(corrected.x - existing.x, corrected.y - existing.y)
 
-describe('자리 바꾸기', () => {
-  it('두 사람의 자리 번호가 서로 넘어간다', () => {
-    const seats = new Map([
-      ['a', 1],
-      ['b', 5],
-      ['c', 7],
-    ])
-    const next = swapSeats(seats, 'a', 'b')
-    expect(next.get('a')).toBe(5)
-    expect(next.get('b')).toBe(1)
-    expect(next.get('c')).toBe(7)
+    expect(gap).toBeGreaterThanOrEqual(CARD_SIZE + CARD_GAP - 0.1)
+    expect(gap).toBeLessThan(CARD_SIZE + CARD_GAP + 1)
   })
 
-  it('원래 맵을 고치지 않는다', () => {
-    const seats = new Map([
-      ['a', 1],
-      ['b', 5],
-    ])
-    swapSeats(seats, 'a', 'b')
-    expect(seats.get('a')).toBe(1)
-  })
-
-  it('같은 사람끼리는 바뀌지 않는다', () => {
-    const seats = new Map([['a', 1]])
-    expect(swapSeats(seats, 'a', 'a').get('a')).toBe(1)
-  })
-
-  it('명단에 없는 사람이면 그대로 둔다', () => {
-    const seats = new Map([['a', 1]])
-    const next = swapSeats(seats, 'a', 'zzz')
-    expect(next.get('a')).toBe(1)
-    expect(next.has('zzz')).toBe(false)
-  })
-
-  it('두 번 바꾸면 처음으로 돌아온다', () => {
-    const seats = new Map([
-      ['a', 2],
-      ['b', 9],
-    ])
-    const back = swapSeats(swapSeats(seats, 'a', 'b'), 'a', 'b')
-    expect(back.get('a')).toBe(2)
-    expect(back.get('b')).toBe(9)
+  it('여러 카드 사이에서도 어느 카드와도 겹치지 않는다', () => {
+    const occupied = [
+      { x: 52.5, y: 34 },
+      { x: 52.5, y: 45 },
+      { x: 65, y: 34 },
+    ]
+    const desired = boardPointOf(occupied[0], SIZE)
+    const placed = boardPointOf(placedAt(desired.x, desired.y, occupied), SIZE)
+    for (const position of occupied) {
+      const other = boardPointOf(position, SIZE)
+      expect(Math.hypot(placed.x - other.x, placed.y - other.y))
+        .toBeGreaterThanOrEqual(CARD_SIZE + CARD_GAP - 0.1)
+    }
   })
 })
 
-describe('놓기 전에 알려주는 한 줄', () => {
-  const numOf = (id: string) => (id === 'dfR' ? 3 : 99)
-
-  it('안 되는 이유가 있으면 그것부터 말한다', () => {
-    const hint = dropHint({ kind: 'ORDER', order: 'PUSH_UP' }, '이미 공격수다', numOf, 9)
-    expect(hint).toBe('이미 공격수다')
+describe('3×3 위치 안내와 접근성 대안', () => {
+  it('수비·중원·공격 × 왼쪽·중앙·오른쪽 아홉 자리가 모두 있다', () => {
+    expect(POSITION_CHOICES).toHaveLength(9)
+    expect(new Set(POSITION_CHOICES.map((choice) => choice.depthLabel))).toEqual(
+      new Set(['수비', '중원', '공격']),
+    )
+    expect(new Set(POSITION_CHOICES.map((choice) => choice.laneLabel))).toEqual(
+      new Set(['왼쪽', '중앙', '오른쪽']),
+    )
   })
 
-  it('자리 바꾸기는 배치만 바뀐다고 분명히 말한다', () => {
-    const hint = dropHint({ kind: 'SWAP', id: 'dfR' }, null, numOf, 2)
-    expect(hint).toContain('배치만')
-    expect(hint).toContain('2')
-    expect(hint).toContain('3')
+  it('위치 구역 이름이 실제 좌표와 맞는다', () => {
+    expect(positionZone({ x: 12, y: 8 })).toEqual({ depth: '수비', lane: '왼쪽' })
+    expect(positionZone({ x: 52.5, y: 34 })).toEqual({ depth: '중원', lane: '중앙' })
+    expect(positionZone({ x: 92, y: 61 })).toEqual({ depth: '공격', lane: '오른쪽' })
   })
 
-  it('지시는 방향마다 다른 말을 한다', () => {
-    const up = dropHint({ kind: 'ORDER', order: 'PUSH_UP' }, null, numOf, 6)
-    const down = dropHint({ kind: 'ORDER', order: 'DROP_BACK' }, null, numOf, 6)
-    expect(up).not.toBe(down)
-    expect(up).toContain('올라가라')
-    expect(down).toContain('내려서라')
+  it('드래그 힌트가 앞뒤와 좌우를 함께 말한다', () => {
+    const hint = dropHint(
+      { kind: 'PLACE', position: { x: 90, y: 8 } },
+      null,
+      7,
+    )
+    expect(hint).toContain('공격')
+    expect(hint).toContain('왼쪽')
   })
 
-  it('아무 데나 놓으면 되돌아간다고 말한다', () => {
-    expect(dropHint({ kind: 'NONE' }, null, numOf, 6)).toContain('제자리')
+  it('엔진이 막은 한국어 사유를 위치 안내보다 먼저 보여준다', () => {
+    const reason = '뒤에 수비가 셋은 남아야 한다'
+    expect(
+      dropHint({ kind: 'PLACE', position: { x: 90, y: 34 } }, reason, 4),
+    ).toBe(reason)
   })
 })
 
-describe('탭을 망가뜨리지 않는 상수', () => {
-  it('손 떨림은 드래그가 아니다', () => {
-    expect(DRAG_START).toBeGreaterThan(2)
-    expect(DRAG_START).toBeLessThan(SWAP_RADIUS)
-  })
-
-  it('지시 구역이 판의 절반을 먹지 않는다 — 가운데가 남아야 취소할 수 있다', () => {
-    expect(ZONE_RATIO).toBeGreaterThan(0.05)
-    expect(ZONE_RATIO * 2).toBeLessThan(0.5)
+describe('기존 앞뒤 줄 지시 표시', () => {
+  it('포메이션 기준에서 올라가라/내려서라만 앞뒤로 보인다', () => {
+    expect(displayDepth(45, 'PUSH_UP')).toBeGreaterThan(45)
+    expect(displayDepth(45, 'DROP_BACK')).toBeLessThan(45)
+    expect(displayDepth(45, 'CONSERVE')).toBe(45)
   })
 })

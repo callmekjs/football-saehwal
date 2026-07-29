@@ -6,6 +6,7 @@ import type {
   MatchEventLog,
   MatchState,
   PlayerOrder,
+  PlayerPosition,
   Problem,
   Tactics,
 } from '../sim/types'
@@ -61,6 +62,7 @@ interface Setup {
   formation: FormationId
   tactics: Tactics
   orders: Map<string, PlayerOrder>
+  positions: Map<string, PlayerPosition>
 }
 
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
@@ -84,23 +86,33 @@ function setupAt(problem: Problem, decisions: Decision[], tick: number): Setup {
     formation: problem.initialFormation,
     tactics: { ...problem.initialTactics },
     orders: new Map(),
+    positions: new Map(),
   }
 
   for (const decision of decisions) {
     if (decision.tick > tick) break
-    if (decision.type === 'FORMATION') setup.formation = decision.value
+    if (decision.type === 'FORMATION') {
+      setup.formation = decision.value
+      setup.positions.clear()
+    }
     else if (decision.type === 'LINE') setup.tactics.line = decision.value
     else if (decision.type === 'PRESS') setup.tactics.press = decision.value
     else if (decision.type === 'WIDTH') setup.tactics.width = decision.value
     else if (decision.type === 'ORDER') setup.orders.set(decision.target, decision.order)
+    else if (decision.type === 'POSITION') {
+      if (decision.position) setup.positions.set(decision.target, decision.position)
+      else setup.positions.delete(decision.target)
+    }
   }
   return setup
 }
 
 function setupText(setup: Setup): string {
+  const positionText =
+    setup.positions.size > 0 ? ` · 직접 배치 ${setup.positions.size}명` : ''
   return `${setup.formation} · 라인 ${LEVEL_LABEL.line[setup.tactics.line]} · 압박 ${
     LEVEL_LABEL.press[setup.tactics.press]
-  } · 폭 ${LEVEL_LABEL.width[setup.tactics.width]}`
+  } · 폭 ${LEVEL_LABEL.width[setup.tactics.width]}${positionText}`
 }
 
 function causeOf(event: MatchEventLog): string[] {
@@ -396,13 +408,16 @@ function decisionFindings(
   }
 
   const personnel = decisions.filter(
-    (decision) => decision.type === 'SUB' || decision.type === 'ORDER',
+    (decision) =>
+      decision.type === 'SUB' ||
+      decision.type === 'ORDER' ||
+      decision.type === 'POSITION',
   )
   if (personnel.length > 0) {
     result.push({
       id: 'decision-personnel',
       label: '선수 개입',
-      title: `교체·개별 지시 ${personnel.length}회`,
+      title: `교체·개별 지시·직접 배치 ${personnel.length}회`,
       explanation:
         '선수 단위 개입은 적용 시점까지 기록해 150판 비교에 그대로 재현했습니다.',
       evidence: [

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import raw from '../data/problems.json' with { type: 'json' }
 import { toProblem } from '../sim/problems'
 import { createState } from '../sim/engine'
-import type { MatchState, Problem } from '../sim/types'
+import type { Decision, MatchState, Problem } from '../sim/types'
 import { buildCoachReport, type CoachMetrics, type OutcomeProfile } from './coach'
 
 function problemAt(index = 1): Problem {
@@ -138,5 +138,18 @@ describe('Coach 경기 분석', () => {
       ...report.decisionReview,
     ]
     expect(findings.every((finding) => finding.evidence.length > 0)).toBe(true)
+  })
+
+  it('직접 배치도 선수 개입으로 기록하고 당시 전술 근거에 남긴다', () => {
+    const decisions: Decision[] = [
+      { tick: 20, type: 'POSITION', target: 'MF06', position: { x: 80, y: 12 } },
+    ]
+    const report = buildCoachReport(problemAt(), finalWith({}), decisions, metrics, 77)
+    const personnel = report.decisionReview.find(
+      (finding) => finding.id === 'decision-personnel',
+    )
+
+    expect(personnel?.title).toContain('직접 배치')
+    expect(personnel?.title).toContain('1회')
   })
 })

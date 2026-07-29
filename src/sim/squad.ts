@@ -1,4 +1,5 @@
 import raw from '../data/squads.json' with { type: 'json' }
+import { FREE_POSITION } from './constants'
 import type { Player, PlayerState, Position, Problem } from './types'
 
 type RawEntry = { num: number; pos: string; speed?: number; stamina0?: number; finishing?: number }
@@ -86,6 +87,7 @@ export function initialPlayers(problem: Problem): PlayerState[] {
     booked: problem.booked.includes(p.id),
     out: problem.unavailable.includes(p.id),
     order: 'NONE',
+    position: null,
   }))
 }
 
@@ -105,6 +107,11 @@ export function initialPlayers(problem: Problem): PlayerState[] {
 export function effectivePos(s: PlayerState): Position {
   const base = getPlayer(s.id).pos
   if (base === 'GK') return base
+  if (s.position) {
+    if (s.position.x <= FREE_POSITION.zones.defenceMaxX) return 'DF'
+    if (s.position.x <= FREE_POSITION.zones.midfieldMaxX) return 'MF'
+    return 'FW'
+  }
   if (s.order === 'DROP_BACK') return 'DF'
   if (s.order === 'PUSH_UP') return 'FW'
   return base

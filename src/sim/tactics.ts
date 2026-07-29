@@ -1,4 +1,12 @@
-import { LINE, PRESS, WIDTH, MENTALITY, COUNT_PENALTY, ORDERS } from './constants'
+import {
+  LINE,
+  PRESS,
+  WIDTH,
+  MENTALITY,
+  COUNT_PENALTY,
+  FREE_POSITION,
+  ORDERS,
+} from './constants'
 import { getFormation, type FormationId } from './formations'
 import type { Mentality, PlayerState, Tactics } from './types'
 
@@ -37,6 +45,13 @@ export interface Coefficients {
   widthK: number
   /** 우리 전진 시도가 슈팅 상황까지 갈 확률 배수 */
   openness: number
+}
+
+export interface PositionFactors {
+  /** 우리 전진 시도에 곱해지는 값 */
+  attack: number
+  /** 상대 오픈플레이·배후 침투에 곱해지는 값 */
+  risk: number
 }
 
 const WIDTH_BY_LEVEL = [WIDTH.narrow, WIDTH.normal, WIDTH.wide] as const
@@ -140,6 +155,59 @@ export function applyOrders(c: Coefficients, players: PlayerState[]): Coefficien
   }
 
   return { ...c, oppShotXg, widthK, oppOpen }
+}
+
+/**
+ * 직접 배치한 좌표를 공격 이득과 수비 위험으로 바꾼다.
+ *
+ * x 는 전진 정도, y 는 중앙에서 터치라인 쪽으로 벌어진 정도를 연속값으로
+ * 읽는다. 전진·측면 배치는 공격과 위험을 함께 올리고, 후퇴·중앙 배치는
+ * 둘을 함께 내린다. 어느 한쪽만 움직이면 공짜 이득이 되어 만능 배치가
+ * 생기므로 두 계수는 같은 방향으로 움직인다.
+ *
+ * 직접 배치한 선수가 없으면 null 이다. 호출자는 이때 들어온 계수 객체를
+ * 그대로 돌려줘야 한다 — 1을 곱하는 새 경로조차 만들지 않아 기존 경기와
+ * 비트 단위로 같은 결과를 보존한다.
+ */
+export function positionFactors(players: PlayerState[]): PositionFactors | null {
+  const p = FREE_POSITION.pitch
+  const e = FREE_POSITION.effect
+  let sum = 0
+  let found = false
+
+  for (const state of players) {
+    if (!state.onPitch || state.out || !state.position) continue
+    found = true
+    const forward = (state.position.x - p.centreX) / p.centreX
+    const fromCentre = Math.abs(state.position.y - p.centreY) / p.centreY
+    const lateral = fromCentre * e.lateralScale - e.identity
+    sum += forward * e.forwardWeight + lateral * e.lateralWeight
+  }
+
+  if (!found) return null
+  const rawDelta = sum * e.perPlayerDelta
+  const delta = Math.max(-e.maxDelta, Math.min(e.maxDelta, rawDelta))
+  const multiplier = e.identity + delta
+  return { attack: multiplier, risk: multiplier }
+}
+
+/**
+ * 자유 배치 효과를 최종 전술 계수에 얹는다.
+ *
+ * 전진·측면 배치가 우리 공격만 늘리고 상대 위험을 그대로 두면 전원을
+ * 올리는 것이 공짜가 된다. 그래서 우리 전진 시도와 전환 수비의 두 경로
+ * (오픈플레이·배후 침투)를 같은 거래로 묶는다. 세트피스는 선수의 정확한
+ * 좌표보다 팀 라인과 골문 앞 지시가 담당하므로 여기서 건드리지 않는다.
+ */
+export function applyPositions(c: Coefficients, players: PlayerState[]): Coefficients {
+  const factors = positionFactors(players)
+  if (!factors) return c
+  return {
+    ...c,
+    behind: c.behind * factors.risk,
+    oppOpen: c.oppOpen * factors.risk,
+    widthK: c.widthK * factors.attack,
+  }
 }
 
 /** 이 선수의 체력 소모 배수. 아껴 뛰라고 하면 덜 닳는다 */

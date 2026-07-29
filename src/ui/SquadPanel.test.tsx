@@ -15,6 +15,7 @@ describe('우리 팀 배치판', () => {
         state={stateOf('p04')}
         locked={false}
         onOrder={() => null}
+        onPosition={() => null}
         onFormation={() => undefined}
       />,
     )
@@ -28,6 +29,7 @@ describe('우리 팀 배치판', () => {
         state={stateOf('p02')}
         locked
         onOrder={() => null}
+        onPosition={() => null}
         onFormation={() => undefined}
       />,
     )
@@ -35,6 +37,21 @@ describe('우리 팀 배치판', () => {
     expect((html.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(
       FORMATION_IDS.length,
     )
+  })
+
+  it('자유 배치 캡션과 골키퍼 이동 불가를 한국어로 보여준다', () => {
+    const html = renderToStaticMarkup(
+      <SquadPanel
+        state={stateOf('p02')}
+        locked={false}
+        onOrder={() => null}
+        onPosition={() => null}
+        onFormation={() => undefined}
+      />,
+    )
+    expect(html).toContain('원하는 곳에 놓기')
+    expect(html).toContain('골키퍼는 자리를 옮길 수 없다')
+    expect(html).not.toContain('위아래로 끌어')
   })
 })
 

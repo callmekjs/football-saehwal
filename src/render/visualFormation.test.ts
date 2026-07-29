@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FREE_POSITION } from '../sim/constants'
 import { createState } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
 import { changeFormation } from '../ui/useMatch'
@@ -35,5 +36,34 @@ describe('중앙 경기장의 포메이션 배치', () => {
     const six = visual.players.find((player) => player.side === 'HOME' && player.num === 6)!
     expect(six.pos).toBe('MF')
     expect(six.order).toBe('NONE')
+  })
+
+  it('자유 좌표를 중앙 경기장의 기준 자리로 그대로 쓴다', () => {
+    const { problem, state: base } = stateOf('p02')
+    const position = {
+      x: FREE_POSITION.pitch.maxX,
+      y: FREE_POSITION.pitch.minY,
+    }
+    const state = {
+      ...base,
+      players: base.players.map((player) =>
+        player.id === 'MF06' ? { ...player, position } : player,
+      ),
+    }
+    const visual = new VisualMatch(base, problem.seed)
+    visual.sync(state)
+    const six = visual.players.find((player) => player.side === 'HOME' && player.num === 6)!
+
+    expect(six.homeX).toBe(position.x)
+    expect(six.homeY).toBe(position.y)
+    expect(six.pos).toBe('FW')
+
+    // 팀 라인·폭을 바꿔도 손으로 놓은 선수의 기준 자리는 덮어쓰지 않는다.
+    visual.sync({
+      ...state,
+      tactics: { ...state.tactics, line: 2, width: 2 },
+    })
+    expect(six.homeX).toBe(position.x)
+    expect(six.homeY).toBe(position.y)
   })
 })

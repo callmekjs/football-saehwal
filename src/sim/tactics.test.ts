@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { applyOrders, drainFactorOf, resolveCoefficients } from './tactics'
-import type { Level, PlayerOrder, PlayerState, Tactics } from './types'
+import { FREE_POSITION } from './constants'
+import {
+  applyOrders,
+  applyPositions,
+  drainFactorOf,
+  positionFactors,
+  resolveCoefficients,
+} from './tactics'
+import type { Level, PlayerOrder, PlayerPosition, PlayerState, Tactics } from './types'
 
 const t = (line: Level, press: Level, width: Level): Tactics => ({ line, press, width })
 
@@ -94,13 +101,19 @@ describe('resolveCoefficients', () => {
 })
 
 describe('개별 지시 — applyOrders', () => {
-  const p = (id: string, order: PlayerOrder, onPitch = true): PlayerState => ({
+  const p = (
+    id: string,
+    order: PlayerOrder,
+    onPitch = true,
+    position: PlayerPosition | null = null,
+  ): PlayerState => ({
     id,
     onPitch,
     stamina: 70,
     booked: false,
     out: false,
     order,
+    position,
   })
   const base = () => resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
 
@@ -153,5 +166,84 @@ describe('개별 지시 — applyOrders', () => {
      */
     const c = base()
     expect(applyOrders(c, [p('MF06', 'BACK_OFF')])).toEqual(c)
+  })
+})
+
+describe('자유 배치 — 연속 계수', () => {
+  const p = (
+    id: string,
+    position: PlayerPosition | null,
+    onPitch = true,
+  ): PlayerState => ({
+    id,
+    onPitch,
+    stamina: 70,
+    booked: false,
+    out: false,
+    order: 'NONE',
+    position,
+  })
+  const base = () => resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
+  const pitch = FREE_POSITION.pitch
+
+  it('직접 놓은 선수가 없으면 기존 계수 객체를 그대로 돌려준다', () => {
+    const c = base()
+    const after = applyPositions(c, [
+      p('DF04', null),
+      p('MF06', null),
+      p('FW09', null),
+    ])
+    expect(after).toBe(c)
+    expect(positionFactors([p('DF04', null)])).toBeNull()
+  })
+
+  it('전진·측면 배치는 공격 이득과 수비 대가를 함께 키운다', () => {
+    const frontWide = positionFactors([
+      p('MF06', { x: pitch.maxX, y: pitch.maxY }),
+    ])!
+    const backCentre = positionFactors([
+      p('MF06', { x: pitch.minX, y: pitch.centreY }),
+    ])!
+
+    expect(frontWide.attack).toBeGreaterThan(backCentre.attack)
+    expect(frontWide.risk).toBeGreaterThan(backCentre.risk)
+
+    const c = base()
+    const advanced = applyPositions(c, [
+      p('MF06', { x: pitch.maxX, y: pitch.maxY }),
+    ])
+    expect(advanced.widthK).toBeGreaterThan(c.widthK)
+    expect(advanced.oppOpen).toBeGreaterThan(c.oppOpen)
+    expect(advanced.behind).toBeGreaterThan(c.behind)
+    expect(advanced.setPiece).toBe(c.setPiece)
+  })
+
+  it('앞뒤와 좌우의 정확한 좌표가 각각 연속적으로 계수를 움직인다', () => {
+    const back = positionFactors([
+      p('MF06', { x: FREE_POSITION.zones.defenceMaxX, y: pitch.maxY }),
+    ])!
+    const front = positionFactors([
+      p('MF06', { x: FREE_POSITION.zones.midfieldMaxX, y: pitch.maxY }),
+    ])!
+    expect(front.attack).toBeGreaterThan(back.attack)
+
+    const centre = positionFactors([
+      p('MF06', { x: pitch.centreX, y: pitch.centreY }),
+    ])!
+    const wide = positionFactors([
+      p('MF06', { x: pitch.centreX, y: pitch.maxY }),
+    ])!
+    expect(wide.attack).toBeGreaterThan(centre.attack)
+  })
+
+  it('여러 명을 극단에 놓아도 정해진 상한에서 멈춘다', () => {
+    const enough =
+      Math.ceil(FREE_POSITION.effect.maxDelta / FREE_POSITION.effect.perPlayerDelta) + 1
+    const placed = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        p(`MF${i}`, { x: pitch.maxX, y: pitch.maxY }),
+      )
+
+    expect(positionFactors(placed(enough))).toEqual(positionFactors(placed(enough * 2)))
   })
 })

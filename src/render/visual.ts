@@ -4,7 +4,7 @@ import {
   formationSlotKey,
   slotsForPlayers,
 } from '../sim/formations'
-import { getPlayer } from '../sim/squad'
+import { effectivePos, getPlayer } from '../sim/squad'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, PlayerOrder, Position } from '../sim/types'
 
@@ -666,6 +666,8 @@ export class VisualMatch {
       const num = getPlayer(s.id).num
       const id = `H${num}`
       const prev = keep.get(id)
+      const base = s.position ?? slot
+      const pos = effectivePos(s)
       // 새로 들어온 선수는 터치라인에서 걸어 들어온다
       const entry = this.entryAt.get(id)
       this.entryAt.delete(id)
@@ -673,19 +675,19 @@ export class VisualMatch {
         id,
         num,
         side: 'HOME',
-        pos: slot.pos,
-        x: prev?.x ?? entry?.x ?? slot.x,
-        y: prev?.y ?? entry?.y ?? slot.y,
+        pos,
+        x: prev?.x ?? entry?.x ?? base.x,
+        y: prev?.y ?? entry?.y ?? base.y,
         vx: prev?.vx ?? 0,
         vy: prev?.vy ?? 0,
-        tx: slot.x,
-        ty: slot.y,
-        stx: prev?.stx ?? entry?.x ?? slot.x,
-        sty: prev?.sty ?? entry?.y ?? slot.y,
+        tx: base.x,
+        ty: base.y,
+        stx: prev?.stx ?? entry?.x ?? base.x,
+        sty: prev?.sty ?? entry?.y ?? base.y,
         slot: slotIndex,
-        homeX: slot.x,
-        homeY: slot.y,
-        top: TOP_SPEED[slot.pos],
+        homeX: base.x,
+        homeY: base.y,
+        top: TOP_SPEED[pos],
         stamina: s.stamina,
         booked: s.booked,
         order: s.order,
@@ -884,6 +886,21 @@ export class VisualMatch {
       v.stamina = s.stamina
       v.booked = s.booked
       v.order = s.order
+      v.pos = effectivePos(s)
+      v.top = TOP_SPEED[v.pos]
+      /**
+       * 손으로 놓은 좌표가 이 선수의 기준 자리다.
+       *
+       * 포메이션·라인·폭은 직접 놓지 않은 선수들의 기본 대형을 정한다.
+       * 자유 좌표 위에 그 이동을 다시 더하면 배치판에서 놓은 곳과 중앙
+       * 경기장에서 서는 곳이 달라지고, 정확한 좌표를 읽는 엔진과도
+       * 어긋난다. 그래서 자유 좌표가 있는 동안은 그 값을 그대로 쓴다.
+       */
+      if (s.position) {
+        v.homeX = s.position.x
+        v.homeY = s.position.y
+        continue
+      }
       // 수비라인·폭 설정을 자기 자리에 반영한다.
       // 자리는 배열 순서가 아니라 선수에게 붙어 있는 자리 번호로 찾는다
       const slot = slots[v.slot]

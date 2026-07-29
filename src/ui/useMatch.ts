@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRng, type Rng } from '../sim/rng'
-import { createState, tick, checkSub, checkOrder } from '../sim/engine'
+import { createState, tick, checkSub, checkOrder, checkPosition } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
-import type { Decision, Level, MatchState, PlayerOrder, Problem } from '../sim/types'
+import type {
+  Decision,
+  Level,
+  MatchState,
+  PlayerOrder,
+  PlayerPosition,
+  Problem,
+} from '../sim/types'
 
 const TICK_MS = 100
 
@@ -42,10 +49,74 @@ export function changeFormation(
       ...state,
       formation: value,
       players: state.players.map((player) =>
-        clearedIds.has(player.id) ? { ...player, order: 'NONE' } : player,
+        clearedIds.has(player.id) || player.position !== null
+          ? {
+              ...player,
+              order: clearedIds.has(player.id) ? 'NONE' : player.order,
+              position: null,
+            }
+          : player,
       ),
     },
     records,
+  }
+}
+
+type PositionRecord = {
+  type: 'POSITION'
+  target: string
+  position: PlayerPosition | null
+}
+
+const movesLine = (order: PlayerOrder) =>
+  order === 'PUSH_UP' || order === 'DROP_BACK'
+
+/**
+ * 선수를 피치 미터 좌표에 놓고 재현 가능한 결정 한 줄을 만든다.
+ *
+ * 유효성은 엔진 `checkPosition` 하나만 쓴다. 직접 놓은 자리가 마지막 위치
+ * 지시이므로 앞뒤 줄을 옮기던 지시는 함께 풀고, 행동 지시는 보존한다.
+ */
+export function changePosition(
+  state: MatchState,
+  target: string,
+  position: PlayerPosition | null,
+): { next: MatchState; record: PositionRecord | null; error: string | null } {
+  const error = checkPosition(state, target, position)
+  if (error) return { next: state, record: null, error }
+  const before = state.players.find((player) => player.id === target)
+  if (!before) return { next: state, record: null, error: `${target} 은 명단에 없다` }
+
+  const samePosition =
+    before.position === position ||
+    (before.position !== null &&
+      position !== null &&
+      before.position.x === position.x &&
+      before.position.y === position.y)
+  const nextOrder = movesLine(before.order) ? 'NONE' : before.order
+  if (samePosition && before.order === nextOrder) {
+    return { next: state, record: null, error: null }
+  }
+
+  return {
+    next: {
+      ...state,
+      players: state.players.map((player) =>
+        player.id === target
+          ? {
+              ...player,
+              position: position ? { ...position } : null,
+              order: nextOrder,
+            }
+          : player,
+      ),
+    },
+    record: {
+      type: 'POSITION',
+      target,
+      position: position ? { ...position } : null,
+    },
+    error: null,
   }
 }
 
@@ -160,6 +231,19 @@ export function useMatch(problem: Problem) {
     [record],
   )
 
+  const setPosition = useCallback(
+    (target: string, position: PlayerPosition | null): string | null => {
+      const changed = changePosition(stateRef.current, target, position)
+      if (changed.error) return changed.error
+      if (!changed.record) return null
+      record(changed.record as Omit<Decision, 'tick'>)
+      stateRef.current = changed.next
+      setState(changed.next)
+      return null
+    },
+    [record],
+  )
+
   const substitute = useCallback(
     (out: string, inId: string): string | null => {
       const cur = stateRef.current
@@ -195,7 +279,15 @@ export function useMatch(problem: Problem) {
       record({ type: 'ORDER', target, order } as Omit<Decision, 'tick'>)
       const next: MatchState = {
         ...cur,
-        players: cur.players.map((s) => (s.id === target ? { ...s, order } : s)),
+        players: cur.players.map((s) =>
+          s.id === target
+            ? {
+                ...s,
+                order,
+                position: movesLine(order) ? null : s.position,
+              }
+            : s,
+        ),
       }
       stateRef.current = next
       setState(next)
@@ -213,6 +305,7 @@ export function useMatch(problem: Problem) {
     setFormation,
     substitute,
     setOrder,
+    setPosition,
     decisions: decisionsRef,
   }
 }

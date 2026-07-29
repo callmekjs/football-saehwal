@@ -115,6 +115,44 @@ export const CAPTAIN_EFFECT = {
 } as const
 
 /**
+ * 배치판에서 직접 정한 선수 자리.
+ *
+ * 좌표와 줄 경계는 실제 피치 미터다. x 가 클수록 상대 골문에 가깝고,
+ * y 는 양쪽 터치라인 사이 거리다.
+ *
+ * 자유 배치는 공격 이득만 주지 않는다. 전진하거나 측면으로 벌린 만큼
+ * 우리 전진 시도와 상대의 역습 위험이 함께 커지고, 뒤로 물러나거나
+ * 중앙을 메우면 둘 다 줄어든다. 한 명의 극단 배치는 4% 이내, 여러 명을
+ * 같은 곳에 몰아도 24%에서 멈춘다. 상한이 없으면 전원을 터치라인과
+ * 상대 골문에 붙이는 만능 배치가 생긴다.
+ */
+export const FREE_POSITION = {
+  pitch: {
+    minX: 0,
+    maxX: 105,
+    minY: 0,
+    maxY: 68,
+    centreX: 52.5,
+    centreY: 34,
+  },
+  zones: {
+    defenceMaxX: 35,
+    midfieldMaxX: 70,
+  },
+  rules: {
+    minDefenders: 3,
+  },
+  effect: {
+    identity: 1,
+    lateralScale: 2,
+    forwardWeight: 0.65,
+    lateralWeight: 0.35,
+    perPlayerDelta: 0.04,
+    maxDelta: 0.24,
+  },
+} as const
+
+/**
  * 경기 중 사건.
  *
  * 퇴장 해저드가 압박 축이 값을 갖는 유일한 통로다. 경고 보유 선수가

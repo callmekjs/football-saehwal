@@ -491,8 +491,18 @@ export function MatchScreen({
    */
   onRetry?: () => void
 }) {
-  const { state, phase, start, reset, setLever, setFormation, substitute, setOrder, decisions } =
-    useMatch(problem)
+  const {
+    state,
+    phase,
+    start,
+    reset,
+    setLever,
+    setFormation,
+    substitute,
+    setOrder,
+    setPosition,
+    decisions,
+  } = useMatch(problem)
   const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
@@ -656,6 +666,7 @@ export function MatchScreen({
               state={state}
               locked={phase === 'DONE'}
               onOrder={setOrder}
+              onPosition={setPosition}
               onFormation={setFormation}
             />
           </div>

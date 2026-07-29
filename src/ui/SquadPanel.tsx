@@ -7,20 +7,26 @@ import {
   slotsForPlayers,
   type FormationId,
 } from '../sim/formations'
-import { effectivePos, getPlayer } from '../sim/squad'
-import { MAX_ORDERS, checkOrder } from '../sim/engine'
+import { getPlayer } from '../sim/squad'
+import { MAX_ORDERS, checkPosition } from '../sim/engine'
 import {
-  DRAG_START,
-  ZONE_RATIO,
+  POSITION_CHOICES,
+  boardPointOf,
   displayDepth,
   dropHint,
-  openLane,
+  isDragMovement,
+  positionZone,
   resolveDrop,
-  swapSeats,
-  type CardPoint,
   type DropTarget,
 } from './squadDrag'
-import type { Level, MatchState, PlayerOrder, PlayerState, Position } from '../sim/types'
+import type {
+  Level,
+  MatchState,
+  PlayerOrder,
+  PlayerPosition,
+  PlayerState,
+  Position,
+} from '../sim/types'
 
 /**
  * 옆에 세우는 세로 전술판의 좌표계.
@@ -81,9 +87,6 @@ function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | n
 /** 드래그가 진행 중인 동안만 존재하는 화면 상태 */
 interface DragView {
   id: string
-  /** 카드가 원래 자리에서 옮겨진 만큼(px) */
-  dx: number
-  dy: number
   target: DropTarget
   /** 놓아도 안 되는 이유. 놓기 **전에** 보여준다 */
   blocked: string | null
@@ -105,6 +108,8 @@ interface Press {
    * 이 누름을 기억하고 있어야 한다.
    */
   cancelled: boolean
+  /** 지원하는 브라우저에서는 카드가 포인터를 끝까지 붙잡는다 */
+  capture: HTMLButtonElement | null
   drop: { target: DropTarget; blocked: string | null } | null
 }
 
@@ -119,28 +124,29 @@ interface Press {
  *
  * - **선수 카드 1탭 → 행동 1탭.** 어디서나 되는 길이다. 마우스가 없어도,
  *   손가락이어도, 키보드만 있어도 된다.
- * - **카드를 끌어다 놓기.** 마우스가 있을 때의 빠른 길이다. 위로 끌면
- *   올라가라, 아래로 끌면 내려서라 — 판이 세로로 서 있고 아래가 우리
- *   골문이라 방향을 설명할 필요가 없다.
+ * - **카드를 끌어다 놓기.** 마우스가 있을 때의 빠른 길이다. 빈 공간,
+ *   같은 줄, 가로·세로·대각선 어디든 놓은 실제 지점이 선수 자리가 된다.
  *
  * 드래그는 **마우스일 때만** 잡는다. 손가락에도 열어두려면 카드 위에서
  * 페이지 스크롤을 막아야 하는데, 카드 열한 장이 판을 덮고 있어서 좁은
  * 화면에서 페이지가 안 내려가게 된다. 되던 조작을 망가뜨리면서 얻는
  * 빠른 길은 손해다.
  *
- * **경기장 캔버스 위의 선수 원은 여전히 끌 수 없다.** 반지름이 7픽셀이라
+ * **중앙 경기장 캔버스 위의 선수 원은 여전히 끌 수 없다.** 반지름이 7픽셀이라
  * 마우스로 겨냥할 수 있는 표적이 아니다. 카드는 44px 이라 잡힌다.
  */
 export function SquadPanel({
   state,
   locked,
   onOrder,
+  onPosition,
   onFormation,
 }: {
   state: MatchState
   /** 끝난 경기에는 지시할 수 없다 */
   locked: boolean
   onOrder: (target: string, order: PlayerOrder) => string | null
+  onPosition: (target: string, position: PlayerPosition | null) => string | null
   onFormation: (f: FormationId) => void
 }) {
   const [picked, setPicked] = useState<string | null>(null)
@@ -156,9 +162,6 @@ export function SquadPanel({
     slotKey: '',
     map: new Map(),
   })
-  /** 자리를 바꿨다고 화면에 알리는 신호. `seats` 는 ref 라 저 혼자로는 안 그려진다 */
-  const [, bumpSeats] = useState(0)
-
   const fieldRef = useRef<HTMLDivElement>(null)
   const pressRef = useRef<Press | null>(null)
   /** 카드 밖으로 나간 포인터도 끝까지 받는 창 단위 추적을 해제한다 */
@@ -185,6 +188,14 @@ export function SquadPanel({
     setPicked(null)
     pointerCleanupRef.current?.()
     pointerCleanupRef.current = null
+    const pr = pressRef.current
+    try {
+      if (pr?.capture?.hasPointerCapture(pr.pointerId)) {
+        pr.capture.releasePointerCapture(pr.pointerId)
+      }
+    } catch {
+      // 잠기는 순간 브라우저가 이미 캡처를 놓았을 수 있다
+    }
     pressRef.current = null
     setDrag(null)
   }, [locked])
@@ -192,6 +203,14 @@ export function SquadPanel({
   useEffect(
     () => () => {
       pointerCleanupRef.current?.()
+      const pr = pressRef.current
+      try {
+        if (pr?.capture?.hasPointerCapture(pr.pointerId)) {
+          pr.capture.releasePointerCapture(pr.pointerId)
+        }
+      } catch {
+        // 닫히는 중에는 DOM 이 먼저 사라질 수 있다
+      }
     },
     [],
   )
@@ -257,86 +276,59 @@ export function SquadPanel({
   for (const slot of slots) shape[slot.pos] += 1
 
   /**
-   * 앞뒤 줄을 옮긴 카드는 새 줄의 가장 넓은 빈칸에 세운다.
+   * 카드가 실제로 보이는 자리.
    *
-   * `PUSH_UP`·`DROP_BACK`은 경기장에서도 선수를 실제로 앞뒤로 옮긴다.
-   * 전술판 카드도 같은 방향으로 남되, 이미 그 줄에 있는 카드를 가리지
-   * 않도록 좌우 빈칸만 화면에서 자동으로 잡는다.
+   * 자유 위치는 피치 미터를 그대로 판에 투영한다. 포메이션 기본 자리는
+   * 기존의 넓게 편 좌표를 유지해 44px 카드가 겹치지 않게 한다. 충돌
+   * 검사에는 둘 모두 현재 화면과 같은 지점을 실제 피치 좌표로 환산해
+   * 넘기므로, 보이는 카드와 비켜 가는 기준이 다르지 않다.
    */
   const displayPositions = new Map(
-    placed.map(({ s, slot }) => [
-      s.id,
-      { depth: displayDepth(slot.x, s.order), lane: slotLeft(slot.y) },
-    ]),
+    placed.map(({ s, slot }) => {
+      if (s.position) {
+        const point = boardPointOf(s.position, { width: 100, height: 100 })
+        return [
+          s.id,
+          {
+            top: point.y,
+            left: point.x,
+            collision: s.position,
+          },
+        ]
+      }
+      const top = slotTop(displayDepth(slot.x, s.order))
+      const left = slotLeft(slot.y)
+      return [
+        s.id,
+        {
+          top,
+          left,
+          // 자유 위치와 같은 0~105 × 0~68 좌표로 바꾸되, 화면상 카드
+          // 중심은 한 픽셀도 움직이지 않는다.
+          collision: { x: (1 - top / 100) * 105, y: (left / 100) * 68 },
+        },
+      ]
+    }),
   )
-  for (const { s } of placed) {
-    if (s.order !== 'PUSH_UP' && s.order !== 'DROP_BACK') continue
-    const mine = displayPositions.get(s.id)!
-    const line = effectivePos(s)
-    const occupied = placed
-      .filter(({ s: other }) => other.id !== s.id && effectivePos(other) === line)
-      .map(({ s: other }) => displayPositions.get(other.id)!.lane)
-    displayPositions.set(s.id, { ...mine, lane: openLane(mine.lane, occupied) })
-  }
-
-  /**
-   * 카드 중심의 실제 픽셀 좌표.
-   *
-   * 카드 열한 장을 DOM 에서 재지 않고 자리 좌표에서 바로 계산한다. 화면에
-   * 그릴 때 쓰는 것과 **같은 식**이라 둘이 어긋날 수 없다.
-   *
-   * **골키퍼는 뺀다.** 지시를 받을 수도 자리를 바꿀 수도 없으므로 표적이
-   * 아니다. 빼두면 골키퍼 쪽으로 끌었을 때 "골키퍼는 안 됩니다"가 아니라
-   * 아래 수비 구역으로 읽힌다 — 그게 사람이 뜻한 바다.
-   */
-  const pointsOf = (box: DOMRect): CardPoint[] =>
-    placed
-      .filter(({ slot }) => slot.pos !== 'GK')
-      .map(({ s }) => {
-        const { depth, lane } = displayPositions.get(s.id)!
-        return {
-          id: s.id,
-          x: (lane / 100) * box.width,
-          y: (slotTop(depth) / 100) * box.height,
-          depth,
-          line: effectivePos(s),
-        }
-      })
 
   const numOf = (id: string) => getPlayer(id).num
 
   /**
-   * 놓아도 되는가. **엔진의 `checkOrder` 를 그대로 쓴다.**
+   * 놓아도 되는가. **엔진의 `checkPosition` 을 그대로 쓴다.**
    *
-   * 검증을 여기 따로 적으면 드래그로 되는 것과 탭으로 되는 것이 조용히
-   * 갈린다. "뒤에 수비가 셋은 남아야 한다" 같은 사유 문자열도 같은 곳에서
-   * 나오므로 두 길이 같은 말을 한다.
+   * "뒤에 수비가 셋은 남아야 한다"와 골키퍼 제한을 화면에 다시 쓰지
+   * 않는다. 드래그와 3×3 버튼이 엔진과 같은 한국어 사유를 보여준다.
    */
   const blockedFor = (id: string, target: DropTarget): string | null => {
-    if (target.kind !== 'ORDER') return null
-    const mine = onPitch.find((s) => s.id === id)
-    if (mine?.order === target.order) {
-      return `${numOf(id)}번은 이미 ${ORDER_LABELS[target.order].name} 입니다`
-    }
-    return checkOrder(state, id, target.order)
+    if (target.kind !== 'PLACE') return null
+    return checkPosition(state, id, target.position)
   }
 
   const applyDrop = (id: string, target: DropTarget) => {
-    if (target.kind === 'SWAP') {
-      seats.current = {
-        key: seats.current.key,
-        formation: seats.current.formation,
-        slotKey: seats.current.slotKey,
-        map: swapSeats(seats.current.map, id, target.id),
-      }
-      bumpSeats((v) => v + 1)
-      setNote(`${numOf(id)}번 ↔ ${numOf(target.id)}번 자리 바꿈 · 배치만 바뀝니다`)
-      return
-    }
-    if (target.kind === 'ORDER') {
-      const err = onOrder(id, target.order)
-      setNote(err ?? `${numOf(id)}번 — ${ORDER_LABELS[target.order].name}`)
-    }
+    if (target.kind !== 'PLACE') return
+    const err = onPosition(id, target.position)
+    const zone = positionZone(target.position)
+    setNote(err ?? `${numOf(id)}번 — ${zone.depth} · ${zone.lane}`)
   }
 
   /**
@@ -365,29 +357,33 @@ export function SquadPanel({
 
     const dx = e.clientX - pr.startX
     const dy = e.clientY - pr.startY
-    if (!pr.moved && Math.hypot(dx, dy) < DRAG_START) return
+    if (!pr.moved && !isDragMovement(dx, dy)) return
     pr.moved = true
 
     const box = field.getBoundingClientRect()
-    const points = pointsOf(box)
-    const from = points.find((p) => p.id === pr.id)
-    if (!from) return
-
     const target = resolveDrop(
-      from,
       { x: e.clientX - box.left, y: e.clientY - box.top },
-      box.height,
-      points,
+      { width: box.width, height: box.height },
+      placed
+        .filter(({ s }) => s.id !== pr.id)
+        .map(({ s }) => displayPositions.get(s.id)!.collision),
     )
     const blocked = blockedFor(pr.id, target)
     pr.drop = { target, blocked }
-    setDrag({ id: pr.id, dx, dy, target, blocked })
+    setDrag({ id: pr.id, target, blocked })
   }
 
   const endPress = (e: Pick<PointerEvent, 'pointerId'>) => {
     const pr = pressRef.current
     if (!pr || pr.pointerId !== e.pointerId) return
     pressRef.current = null
+    try {
+      if (pr.capture?.hasPointerCapture(pr.pointerId)) {
+        pr.capture.releasePointerCapture(pr.pointerId)
+      }
+    } catch {
+      // 포인터가 이미 취소된 브라우저는 놓을 캡처가 없다
+    }
     setDrag(null)
     // 끌지 않았으면 그냥 탭이다. 아래 onClick 이 그대로 받는다
     if (!pr.moved) return
@@ -401,6 +397,14 @@ export function SquadPanel({
   }
 
   const cancelPress = () => {
+    const pr = pressRef.current
+    try {
+      if (pr?.capture?.hasPointerCapture(pr.pointerId)) {
+        pr.capture.releasePointerCapture(pr.pointerId)
+      }
+    } catch {
+      // pointercancel 뒤에는 브라우저가 먼저 캡처를 놓을 수 있다
+    }
     pressRef.current = null
     setDrag(null)
   }
@@ -423,7 +427,14 @@ export function SquadPanel({
       startY: e.clientY,
       moved: false,
       cancelled: false,
+      capture: e.currentTarget,
       drop: null,
+    }
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // 창 단위 추적도 함께 걸어 캡처가 없는 브라우저에서 같은 동작을 한다
     }
 
     /**
@@ -452,12 +463,36 @@ export function SquadPanel({
   }
 
   /** 드래그 중에는 지시 줄이 지금 무슨 일이 일어날지 말한다 */
-  const liveHint = drag ? dropHint(drag.target, drag.blocked, numOf, numOf(drag.id)) : null
+  const liveHint = drag ? dropHint(drag.target, drag.blocked, numOf(drag.id)) : null
 
-  /** 위아래 구역이 지금 켜져 있는가 */
-  const zoneState = (order: 'PUSH_UP' | 'DROP_BACK') => {
-    if (!drag || drag.target.kind !== 'ORDER' || drag.target.order !== order) return undefined
-    return drag.blocked ? 'bad' : 'on'
+  const liveZone =
+    drag?.target.kind === 'PLACE' ? positionZone(drag.target.position) : null
+
+  /**
+   * 3×3 버튼도 드래그와 같은 충돌 보정을 거친다.
+   *
+   * 같은 구역을 여러 번 누르면 카드가 정확히 포개지지 않고 그 구역 안의
+   * 가장 가까운 빈자리로만 조금 비켜 선다.
+   */
+  const placeFromButton = (id: string, position: PlayerPosition) => {
+    const field = fieldRef.current
+    let next = position
+    if (field) {
+      const box = field.getBoundingClientRect()
+      const point = boardPointOf(position, { width: box.width, height: box.height })
+      const target = resolveDrop(
+        point,
+        { width: box.width, height: box.height },
+        placed
+          .filter(({ s }) => s.id !== id)
+          .map(({ s }) => displayPositions.get(s.id)!.collision),
+      )
+      if (target.kind === 'PLACE') next = target.position
+    }
+    const err = onPosition(id, next)
+    const zone = positionZone(next)
+    setNote(err ?? `${numOf(id)}번 — ${zone.depth} · ${zone.lane}`)
+    if (!err) setPicked(null)
   }
 
   return (
@@ -465,7 +500,10 @@ export function SquadPanel({
       <h2>
         우리 팀
         {tenMen && <span style={{ color: 'var(--away)' }}> · {state.homeCount}명</span>}
-        <b>지시 {active.length}/{MAX_ORDERS}</b>
+        <b>
+          배치 {onPitch.filter((s) => s.position !== null).length} · 지시 {active.length}/
+          {MAX_ORDERS}
+        </b>
       </h2>
 
       {/*
@@ -490,72 +528,80 @@ export function SquadPanel({
 
       <p className="squad-caption">
         <b>{getFormation(state.formation).label}</b> · 수비 {shape.DF} 중원 {shape.MF} 공격{' '}
-        {shape.FW} · 위쪽이 상대 골문
+        {shape.FW} · 원하는 곳에 놓기
       </p>
 
       <div className="squad-shape" data-dragging={drag ? 'on' : undefined}>
         <div className="squad-field" ref={fieldRef}>
           {/*
-            놓을 수 있는 자리는 **끌기 시작할 때 보인다.** 어디까지 가면
-            되는지 모른 채 끌면 아무 데나 놓고 아무 일도 일어나지 않는다.
-
-            구역은 판 좌표 그대로다. `resolveDrop` 이 세는 것과 화면에
-            그리는 것이 같은 비율이라 "저기 놓았는데 안 걸렸다"가 없다.
+            끄는 동안 3×3 구역을 보여준다. 텍스트가 수비/중원/공격과
+            왼쪽/중앙/오른쪽을 함께 말하므로 색을 못 보아도 목표를 읽는다.
           */}
           {drag && (
-            <>
-              <div
-                className="squad-zone up"
-                data-on={zoneState('PUSH_UP')}
-                style={{ height: `${ZONE_RATIO * 100}%` }}
-                aria-hidden
-              >
-                <span>↑ 올라가라 · 공격으로</span>
-              </div>
-              <div
-                className="squad-zone down"
-                data-on={zoneState('DROP_BACK')}
-                style={{ height: `${ZONE_RATIO * 100}%` }}
-                aria-hidden
-              >
-                <span>↓ 내려서라 · 수비로</span>
-              </div>
-            </>
+            <div className="squad-placement-guide" aria-hidden>
+              {(['ATTACK', 'MIDFIELD', 'DEFENCE'] as const).flatMap((depth) =>
+                POSITION_CHOICES.filter((choice) => choice.depth === depth).map((choice) => (
+                  <span
+                    key={`${choice.depth}-${choice.lane}`}
+                    data-on={
+                      liveZone?.depth === choice.depthLabel &&
+                      liveZone?.lane === choice.laneLabel
+                        ? drag.blocked
+                          ? 'bad'
+                          : 'on'
+                        : undefined
+                    }
+                  >
+                    {choice.depthLabel} · {choice.laneLabel}
+                  </span>
+                )),
+              )}
+            </div>
           )}
 
           {placed.map(({ s }) => {
             const p = getPlayer(s.id)
             const warn = alertOf(s, state.tactics.press)
-            const tag = s.order !== 'NONE' ? ORDER_TAG[s.order] : (warn?.tag ?? p.pos)
+            const tag =
+              s.order !== 'NONE'
+                ? ORDER_TAG[s.order]
+                : s.position
+                  ? positionZone(s.position).depth
+                  : (warn?.tag ?? p.pos)
             const stamina = Math.max(0, Math.min(100, s.stamina))
             const held = drag?.id === s.id
-            const isSwapTarget = drag?.target.kind === 'SWAP' && drag.target.id === s.id
+            const baseDisplay = displayPositions.get(s.id)!
+            const preview =
+              held && drag.target.kind === 'PLACE'
+                ? boardPointOf(drag.target.position, { width: 100, height: 100 })
+                : null
             const detail =
               `${p.num}번 ${p.pos} · 체력 ${Math.round(s.stamina)} · 속도 ${p.speed}` +
               (warn ? ` · ${warn.why}` : '') +
-              (s.order !== 'NONE' ? ` · 지시: ${ORDER_LABELS[s.order].name}` : '')
+              (s.order !== 'NONE' ? ` · 지시: ${ORDER_LABELS[s.order].name}` : '') +
+              (s.position ? ` · 자유 위치: ${positionZone(s.position).depth} ${positionZone(s.position).lane}` : '')
             return (
               <button
                 key={s.id}
                 type="button"
                 className="squad-card"
                 data-order={s.order !== 'NONE' ? 'on' : undefined}
+                data-position={s.position ? 'on' : undefined}
                 data-warn={warn ? 'on' : undefined}
                 data-drag={held ? (drag.blocked ? 'bad' : 'on') : undefined}
-                data-drop={isSwapTarget ? 'on' : undefined}
                 aria-pressed={picked === s.id}
                 disabled={locked || p.pos === 'GK'}
                 title={
                   p.pos === 'GK'
-                    ? `${detail} · 골키퍼에게는 지시할 수 없다`
-                    : `${detail} · 눌러서 지시하거나 위아래로 끌어 옮긴다`
+                    ? `${detail} · 골키퍼는 자리를 옮길 수 없다`
+                    : `${detail} · 눌러서 고르거나 원하는 곳으로 끌어 놓는다`
                 }
                 style={{
-                  top: `${slotTop(displayPositions.get(s.id)!.depth)}%`,
-                  left: `${displayPositions.get(s.id)!.lane}%`,
+                  top: `${preview?.y ?? baseDisplay.top}%`,
+                  left: `${preview?.x ?? baseDisplay.left}%`,
                   ...(held
                     ? {
-                        transform: `translate(-50%, -50%) translate(${drag.dx}px, ${drag.dy}px) scale(1.1)`,
+                        transform: 'translate(-50%, -50%) scale(1.1)',
                       }
                     : null),
                 }}
@@ -593,8 +639,39 @@ export function SquadPanel({
         ) : cur ? (
           <>
             <span className="squad-orders-head">
-              <b>{getPlayer(cur.id).num}번</b>에게 무엇을 시킬까
+              <b>{getPlayer(cur.id).num}번</b> · 원하는 곳에 놓기
             </span>
+            <div className="squad-position-grid" aria-label={`${getPlayer(cur.id).num}번 위치`}>
+              {POSITION_CHOICES.map((choice) => {
+                const currentZone = cur.position ? positionZone(cur.position) : null
+                return (
+                  <button
+                    key={`${choice.depth}-${choice.lane}`}
+                    className="chip"
+                    aria-pressed={
+                      currentZone?.depth === choice.depthLabel &&
+                      currentZone?.lane === choice.laneLabel
+                    }
+                    onClick={() => placeFromButton(cur.id, choice.position)}
+                  >
+                    <strong>{choice.depthLabel}</strong>
+                    <small>{choice.laneLabel}</small>
+                  </button>
+                )
+              })}
+              <button
+                className="chip position-default"
+                aria-pressed={cur.position === null}
+                onClick={() => {
+                  const err = onPosition(cur.id, null)
+                  setNote(err ?? `${getPlayer(cur.id).num}번 — 기본 자리`)
+                  if (!err) setPicked(null)
+                }}
+              >
+                기본 자리
+              </button>
+            </div>
+            <span className="squad-orders-head action">행동 지시</span>
             <div className="squad-order-grid">
               {orders.map((o) => (
                 <button
@@ -626,7 +703,7 @@ export function SquadPanel({
             <span className="squad-orders-head">
               {locked
                 ? '경기가 끝났습니다'
-                : '이 배치판의 선수를 누르거나 위아래로 끌어 위치를 바꿉니다'}
+                : '선수를 누르거나 원하는 곳으로 끌어 놓습니다'}
             </span>
             <div className="squad-order-list">
               {active.length === 0 ? (

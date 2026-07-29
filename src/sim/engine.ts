@@ -1,5 +1,5 @@
 import { createRng, type Rng } from './rng'
-import { applyOrders, drainFactorOf, resolveCoefficients } from './tactics'
+import { applyOrders, applyPositions, drainFactorOf, resolveCoefficients } from './tactics'
 import { drawTick, resolveAttacks, type TickDraws } from './attack'
 import type { Coefficients } from './tactics'
 import { resolveEvents } from './events'
@@ -14,12 +14,13 @@ import {
   onPitchCount,
 } from './squad'
 import { rollSetup } from './setup'
-import { EVENTS, TOTAL_TICKS } from './constants'
+import { EVENTS, FREE_POSITION, TOTAL_TICKS } from './constants'
 import type {
   Decision,
   MatchState,
   Mentality,
   PlayerOrder,
+  PlayerPosition,
   PlayerState,
   Problem,
 } from './types'
@@ -88,8 +89,12 @@ function applySub(players: PlayerState[], out: string, inId: string): PlayerStat
   return players.map((s) => {
     // 나간 선수의 지시는 함께 걷힌다. 들어온 선수는 지시 없이 시작한다 —
     // 안 그러면 벤치에 앉아 있던 선수에게 유령 지시가 붙어 들어온다
-    if (s.id === out) return { ...s, onPitch: false, order: 'NONE' as const }
-    if (s.id === inId) return { ...s, onPitch: true, order: 'NONE' as const }
+    if (s.id === out) {
+      return { ...s, onPitch: false, order: 'NONE' as const, position: null }
+    }
+    if (s.id === inId) {
+      return { ...s, onPitch: true, order: 'NONE' as const, position: null }
+    }
     return s
   })
 }
@@ -130,6 +135,60 @@ export const MAX_ORDERS = 10
  */
 export const MAX_HOLD = 2
 
+const movesLine = (order: PlayerOrder): boolean =>
+  order === 'DROP_BACK' || order === 'PUSH_UP'
+
+/**
+ * 자유 배치가 유효한지 검사한다. 무효면 화면에 그대로 보여줄 사유를 돌려준다.
+ *
+ * 골키퍼는 골문 앞의 기하 규칙을 따라야 하므로 직접 옮기지 못한다. 필드
+ * 선수도 수비 자원을 셋 아래로 줄이는 이동은 막는다. 좌표를 지우는 null 은
+ * 포메이션 기본 자리로 돌아가라는 뜻이다.
+ */
+export function checkPosition(
+  state: MatchState,
+  target: string,
+  position: PlayerPosition | null,
+): string | null {
+  const player = state.players.find((s) => s.id === target)
+  if (!player) return `${target} 은 명단에 없다`
+  if (!player.onPitch || player.out) return '피치 위 선수가 아니다'
+
+  const registered = getPlayer(target).pos
+  if (registered === 'GK') {
+    return position === null ? null : '골키퍼는 자리를 옮길 수 없다'
+  }
+
+  if (position) {
+    const pitch = FREE_POSITION.pitch
+    if (
+      !Number.isFinite(position.x) ||
+      !Number.isFinite(position.y) ||
+      position.x < pitch.minX ||
+      position.x > pitch.maxX ||
+      position.y < pitch.minY ||
+      position.y > pitch.maxY
+    ) {
+      return '경기장 안에 놓아야 한다'
+    }
+  }
+
+  const next: PlayerState = {
+    ...player,
+    position,
+    order: movesLine(player.order) ? 'NONE' : player.order,
+  }
+  if (effectivePos(player) === 'DF' && effectivePos(next) !== 'DF') {
+    const remaining = state.players.filter(
+      (s) => s.onPitch && !s.out && s.id !== target && effectivePos(s) === 'DF',
+    )
+    if (remaining.length < FREE_POSITION.rules.minDefenders) {
+      return '뒤에 수비가 셋은 남아야 한다'
+    }
+  }
+  return null
+}
+
 export function checkOrder(
   state: MatchState,
   target: string,
@@ -145,8 +204,9 @@ export function checkOrder(
   if (p.order === 'NONE' && active.length >= MAX_ORDERS) {
     return `지시는 ${MAX_ORDERS}명까지다. 하나를 풀어라`
   }
-  const pos = getPlayer(target).pos
-  if (pos === 'GK') return '골키퍼에게는 지시할 수 없다'
+  const registered = getPlayer(target).pos
+  if (registered === 'GK') return '골키퍼에게는 지시할 수 없다'
+  const pos = effectivePos(p)
 
   if (order === 'HOLD') {
     if (pos !== 'DF' && pos !== 'MF') return '골문 앞은 수비수와 미드필더만'
@@ -163,7 +223,9 @@ export function checkOrder(
     const backs = state.players.filter(
       (s) => s.onPitch && !s.out && s.id !== target && effectivePos(s) === 'DF',
     )
-    if (backs.length < 3) return '뒤에 수비가 셋은 남아야 한다'
+    if (backs.length < FREE_POSITION.rules.minDefenders) {
+      return '뒤에 수비가 셋은 남아야 한다'
+    }
   }
   return null
 }
@@ -232,13 +294,16 @@ function nextBall(
 export function tick(state: MatchState, rng: Rng): MatchState {
   // 레버가 정한 계수 위에 개별 지시를 얹는다.
   // 지시가 하나도 없으면 `applyOrders` 는 항등이라 계수가 그대로 나간다
-  const c = applyOrders(
-    resolveCoefficients(
-      state.tactics,
-      state.opponent,
-      state.awayCount < 11,
-      state.homeCount < 11,
-      state.formation,
+  const c = applyPositions(
+    applyOrders(
+      resolveCoefficients(
+        state.tactics,
+        state.opponent,
+        state.awayCount < 11,
+        state.homeCount < 11,
+        state.formation,
+      ),
+      state.players,
     ),
     state.players,
   )
@@ -374,14 +439,49 @@ export function simulate(
             ],
           }
         }
-      } else if (d.type === 'FORMATION') state = { ...state, formation: d.value }
-      else if (d.type === 'ORDER') {
+      } else if (d.type === 'FORMATION') {
+        // 새 포메이션은 전체 재배치다. 전에 손으로 옮긴 좌표를 남겨두면
+        // 새 자리와 겹치고, 배치판과 중앙 경기장이 서로 다른 모양이 된다.
+        state = {
+          ...state,
+          formation: d.value,
+          players: state.players.map((s) =>
+            s.position === null ? s : { ...s, position: null },
+          ),
+        }
+      } else if (d.type === 'ORDER') {
         // 재현에서도 상한을 지킨다. 통과한 지시만 걸려야 화면과 결과가 같아진다
         if (!checkOrder(state, d.target, d.order)) {
           state = {
             ...state,
             players: state.players.map((s) =>
-              s.id === d.target ? { ...s, order: d.order } : s,
+              s.id === d.target
+                ? {
+                    ...s,
+                    order: d.order,
+                    // 앞뒤 줄 지시는 포메이션 기준에서 다시 시작한다.
+                    // 자유 좌표와 동시에 남겨 어느 것이 우선인지 모호하게
+                    // 만들지 않고, 마지막 위치 지시가 이긴다.
+                    position: movesLine(d.order) ? null : s.position,
+                  }
+                : s,
+            ),
+          }
+        }
+      } else if (d.type === 'POSITION') {
+        if (!checkPosition(state, d.target, d.position)) {
+          state = {
+            ...state,
+            players: state.players.map((s) =>
+              s.id === d.target
+                ? {
+                    ...s,
+                    position: d.position ? { ...d.position } : null,
+                    // 직접 놓은 자리가 마지막 위치 지시다. 행동 지시는
+                    // 보존하되 앞뒤 줄을 옮기던 지시는 풀어 충돌을 막는다.
+                    order: movesLine(s.order) ? 'NONE' : s.order,
+                  }
+                : s,
             ),
           }
         }

@@ -1,190 +1,234 @@
-import type { PlayerOrder, Position } from '../sim/types'
+import { FREE_POSITION } from '../sim/constants'
+import type { PlayerOrder, PlayerPosition } from '../sim/types'
 
 /**
- * 전술판에서 선수 카드를 끌어다 놓는 판정.
+ * 전술판 카드 한 변과 카드 사이에 남길 최소 여백(px).
  *
- * **새 확률 통로를 만들지 않는다.** 이미 배선된 개별 지시(`DROP_BACK` ·
- * `PUSH_UP`)에 공간적인 표현을 붙이는 것뿐이다. 위로 끌면 앞으로 올라가고
- * 아래로 끌면 뒤로 내려간다 — 판이 세로로 서 있고 아래가 우리 골문이라
- * 화살표를 읽지 않아도 방향이 맞는다.
- *
- * 드래그는 **빠른 길이지 유일한 길이 아니다.** 같은 일을 선수 1탭 → 행동
- * 1탭으로도 할 수 있어야 한다. 마우스가 없는 환경이 있고, 규칙상 작동하지
- * 않는 인터랙션은 평가에서 제외된다.
- *
- * 이 파일에는 **좌표 판정만** 둔다. "그 지시를 걸어도 되는가"는 엔진의
- * `checkOrder` 가 판단한다. 검증이 두 곳에 있으면 드래그로 되는 것과
- * 탭으로 되는 것이 조용히 갈린다.
+ * 카드는 44px 표적이다. 중심끼리 이보다 가까우면 둘 중 하나를 누르기
+ * 어려우므로, 놓은 지점에서 가장 가까운 빈자리로만 조금 비켜 준다.
  */
-
-/** 다른 카드 위에 놓았다고 볼 거리(px). 카드가 44px 이라 반지름보다 조금 크다 */
-export const SWAP_RADIUS = 30
-
-/** 판 위아래 이 비율 안쪽은 지시 구역이다 */
-export const ZONE_RATIO = 0.15
+export const CARD_SIZE = 44
+export const CARD_GAP = 4
 
 /**
  * 여기까지는 그냥 탭이다(px).
  *
- * 누르는 순간 손이 몇 픽셀 흔들린다. 이걸 두지 않으면 탭 두 단계가
- * 드래그로 오인되어 **이미 있는 조작이 망가진다.**
+ * 누르는 순간의 작은 손 떨림은 드래그로 읽지 않는다. 가로·세로·대각선
+ * 어느 방향이든 이 거리를 넘으면 실제 위치 변경이다.
  */
 export const DRAG_START = 6
 
-/** 이만큼 세로로 옮기면 줄을 바꾸려는 뜻으로 본다(px) */
-export const ORDER_DRAG_DISTANCE = 32
-
-/** 경기장 연출에서 개별 지시로 전진·후퇴하는 거리와 같은 값(m) */
+/** 기존 앞뒤 줄 지시를 배치판에 보여주는 거리(m) */
 export const ORDER_DEPTH_SHIFT = 22
 
-export type DropTarget =
-  /** 두 사람의 화면상 자리를 맞바꾼다 */
-  | { kind: 'SWAP'; id: string }
-  /** 이미 있는 개별 지시를 건다 */
-  | { kind: 'ORDER'; order: Extract<PlayerOrder, 'DROP_BACK' | 'PUSH_UP'> }
-  /** 아무 일도 없다. 카드는 제자리로 돌아간다 */
-  | { kind: 'NONE' }
-
-export interface CardPoint {
-  id: string
-  /** 전술판 안에서의 중심 좌표(px) */
-  x: number
-  y: number
-  /** 이 자리의 피치 x. 클수록 상대 골문 쪽이다 */
-  depth: number
-  /** 이 자리가 속한 줄 */
-  line: Position
-}
-
-/** 지시가 걸린 뒤 카드와 경기장 선수가 함께 머무를 앞뒤 위치 */
 export function displayDepth(depth: number, order: PlayerOrder): number {
   if (order === 'PUSH_UP') return depth + ORDER_DEPTH_SHIFT
   if (order === 'DROP_BACK') return depth - ORDER_DEPTH_SHIFT
   return depth
 }
 
-/**
- * 새 줄의 카드 사이에서 가장 넓은 빈칸을 고른다.
- *
- * 양 끝 카드는 판 밖으로 반쯤 나가지 않게 8~92% 안에 둔다. 같은 너비의
- * 카드가 늘어서므로 기존 카드 사이 중점을 후보로 보면 겹치지 않는 자리를
- * 별도 좌표 저장 없이 재현할 수 있다.
- */
-export function openLane(preferred: number, occupied: number[]): number {
-  if (occupied.length === 0) return Math.max(8, Math.min(92, preferred))
-  const sorted = [...occupied].sort((a, b) => a - b)
-  const candidates = [
-    Math.max(8, Math.min(92, preferred)),
-    8,
-    92,
-    ...sorted.slice(0, -1).map((lane, i) => (lane + sorted[i + 1]) / 2),
-  ]
-  let best = candidates[0]
-  let bestGap = -1
-  for (const candidate of candidates) {
-    const gap = Math.min(...sorted.map((lane) => Math.abs(candidate - lane)))
-    if (gap > bestGap || (gap === bestGap && Math.abs(candidate - preferred) < Math.abs(best - preferred))) {
-      best = candidate
-      bestGap = gap
-    }
-  }
-  return best
+export interface BoardSize {
+  width: number
+  height: number
+}
+
+export interface BoardPoint {
+  x: number
+  y: number
+}
+
+export type DropTarget =
+  | { kind: 'PLACE'; position: PlayerPosition }
+  | { kind: 'NONE' }
+
+export type DepthZone = 'DEFENCE' | 'MIDFIELD' | 'ATTACK'
+export type LaneZone = 'LEFT' | 'CENTRE' | 'RIGHT'
+
+export interface PositionChoice {
+  depth: DepthZone
+  lane: LaneZone
+  depthLabel: '수비' | '중원' | '공격'
+  laneLabel: '왼쪽' | '중앙' | '오른쪽'
+  position: PlayerPosition
+}
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value))
+
+const pitch = FREE_POSITION.pitch
+const zones = FREE_POSITION.zones
+const pitchLength = pitch.maxX - pitch.minX
+const pitchWidth = pitch.maxY - pitch.minY
+
+const depthCentres: Array<[DepthZone, PositionChoice['depthLabel'], number]> = [
+  ['DEFENCE', '수비', (pitch.minX + zones.defenceMaxX) / 2],
+  ['MIDFIELD', '중원', (zones.defenceMaxX + zones.midfieldMaxX) / 2],
+  ['ATTACK', '공격', (zones.midfieldMaxX + pitch.maxX) / 2],
+]
+
+const laneCentres: Array<[LaneZone, PositionChoice['laneLabel'], number]> = [
+  ['LEFT', '왼쪽', pitch.minY + pitchWidth / 6],
+  ['CENTRE', '중앙', pitch.centreY],
+  ['RIGHT', '오른쪽', pitch.maxY - pitchWidth / 6],
+]
+
+/** 드래그 없이 고를 수 있는 수비/중원/공격 × 왼쪽/중앙/오른쪽 아홉 자리 */
+export const POSITION_CHOICES: PositionChoice[] = depthCentres.flatMap(
+  ([depth, depthLabel, x]) =>
+    laneCentres.map(([lane, laneLabel, y]) => ({
+      depth,
+      lane,
+      depthLabel,
+      laneLabel,
+      position: { x, y },
+    })),
+)
+
+/** 가로·세로·대각선 어느 방향이든 6px 이상이면 드래그다 */
+export function isDragMovement(dx: number, dy: number): boolean {
+  return Math.hypot(dx, dy) >= DRAG_START
 }
 
 /**
- * 끌어다 놓은 지점이 무엇을 뜻하는가.
+ * 실제 피치 미터를 세로 전술판의 카드 중심 좌표로 바꾼다.
  *
- * 판정 순서에 이유가 있다.
+ * 판 위쪽이 상대 골문이므로 x 축은 뒤집고, y 축은 화면 왼쪽에서 오른쪽
+ * 방향으로 그대로 놓는다.
+ */
+export function boardPointOf(position: PlayerPosition, size: BoardSize): BoardPoint {
+  if (size.width <= 0 || size.height <= 0) return { x: 0, y: 0 }
+  return {
+    x: ((position.y - pitch.minY) / pitchWidth) * size.width,
+    y: (1 - (position.x - pitch.minX) / pitchLength) * size.height,
+  }
+}
+
+/**
+ * 카드 중심을 판 안에 남긴다.
  *
- * 1. **다른 카드 위**가 가장 먼저다. 사람이 카드를 겨냥해 놓았으면 그게
- *    구역보다 분명한 의사표시다.
- *    - 같은 줄이면 **자리 바꾸기**다. 엔진은 좌우를 구분하지 않으므로
- *      같은 줄 안에서 자리를 바꾸는 것은 확률에 영향이 없다. 그래서
- *      화면에서도 배치만 바뀐다고 말한다.
- *    - 다른 줄이면 **지시**다. 뒤쪽 줄로 끌었으면 내려서라, 앞쪽 줄로
- *      끌었으면 올라가라. 이쪽이 사람이 기대하는 것이고 실제로 확률에
- *      걸린다.
- * 2. 카드에서 멀면 **시작점에서 움직인 방향**을 본다. 위는 상대 골문,
- *    아래는 우리 골문이다. 판 끝까지 끌 필요는 없다.
- * 3. 세로 이동이 작거나 가로 이동이면 아무 일도 없다. 잘못 놓았을 때
- *    되돌아가는 길이다.
+ * 단순히 0~너비로 자르면 카드 절반이 잘린다. 44px 카드의 반지름까지
+ * 안쪽으로 제한하므로 판 밖에 놓아도 가장 가까운 터치라인/골라인 자리에
+ * 카드 전체가 보인다.
+ */
+function clampCardPoint(point: BoardPoint, size: BoardSize): BoardPoint {
+  const insetX = Math.min(CARD_SIZE / 2, size.width / 2)
+  const insetY = Math.min(CARD_SIZE / 2, size.height / 2)
+  return {
+    x: clamp(point.x, insetX, Math.max(insetX, size.width - insetX)),
+    y: clamp(point.y, insetY, Math.max(insetY, size.height - insetY)),
+  }
+}
+
+function pitchPositionOf(point: BoardPoint, size: BoardSize): PlayerPosition {
+  if (size.width <= 0 || size.height <= 0) {
+    return { x: pitch.centreX, y: pitch.centreY }
+  }
+  return {
+    x: clamp(
+      pitch.minX + (1 - point.y / size.height) * pitchLength,
+      pitch.minX,
+      pitch.maxX,
+    ),
+    y: clamp(
+      pitch.minY + (point.x / size.width) * pitchWidth,
+      pitch.minY,
+      pitch.maxY,
+    ),
+  }
+}
+
+const distance = (a: BoardPoint, b: BoardPoint) => Math.hypot(a.x - b.x, a.y - b.y)
+
+/**
+ * 겹친 카드만 가장 가까운 빈자리로 조금 비켜 준다.
+ *
+ * 각 기존 카드 둘레의 정확한 최소 간격 지점을 후보로 만들고, 모든 카드와
+ * 간격을 지키는 후보 중 원래 놓은 곳에 가장 가까운 것을 고른다. 그래서
+ * 자동 보정이 필요 이상으로 멀리 카드를 보내지 않는다.
+ */
+function separateCard(
+  desired: BoardPoint,
+  occupied: BoardPoint[],
+  size: BoardSize,
+): BoardPoint {
+  const minimum = CARD_SIZE + CARD_GAP
+  const clear = (candidate: BoardPoint) =>
+    occupied.every((other) => distance(candidate, other) >= minimum - 0.01)
+
+  if (clear(desired)) return desired
+
+  const candidates: BoardPoint[] = []
+  const ANGLES = 32
+  for (const other of occupied) {
+    for (let i = 0; i < ANGLES; i += 1) {
+      const angle = (Math.PI * 2 * i) / ANGLES
+      candidates.push(
+        clampCardPoint(
+          {
+            x: other.x + Math.cos(angle) * minimum,
+            y: other.y + Math.sin(angle) * minimum,
+          },
+          size,
+        ),
+      )
+    }
+  }
+
+  const valid = candidates
+    .filter(clear)
+    .sort((a, b) => distance(a, desired) - distance(b, desired))
+  if (valid.length > 0) return valid[0]
+
+  // 좁은 판에 카드가 빽빽해 완전한 빈자리가 없으면, 후보 중 가장 덜
+  // 겹치는 곳을 고른다. 화면 밖으로 밀어내지는 않는다.
+  return candidates.sort((a, b) => {
+    const gapA = Math.min(...occupied.map((other) => distance(a, other)))
+    const gapB = Math.min(...occupied.map((other) => distance(b, other)))
+    return gapB - gapA || distance(a, desired) - distance(b, desired)
+  })[0] ?? desired
+}
+
+/**
+ * 실제 드롭 지점을 피치 미터 좌표로 바꾼다.
+ *
+ * 다른 카드 위, 같은 줄, 빈 공간, 가로·세로·대각선 이동을 따로 나누지
+ * 않는다. 손을 6px 이상 움직인 뒤 놓은 모든 지점은 하나의 실제 자리다.
  */
 export function resolveDrop(
-  from: CardPoint,
-  point: { x: number; y: number },
-  fieldHeight: number,
-  others: CardPoint[],
+  point: BoardPoint,
+  size: BoardSize,
+  occupied: PlayerPosition[],
 ): DropTarget {
-  let best: CardPoint | null = null
-  let bestDist = SWAP_RADIUS
-  for (const o of others) {
-    if (o.id === from.id) continue
-    const d = Math.hypot(o.x - point.x, o.y - point.y)
-    if (d <= bestDist) {
-      best = o
-      bestDist = d
-    }
-  }
+  if (size.width <= 0 || size.height <= 0) return { kind: 'NONE' }
+  const desired = clampCardPoint(point, size)
+  const occupiedPoints = occupied.map((position) => boardPointOf(position, size))
+  const separated = separateCard(desired, occupiedPoints, size)
+  return { kind: 'PLACE', position: pitchPositionOf(separated, size) }
+}
 
-  if (best) {
-    if (best.line === from.line) return { kind: 'SWAP', id: best.id }
-    return { kind: 'ORDER', order: best.depth > from.depth ? 'PUSH_UP' : 'DROP_BACK' }
-  }
-
-  if (fieldHeight <= 0) return { kind: 'NONE' }
-  const dx = point.x - from.x
-  const dy = point.y - from.y
-  if (Math.abs(dy) >= ORDER_DRAG_DISTANCE && Math.abs(dy) > Math.abs(dx)) {
-    return { kind: 'ORDER', order: dy < 0 ? 'PUSH_UP' : 'DROP_BACK' }
-  }
-  const t = point.y / fieldHeight
-  if (t <= ZONE_RATIO) return { kind: 'ORDER', order: 'PUSH_UP' }
-  if (t >= 1 - ZONE_RATIO) return { kind: 'ORDER', order: 'DROP_BACK' }
-  return { kind: 'NONE' }
+/** 위치가 어느 3×3 구역인지 드래그 중과 버튼 설명에서 함께 쓴다 */
+export function positionZone(position: PlayerPosition): {
+  depth: PositionChoice['depthLabel']
+  lane: PositionChoice['laneLabel']
+} {
+  const depth =
+    position.x <= zones.defenceMaxX
+      ? '수비'
+      : position.x <= zones.midfieldMaxX
+        ? '중원'
+        : '공격'
+  const firstThird = pitch.minY + pitchWidth / 3
+  const secondThird = pitch.minY + (pitchWidth * 2) / 3
+  const lane = position.y < firstThird ? '왼쪽' : position.y <= secondThird ? '중앙' : '오른쪽'
+  return { depth, lane }
 }
 
 /**
- * 두 선수의 자리 번호를 맞바꾼다.
- *
- * 원래 맵을 고치지 않고 새로 만든다. 화면이 다시 그려지는 판단은 React
- * 가 하는데, 같은 객체를 몰래 고치면 그 판단이 어긋난다.
+ * 놓기 전에 결과 또는 엔진이 막은 한국어 사유를 한 줄로 알려준다.
  */
-export function swapSeats(
-  seats: Map<string, number>,
-  a: string,
-  b: string,
-): Map<string, number> {
-  const next = new Map(seats)
-  const ka = seats.get(a)
-  const kb = seats.get(b)
-  if (ka === undefined || kb === undefined || a === b) return next
-  next.set(a, kb)
-  next.set(b, ka)
-  return next
-}
-
-/**
- * 드래그 중에 띄우는 한 줄.
- *
- * **놓기 전에** 무슨 일이 일어날지, 안 된다면 왜 안 되는지 말한다.
- * 놓은 다음에 "안 됩니다"라고 하면 사람은 이미 손을 뗀 뒤라 무엇을
- * 다시 해야 하는지 모른다.
- */
-export function dropHint(
-  target: DropTarget,
-  blocked: string | null,
-  numOf: (id: string) => number,
-  self: number,
-): string {
+export function dropHint(target: DropTarget, blocked: string | null, self: number): string {
   if (blocked) return blocked
-  switch (target.kind) {
-    case 'SWAP':
-      return `${self}번 ↔ ${numOf(target.id)}번 자리 바꾸기 · 배치만 바뀝니다`
-    case 'ORDER':
-      return target.order === 'PUSH_UP'
-        ? `${self}번 올라가라 — 공격으로 붙는다`
-        : `${self}번 내려서라 — 수비로 내려간다`
-    default:
-      return '놓으면 제자리로 돌아갑니다'
-  }
+  if (target.kind === 'NONE') return '경기장 안에 놓아 주세요'
+  const zone = positionZone(target.position)
+  return `${self}번 · ${zone.depth} · ${zone.lane}에 놓기`
 }

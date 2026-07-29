@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { simulate, createState, tick, checkOrder } from './engine'
+import { simulate, createState, tick, checkOrder, checkPosition } from './engine'
 import { createRng } from './rng'
-import { TOTAL_TICKS } from './constants'
+import { BASE, FREE_POSITION, TOTAL_TICKS } from './constants'
 import { HOME_XI, BENCH } from './squad'
+import { applyOrders, applyPositions, resolveCoefficients } from './tactics'
 import type { Decision, Problem } from './types'
 
 /** 국면 2 「잠긴 문」 — 앞 감독이 전부 잠가놓은 상태를 물려받는다 */
@@ -64,6 +65,133 @@ describe('simulate — 루프', () => {
   it('상대 성향이 스코어에서 도출된다', () => {
     // 1-0으로 우리가 이기고 있으니 상대는 지고 있어 올라온다
     expect(createState(P).opponent).toBe('ALL_OUT')
+  })
+})
+
+describe('자유 선수 배치 — 계약과 재현', () => {
+  const pitch = FREE_POSITION.pitch
+  const forwardWide = { x: pitch.maxX, y: pitch.maxY }
+
+  it('골키퍼·경기장 밖·수비 셋 미만 배치를 막는다', () => {
+    const state = createState(P)
+    expect(checkPosition(state, 'GK01', forwardWide)).not.toBeNull()
+    expect(
+      checkPosition(state, 'MF06', { x: pitch.minX - 1, y: pitch.centreY }),
+    ).not.toBeNull()
+    expect(
+      checkPosition(state, 'MF06', { x: Number.NaN, y: pitch.centreY }),
+    ).not.toBeNull()
+    expect(checkPosition(state, 'MF06', forwardWide)).toBeNull()
+
+    const threeBacks = {
+      ...state,
+      players: state.players.map((player) =>
+        player.id === 'DF02' ? { ...player, position: forwardWide } : player,
+      ),
+    }
+    expect(checkPosition(threeBacks, 'DF03', forwardWide)).not.toBeNull()
+  })
+
+  it('POSITION은 같은 틱에 정확한 좌표를 적용하고 앞뒤 줄 지시를 푼다', () => {
+    const result = simulate(P, [
+      { tick: TOTAL_TICKS - 1, type: 'ORDER', target: 'MF06', order: 'PUSH_UP' },
+      { tick: TOTAL_TICKS - 1, type: 'POSITION', target: 'MF06', position: forwardWide },
+    ])
+    const player = result.final.players.find((state) => state.id === 'MF06')!
+    expect(player.position).toEqual(forwardWide)
+    expect(player.order).toBe('NONE')
+  })
+
+  it('앞뒤 줄 ORDER가 나중에 오면 자유 좌표를 지운다', () => {
+    const result = simulate(P, [
+      {
+        tick: TOTAL_TICKS - 1,
+        type: 'POSITION',
+        target: 'MF06',
+        position: { x: pitch.minX, y: pitch.centreY },
+      },
+      { tick: TOTAL_TICKS - 1, type: 'ORDER', target: 'MF06', order: 'PUSH_UP' },
+    ])
+    const player = result.final.players.find((state) => state.id === 'MF06')!
+    expect(player.position).toBeNull()
+    expect(player.order).toBe('PUSH_UP')
+  })
+
+  it('행동 지시와 자유 좌표는 함께 남고 NONE도 좌표를 지우지 않는다', () => {
+    const held = simulate(P, [
+      { tick: TOTAL_TICKS - 1, type: 'ORDER', target: 'MF06', order: 'HOLD' },
+      {
+        tick: TOTAL_TICKS - 1,
+        type: 'POSITION',
+        target: 'MF06',
+        position: { x: pitch.minX, y: pitch.centreY },
+      },
+    ]).final.players.find((state) => state.id === 'MF06')!
+    expect(held.order).toBe('HOLD')
+    expect(held.position).not.toBeNull()
+
+    const clearedOrder = simulate(P, [
+      {
+        tick: TOTAL_TICKS - 1,
+        type: 'POSITION',
+        target: 'MF06',
+        position: { x: pitch.centreX, y: pitch.centreY },
+      },
+      { tick: TOTAL_TICKS - 1, type: 'ORDER', target: 'MF06', order: 'NONE' },
+    ]).final.players.find((state) => state.id === 'MF06')!
+    expect(clearedOrder.order).toBe('NONE')
+    expect(clearedOrder.position).not.toBeNull()
+  })
+
+  it('새 포메이션은 자유 좌표를 모두 지우고 전체를 다시 배치한다', () => {
+    const result = simulate(P, [
+      { tick: 0, type: 'POSITION', target: 'MF06', position: forwardWide },
+      {
+        tick: 0,
+        type: 'POSITION',
+        target: 'DF02',
+        position: { x: pitch.minX, y: pitch.minY },
+      },
+      { tick: 0, type: 'FORMATION', value: '5-4-1' },
+    ])
+    expect(result.final.players.every((state) => state.position === null)).toBe(true)
+  })
+
+  it('좌표가 null인 결정은 기존 경기와 비트 단위로 같다', () => {
+    const before = simulate(P, []).final
+    const after = simulate(P, [
+      { tick: 0, type: 'POSITION', target: 'MF06', position: null },
+    ]).final
+    expect(after).toEqual(before)
+  })
+
+  it('자유 좌표 계수가 tick의 공격 판정에 실제로 연결된다', () => {
+    const plain = createState(P)
+    const placed = {
+      ...plain,
+      players: plain.players.map((player) =>
+        player.id === 'MF06' ? { ...player, position: forwardWide } : player,
+      ),
+    }
+    const basic = applyOrders(
+      resolveCoefficients(
+        plain.tactics,
+        plain.opponent,
+        plain.awayCount < 11,
+        plain.homeCount < 11,
+        plain.formation,
+      ),
+      plain.players,
+    )
+    const advanced = applyPositions(basic, placed.players)
+    const attemptDraw = BASE.A0 * ((basic.widthK + advanced.widthK) / 2)
+    const rng = () => {
+      const values = [1, 1, attemptDraw, ...Array.from({ length: 15 }, () => 1)]
+      return { next: () => values.shift() ?? 1 }
+    }
+
+    expect(tick(plain, rng()).stats.homeAttempt).toBe(0)
+    expect(tick(placed, rng()).stats.homeAttempt).toBe(1)
   })
 })
 
@@ -339,10 +467,18 @@ describe('개별 지시 — 경기 전체', () => {
     // 벤치에 앉은 선수에게 유령 지시가 붙어 있으면, 나중에 다시
     // 들어올 때 감독이 내리지 않은 지시가 따라 들어온다
     const r = simulate({ ...P, seed: P.seed }, [
+      {
+        tick: 0,
+        type: 'POSITION',
+        target: 'DF04',
+        position: { x: FREE_POSITION.pitch.minX, y: FREE_POSITION.pitch.centreY },
+      },
       { tick: 0, type: 'ORDER', target: 'DF04', order: 'HOLD' },
       { tick: 10, type: 'SUB', out: 'DF04', in: 'DF15' },
     ])
     expect(r.final.players.find((x) => x.id === 'DF04')!.order).toBe('NONE')
     expect(r.final.players.find((x) => x.id === 'DF15')!.order).toBe('NONE')
+    expect(r.final.players.find((x) => x.id === 'DF04')!.position).toBeNull()
+    expect(r.final.players.find((x) => x.id === 'DF15')!.position).toBeNull()
   })
 })

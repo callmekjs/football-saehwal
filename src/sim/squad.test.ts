@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
+import { FREE_POSITION } from './constants'
 import {
   AWAY_XI,
   BENCH,
   HOME_SQUAD,
   HOME_XI,
   bestFinishing,
+  effectivePos,
   getPlayer,
   initialPlayers,
   meanStamina,
@@ -145,5 +147,26 @@ describe('집계', () => {
   it('마무리 최댓값은 피치 위 공격 자원에서 고른다', () => {
     const onPitch = HOME_XI.filter((p) => p.pos === 'FW' || p.pos === 'MF')
     expect(bestFinishing(initialPlayers(P))).toBe(Math.max(...onPitch.map((p) => p.finishing)))
+  })
+})
+
+describe('자유 배치의 실제 줄', () => {
+  it('x 좌표의 수비·중원·공격 구간을 읽는다', () => {
+    const player = initialPlayers(P).find((state) => state.id === 'MF06')!
+    const at = (x: number) => ({
+      ...player,
+      position: { x, y: FREE_POSITION.pitch.centreY },
+    })
+
+    expect(effectivePos(at(FREE_POSITION.pitch.minX))).toBe('DF')
+    expect(effectivePos(at(FREE_POSITION.pitch.centreX))).toBe('MF')
+    expect(effectivePos(at(FREE_POSITION.pitch.maxX))).toBe('FW')
+  })
+
+  it('자유 좌표가 없으면 기존 앞뒤 줄 지시를 그대로 읽는다', () => {
+    const player = initialPlayers(P).find((state) => state.id === 'MF06')!
+    expect(effectivePos({ ...player, order: 'DROP_BACK' })).toBe('DF')
+    expect(effectivePos({ ...player, order: 'PUSH_UP' })).toBe('FW')
+    expect(effectivePos(player)).toBe('MF')
   })
 })

@@ -18,6 +18,17 @@ export type Mentality = 'PARK_BUS' | 'BALANCED' | 'ALL_OUT'
 export type Position = 'GK' | 'DF' | 'MF' | 'FW'
 
 /**
+ * 감독이 배치판에서 지정한 실제 피치 좌표(m).
+ *
+ * x 는 우리 골문(0)에서 상대 골문(105) 방향, y 는 위 터치라인(0)에서
+ * 아래 터치라인(68) 방향이다.
+ */
+export interface PlayerPosition {
+  x: number
+  y: number
+}
+
+/**
  * 선수. 전부 창작된 가상 인물이며 이름 칸이 없다.
  *
  * 실존 선수의 이름을 붙이지 않는 이유는 저작권 회피만이 아니다. 이 게임의
@@ -81,6 +92,13 @@ export interface PlayerState {
    * 그래야 저장된 시드와 밸런스 기준선이 살아남는다.
    */
   order: PlayerOrder
+  /**
+   * 배치판에서 직접 정한 자리. null 이면 포메이션과 앞뒤 줄 지시를 따른다.
+   *
+   * 값이 있는 선수만 새 위치 계수를 받는다. 전원이 null 인 기존 경기는
+   * 이 기능을 넣기 전과 비트 단위로 같아야 한다.
+   */
+  position: PlayerPosition | null
 }
 
 export interface Objective {
@@ -262,3 +280,4 @@ export type Decision =
   | { tick: number; type: 'SUB'; out: string; in: string }
   | { tick: number; type: 'FORMATION'; value: FormationId }
   | { tick: number; type: 'ORDER'; target: string; order: PlayerOrder }
+  | { tick: number; type: 'POSITION'; target: string; position: PlayerPosition | null }
