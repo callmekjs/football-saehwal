@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pitch } from './Pitch'
 import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
-import { BENCH, getPlayer } from '../sim/squad'
+import { BENCH, effectivePos, getPlayer, meanStamina } from '../sim/squad'
 import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
@@ -515,6 +515,55 @@ function UrgencyBar({ state, cards }: { state: MatchState; cards: number }) {
         </span>
       </div>
     </div>
+  )
+}
+
+/**
+ * 선수단 스트립 — 열한 명의 상태를 한 줄에.
+ *
+ * 배치판이 **어디에 서 있는가**를 보여준다면 이쪽은 **각자 어떤 상태인가**다.
+ * 지친 선수와 지시가 걸린 선수가 한눈에 튀어야 75초 안에 누구를 뺄지 정할
+ * 수 있다.
+ *
+ * 시안에는 선수 평점이 있지만 우리 엔진에 평점이 없다. **없는 값을
+ * 지어내지 않는다** — 실제로 있는 체력을 그 자리에 쓴다.
+ */
+function SquadStrip({ state }: { state: MatchState }) {
+  const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+  const mean = onPitch.length === 0 ? 100 : meanStamina(state.players)
+  const meanTone = mean < 45 ? 'danger' : mean < 60 ? 'warn' : 'calm'
+
+  return (
+    <section className="squad-strip" aria-label="선수단 상태">
+      <div className="strip-head">
+        <span className="strip-label">선수단</span>
+        <b data-tone={meanTone}>{Math.round(mean)}</b>
+        <small>평균 체력</small>
+      </div>
+      <div className="strip-list">
+        {onPitch.map((s) => {
+          const p = getPlayer(s.id)
+          const stamina = Math.round(s.stamina)
+          // 세 단계로 나눈다. 색과 함께 숫자도 보이므로 색을 못 봐도 읽힌다
+          const tone = stamina < 45 ? 'danger' : stamina < 60 ? 'warn' : 'calm'
+          const order = s.order === 'NONE' ? null : ORDER_LABELS[s.order].name
+          return (
+            <div key={s.id} className="strip-cell" data-tone={tone}>
+              <span className="strip-pos">{effectivePos(s)}</span>
+              <span className="strip-mark" data-warn={s.booked ? 'on' : undefined}>
+                {p.num}
+              </span>
+              <span className="strip-bar" aria-hidden>
+                <i style={{ width: `${Math.max(0, Math.min(100, stamina))}%` }} />
+              </span>
+              <span className="strip-stam">{stamina}</span>
+              {/* 지시가 없으면 빈 자리를 남긴다. 칸 높이가 들쭉날쭉하면 눈이 걸린다 */}
+              <span className="strip-order">{order ?? ''}</span>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -1060,6 +1109,21 @@ export function MatchScreen({
           )}
         </div>
       </div>
+
+      {/*
+        선수단 스트립 — 열한 명을 한 줄에 펼친다.
+
+        핸드오프 5순위. 위 배치판은 **어디에 서 있는가**를 보여주고 이쪽은
+        **각자 어떤 상태인가**를 보여준다. 배치판에서 열한 명의 체력을 읽으려면
+        카드를 하나씩 눈으로 훑어야 하는데, 한 줄로 세워두면 지친 선수가
+        한눈에 튄다. 75초 안에 누구를 뺄지 정해야 하는 화면이다.
+
+        **누르는 곳이 아니다.** 시안은 여기서 지시를 돌려가며 걸게 했지만,
+        우리는 이미 배치판에 두 단계 탭(선수 1탭 → 행동 1탭)과 드래그가
+        있다. 조작 경로를 둘로 만들면 어느 쪽이 진짜인지 흐려지고, 지시는
+        되돌릴 수 없어서 돌려 걸기가 특히 위험하다. 여기서는 읽기만 한다.
+      */}
+      {phase !== 'DONE' && <SquadStrip state={state} />}
 
       {/* 감독 보고서는 길다. 열 안에 밀어 넣지 않고 아래에 통째로 편다 */}
       {/*
