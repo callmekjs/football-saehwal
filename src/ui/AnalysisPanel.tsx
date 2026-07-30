@@ -6,6 +6,7 @@ import {
 } from '../analysis/compare'
 import type { CoachFinding } from '../analysis/coach'
 import type { Decision, OpponentId, Level, Problem } from '../sim/types'
+import { buildOneMove } from './oneMove'
 
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
   line: { 0: '낮음', 1: '보통', 2: '높음' },
@@ -21,11 +22,6 @@ export function verdict(delta: number) {
   if (delta >= 0.04) return '내린 판단 덕분에 성공 가능성이 분명히 커졌습니다.'
   if (delta <= -0.04) return '이번에는 그대로 뒀을 때보다 위험이 더 커졌습니다.'
   return '그대로 뒀을 때와 성공 가능성이 비슷했습니다.'
-}
-
-function pointDelta(delta: number) {
-  const points = delta * 100
-  return `${points > 0 ? '+' : ''}${points.toFixed(1)}%p`
 }
 
 function FindingCard({ finding }: { finding: CoachFinding }) {
@@ -75,6 +71,13 @@ export function AnalysisPanel({
   const snapshot = useMemo(() => decisions.map((decision) => ({ ...decision })), [decisions])
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const oneMove = analysis
+    ? buildOneMove(analysis.coach.decisionReview, analysis.userDelta, {
+        decisions: snapshot,
+        kickoff,
+        firstHalf,
+      })
+    : null
 
   useEffect(() => {
     let cancelled = false
@@ -112,7 +115,7 @@ export function AnalysisPanel({
           <span className="analysis-loading">성공 가능성을 계산하고 있습니다…</span>
         )}
         {error && <span className="analysis-error">{error}</span>}
-        {analysis && (
+        {analysis && oneMove && (
           <>
             <section className="coach-overview">
               <span>감독 보고서 · 경기 기록으로 분석</span>
@@ -124,9 +127,32 @@ export function AnalysisPanel({
               </ul>
             </section>
 
+            <section className="one-move" aria-label="이 경기의 한 수">
+              <div className="one-move-head">
+                <span className="one-move-kicker">종료 분석 핵심</span>
+                <h3>이 경기의 한 수</h3>
+                <span className="one-move-status" data-kind={oneMove.kind}>
+                  {oneMove.label}
+                </span>
+              </div>
+              <div className="one-move-main">
+                <span className="one-move-time">
+                  {oneMove.time ?? '결정 시각 없음'}
+                </span>
+                <strong className="one-move-decision">{oneMove.decision}</strong>
+                <div className="one-move-impact">
+                  <span>{oneMove.impactLabel}</span>
+                  <strong className="one-move-delta" data-tone={oneMove.tone}>
+                    {oneMove.deltaText}
+                  </strong>
+                </div>
+              </div>
+              <p className="one-move-note">{oneMove.note}</p>
+            </section>
+
             <div className="analysis-headline">
               <strong className="analysis-verdict">{verdict(analysis.userDelta)}</strong>
-              <span>그대로 뒀을 때와 비교 {pointDelta(analysis.userDelta)}</span>
+              <span>그대로 뒀을 때와 비교 {oneMove.deltaText}</span>
             </div>
             <span className="analysis-caption">
               한 경기의 운을 덜어내려고 같은 조건의 {ANALYSIS_RUNS}경기에서 세 가지
