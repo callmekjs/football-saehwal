@@ -4,13 +4,13 @@ import {
   WIDTH,
   MENTALITY,
   COUNT_PENALTY,
-  DIFFICULTY,
+  OPPONENTS,
   FREE_POSITION,
   ORDERS,
   AWAY_FATIGUE,
 } from './constants'
 import { getFormation, type FormationId } from './formations'
-import type { Difficulty, Mentality, PlayerState, Tactics } from './types'
+import type { Mentality, OpponentId, PlayerState, Tactics } from './types'
 
 /** 레버 3개와 상대 성향이 합쳐져 나오는 최종 승수 묶음 */
 export interface Coefficients {
@@ -235,42 +235,58 @@ export function applyAwayFatigue(c: Coefficients, awayStamina: number): Coeffici
 }
 
 /**
- * 오늘 만난 상대가 우리보다 센가 약한가를 계수에 반영한다.
+ * 오늘 만난 상대 팀을 계수에 반영한다.
  *
- * 사용자가 정했다 — *"상대 난이도도 설정하자. 우리보다 피파 랭킹이 낮다 =
- * 쉬움 / 비슷하다 = 보통 / 높다 = 어려움"*.
+ * 사용자가 정했다 — *"상대방도 좀 선택이 가능한가? 너무 단조로워서"* 그리고
+ * *"FIFA 순위를 참고해서 10~15개 팀을 만들어봐"*.
  *
  * ★ **난수를 하나도 더 뽑지 않는다.** `drawTick()` 의 18슬롯은 순서까지
- * 그대로다. 난이도가 바꾸는 것은 이미 뽑아둔 난수와 비교되는 **계수**뿐이라
+ * 그대로다. 상대가 바꾸는 것은 이미 뽑아둔 난수와 비교되는 **계수**뿐이라
  * 저장된 시드가 깨지지 않는다.
  *
- * ★ **`NORMAL` 은 항등이다.** `step` 이 0이라 들어온 계수 객체를 그대로
- * 돌려준다 — 1을 곱하는 새 경로조차 만들지 않는다. 이 성질이 깨지면 다섯
- * 국면의 합격 기준선을 처음부터 다시 재야 한다.
+ * ★ **기준팀은 항등이다.** `atk`·`def` 가 0이고 `shape` 가 전부 1이면 들어온
+ * 계수 객체를 그대로 돌려준다 — 1을 곱하는 새 경로조차 만들지 않는다. 이
+ * 성질이 깨지면 다섯 국면의 합격 기준선을 처음부터 다시 재야 한다.
  *
- * 센 팀은 네 방향으로 동시에 세다. 더 자주 오고(`oppVolume`), 온 김에 더
- * 잘 넣고(`oppFinish`), 우리 공격은 덜 만들어지게 하고(`ourVolume`),
- * 만들어진 슛도 더 잘 막는다(`ourFinish`). 상대 공격만 키우면 우리 공격은
- * 그대로여서, 쫓는 국면에서는 어려움이 오히려 쉬워지는 역전이 난다.
+ * **공격력과 수비력이 따로 걸린다.** 센 팀은 더 자주 오고(`attack`) 더 잘
+ * 넣으며(`finish`), 동시에 우리 전개를 끊고(`deny`) 우리 슛을 막는다
+ * (`block`). 하나의 세기 눈금만 두면 아래 순위 팀이 *위협도 적고 뚫기도
+ * 쉬워서* 지키는 국면이 통째로 사라진다.
+ *
+ * **`shape` 는 크기가 아니라 모양이다.** 같은 세기라도 배후로 오는 팀과
+ * 오픈플레이로 오는 팀과 세트피스로 넣는 팀의 답이 다르다. 이것이 팀을
+ * 고르는 의미다.
  *
  * 세트피스 **빈도**(`setPiece`)는 건드리지 않는다. 그건 우리가 라인을
- * 내려서 내주는 것이지 상대가 세서 생기는 것이 아니다. 거기에 난이도를
- * 곱하면 `LINE[0].setPiece = 4.2` 위에 다시 곱해져 라인 축이 난이도에
- * 먹힌다. 상대가 센 것은 그 세트피스를 **더 잘 넣는 것**(`oppShotXg`)으로
- * 표현한다.
+ * 내려서 내주는 것이지 상대가 세서 생기는 것이 아니다. 거기에 곱하면
+ * `LINE[0].setPiece = 4.2` 위에 다시 곱해져 라인 축이 상대에게 먹힌다.
+ * 상대가 센 것은 그 세트피스를 **더 잘 넣는 것**(`oppShotXg`)으로 표현한다.
  */
-export function applyDifficulty(c: Coefficients, difficulty: Difficulty): Coefficients {
-  const step = DIFFICULTY.levels[difficulty].step * DIFFICULTY.scale
-  if (step === 0) return c
-  const e = DIFFICULTY.step
+export function applyOpponent(c: Coefficients, team: OpponentId): Coefficients {
+  const t = teamOf(team)
+  const k = OPPONENTS.scale
+  const e = OPPONENTS.effect
+  const atk = t.atk * k
+  const def = t.def * k
+  // 기준팀은 계수 객체를 그대로 돌려준다. 1을 곱하는 새 경로조차 만들지 않는다
+  if (atk === 0 && def === 0 && t.shape.behind === 1 && t.shape.open === 1 && t.shape.finish === 1) {
+    return c
+  }
   return {
     ...c,
-    behind: c.behind * (1 + step * e.oppVolume),
-    oppOpen: c.oppOpen * (1 + step * e.oppVolume),
-    oppShotXg: c.oppShotXg * (1 + step * e.oppFinish),
-    widthK: c.widthK * (1 - step * e.ourVolume),
-    entryXg: c.entryXg * (1 - step * e.ourFinish),
+    behind: c.behind * (1 + atk * e.attack) * t.shape.behind,
+    oppOpen: c.oppOpen * (1 + atk * e.attack) * t.shape.open,
+    oppShotXg: c.oppShotXg * (1 + atk * e.finish) * t.shape.finish,
+    widthK: c.widthK * (1 - def * e.deny),
+    entryXg: c.entryXg * (1 - def * e.block),
   }
+}
+
+/** 팀 표에서 하나를 찾는다. 없는 id 는 데이터가 어긋난 것이므로 바로 터뜨린다 */
+export function teamOf(id: OpponentId): (typeof OPPONENTS)['teams'][number] {
+  const found = OPPONENTS.teams.find((t) => t.id === id)
+  if (!found) throw new Error(`없는 상대 팀: ${id}`)
+  return found
 }
 
 /** 이 선수의 체력 소모 배수. 아껴 뛰라고 하면 덜 닳는다 */

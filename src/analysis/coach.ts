@@ -3,10 +3,10 @@ import { withJosa } from './josa'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
-import { difficultyInfo } from './difficulty'
+import { opponentInfo, REFERENCE_TEAM } from './opponents'
 import type {
   Decision,
-  Difficulty,
+  OpponentId,
   Level,
   MatchEventLog,
   MatchState,
@@ -179,13 +179,11 @@ const point = (rate: number) => `${rate >= 0 ? '+' : ''}${(rate * 100).toFixed(1
  * 어느 상대로 잰 150경기인가.
  *
  * 총평은 다섯 줄로 고정이라 줄을 늘리지 않고 150판 숫자가 있는 줄에 붙인다.
- * **비슷한 상대(보통)일 때는 적지 않는다** — 기본값이라 할 말이 없고,
- * 적으면 예전 보고서와 문장이 달라져 회귀 검사가 깨진다.
+ * **기준팀일 때는 적지 않는다** — 기본값이라 할 말이 없고, 적으면 예전
+ * 보고서와 문장이 달라져 회귀 검사가 깨진다.
  */
-const foeNote = (difficulty: Difficulty): string =>
-  difficulty === 'NORMAL'
-    ? ''
-    : ` · ${difficultyInfo(difficulty).rank}위 상대 기준`
+const foeNote = (opponent: OpponentId): string =>
+  opponent === REFERENCE_TEAM ? '' : ` · ${opponentInfo(opponent).name} 상대 기준`
 
 function clockOf(tick: number, kickoff: number): string {
   const totalSeconds = Math.round((kickoff + (tick / TOTAL_TICKS) * SEGMENT_MINUTES) * 60)
@@ -957,7 +955,7 @@ export function buildCoachReport(
       `상대 공격 ${totals.awayAttempt}회 → 슈팅 ${totals.awayShot}회 → 실점 ${conceded}골${splitAgainst}`,
       `세트피스 위험 ${totals.setPiece} · 배후 침투 ${totals.behind}회`,
       `직접 내린 판단 ${percent(metrics.userRate)} · 방치 대비 ${point(metrics.userDelta)}`,
-      `권장 전술 성공 가능성 ${percent(metrics.recommendationRate)}${foeNote(final.difficulty)}`,
+      `권장 전술 성공 가능성 ${percent(metrics.recommendationRate)}${foeNote(final.opponentTeam)}`,
     ],
     turningPoint: turningPointOf([...rankedFor, ...rankedAgainst], decisionReview),
     goalsFor,

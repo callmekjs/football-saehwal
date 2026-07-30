@@ -3,9 +3,9 @@ import raw from './data/problems.json' with { type: 'json' }
 import { toProblem } from './sim/problems'
 import { Backdrop } from './ui/Backdrop'
 import { MatchScreen } from './ui/MatchScreen'
-import { DIFFICULTIES, OUR_RANK } from './analysis/difficulty'
+import { TIER_LABEL, opponentInfo, teamsByTier } from './analysis/opponents'
 import { addedTimeOf, breakStart, halfLabel, segmentEnd, type Half } from './matchClock'
-import type { Difficulty, Problem } from './sim/types'
+import type { OpponentId, Problem } from './sim/types'
 
 /** 국면 카드에 띄울 정보. 국면 데이터에서 파생한다 */
 interface Entry {
@@ -43,35 +43,45 @@ function HalfButton({ half, onPick }: { half: Half; onPick: () => void }) {
  * 카드 하나에 조작이 다섯 개가 되어 무엇을 눌러야 하는지가 흐려진다.
  * 상대는 판 전체의 설정이므로 국면 목록 위에 한 벌만 둔다.
  *
- * 순위 숫자는 전부 창작이다. 실존 팀·국가·구단을 쓰지 않는다.
+ * **순위 묶음으로 갈라 보여준다.** 열세 팀을 한 줄로 늘어놓으면 무엇이
+ * 센 팀인지 읽히지 않는다. 선수 개인 이름·엠블럼·유니폼은 쓰지 않는다.
  */
-function DifficultyPicker({
+function OpponentPicker({
   value,
   onPick,
 }: {
-  value: Difficulty
-  onPick: (value: Difficulty) => void
+  value: OpponentId
+  onPick: (value: OpponentId) => void
 }) {
   return (
-    <div className="difficulty">
-      <span className="difficulty-head">
-        <b>상대 난이도</b>
-        <small>우리 순위는 {OUR_RANK}위입니다. 오늘 만날 상대를 고르세요.</small>
+    <div className="opponent">
+      <span className="opponent-head">
+        <b>상대 팀</b>
+        <small>팀마다 하는 축구가 다릅니다. 같은 전술이 모두에게 통하지 않습니다.</small>
       </span>
-      <span className="difficulty-set" role="group" aria-label="상대 난이도">
-        {DIFFICULTIES.map((d) => (
-          <button
-            key={d.id}
-            className={`difficulty-btn${value === d.id ? ' on' : ''}`}
-            aria-pressed={value === d.id}
-            onClick={() => onPick(d.id)}
-          >
-            <b>{d.name}</b>
-            <small>상대 {d.rank}위</small>
-            <em>{d.hint}</em>
-          </button>
-        ))}
-      </span>
+      {teamsByTier().map(({ tier, teams }) => (
+        <div key={tier} className="opponent-tier">
+          <span className="opponent-tier-name">{TIER_LABEL[tier]}</span>
+          <span className="opponent-set" role="group" aria-label={TIER_LABEL[tier]}>
+            {teams.map((team) => (
+              <button
+                key={team.id}
+                className={`opponent-btn${value === team.id ? ' on' : ''}`}
+                aria-pressed={value === team.id}
+                title={team.note}
+                onClick={() => onPick(team.id)}
+              >
+                <b>
+                  {team.name}
+                  <i>{team.rank}위</i>
+                </b>
+                <em>{team.tag}</em>
+              </button>
+            ))}
+          </span>
+        </div>
+      ))}
+      <span className="opponent-note">{opponentInfo(value).note}</span>
     </div>
   )
 }
@@ -154,19 +164,19 @@ export function App() {
   /**
    * 오늘 만날 상대. 국면과 반과 함께 한 판을 정한다.
    *
-   * 기본값이 **보통**이다. 다섯 국면의 밸런스를 잰 자리가 보통이므로,
-   * 아무것도 안 고른 사람은 검증된 난이도를 만나야 한다.
+   * 기본값이 **기준팀**이다. 다섯 국면의 밸런스를 잰 자리가 그 팀이므로,
+   * 아무것도 안 고른 사람은 검증된 조건을 만나야 한다.
    */
-  const [difficulty, setDifficulty] = useState<Difficulty>('NORMAL')
+  const [opponent, setOpponent] = useState<OpponentId>('USA')
 
   if (picked) {
     const problem = { ...picked.entry.problem, seed: picked.entry.problem.seed + attempt * 7919 }
     return (
       <MatchScreen
-        key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${difficulty}`}
+        key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${opponent}`}
         problem={problem}
         startHalf={picked.half}
-        difficulty={difficulty}
+        opponent={opponent}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
       />
@@ -227,7 +237,7 @@ export function App() {
             같은 전술이 모든 판을 풀어주지 않습니다 · <b>전반 또는 후반을 선택하세요</b>
           </span>
         </div>
-        <DifficultyPicker value={difficulty} onPick={setDifficulty} />
+        <OpponentPicker value={opponent} onPick={setOpponent} />
         <div className="fixtures">
           {entries.map((e, i) => (
             <FixtureCard

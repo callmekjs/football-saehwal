@@ -6,11 +6,11 @@
  */
 import raw from '../src/data/problems.json' with { type: 'json' }
 import { simulate } from '../src/sim/engine'
-import { DIFFICULTY } from '../src/sim/constants'
+import { OPPONENTS } from '../src/sim/constants'
 import { FORMATION_IDS, type FormationId } from '../src/sim/formations'
 import { getPlayer, initialPlayers } from '../src/sim/squad'
 import { toProblem } from '../src/sim/problems'
-import type { Decision, Difficulty, Level, PlayerOrder, Problem } from '../src/sim/types'
+import type { Decision, OpponentId, Level, PlayerOrder, Problem } from '../src/sim/types'
 
 /** 국면 파싱은 `src/sim/problems.ts` 한 자리에만 둔다 */
 export const problems = raw.map(toProblem)
@@ -23,24 +23,30 @@ export const problems = raw.map(toProblem)
  * 인자를 안 주면 언제나 보통이고, 저장된 기준선도 그 값이다.
  *
  * `npm run sim` — 보통만 (기존과 동일, 3~4분)
- * `npm run sim -- --difficulty=HARD` — 어려움만
- * `npm run sim -- --difficulty=ALL` — 셋 다 (10~12분)
+ * `npm run sim -- --opponent=HARD` — 어려움만
+ * `npm run sim -- --opponent=ALL` — 셋 다 (10~12분)
  */
-const DIFFICULTY_LABEL: Record<Difficulty, string> = {
-  EASY: '쉬움',
-  NORMAL: '보통',
-  HARD: '어려움',
+const LABEL: Record<OpponentId, string> = Object.fromEntries(
+  OPPONENTS.teams.map((team) => [team.id, `${team.name} ${team.rank}위`]),
+) as Record<OpponentId, string>
+
+/** 밸런스를 재는 기준팀. 계수가 전부 1.0이라 여기서만 합격을 판정한다 */
+const REFERENCE: OpponentId = 'USA'
+
+function parseTeams(argv: string[]): OpponentId[] {
+  const arg = argv.find((a) => a.startsWith('--team='))?.split('=')[1]?.toUpperCase()
+  if (!arg) return [REFERENCE]
+  if (arg === 'ALL') return OPPONENTS.teams.map((team) => team.id)
+  const found = OPPONENTS.teams.find((team) => team.id === arg)
+  if (!found) {
+    throw new Error(
+      `--team 은 ALL 이거나 다음 중 하나다: ${OPPONENTS.teams.map((t) => t.id).join(' · ')}`,
+    )
+  }
+  return [found.id]
 }
 
-function parseDifficulties(argv: string[]): Difficulty[] {
-  const arg = argv.find((a) => a.startsWith('--difficulty='))?.split('=')[1]?.toUpperCase()
-  if (!arg || arg === 'NORMAL') return ['NORMAL']
-  if (arg === 'ALL') return ['EASY', 'NORMAL', 'HARD']
-  if (arg === 'EASY' || arg === 'HARD') return [arg]
-  throw new Error(`--difficulty 는 EASY·NORMAL·HARD·ALL 중 하나다 (${arg})`)
-}
-
-const DIFFICULTIES = parseDifficulties(process.argv.slice(2))
+const DIFFICULTIES = parseTeams(process.argv.slice(2))
 
 /**
  * 시드 수는 조합 간 차이를 판별할 수 있을 만큼 커야 한다.
@@ -56,12 +62,12 @@ const stderr = (p: number) => Math.sqrt((p * (1 - p)) / SEEDS)
 const NOOP_MAX = 0.5
 const GAP_MIN = 0.2
 
-function measure(base: Problem, decisions: Decision[], difficulty: Difficulty) {
+function measure(base: Problem, decisions: Decision[], opponent: OpponentId) {
   let pass = 0
   let home = 0
   let away = 0
   for (let s = 0; s < SEEDS; s++) {
-    const r = simulate({ ...base, seed: base.seed + s }, decisions, difficulty)
+    const r = simulate({ ...base, seed: base.seed + s }, decisions, opponent)
     if (r.passed) pass++
     home += r.final.score[0] - base.score[0]
     away += r.final.score[1] - base.score[1]
@@ -122,12 +128,12 @@ function orderPlans(base: Problem): Array<{ label: string; picks: Array<[string,
 }
 
 /** 27조합을 전부 돌려 순위를 낸다. 정답 경로를 손으로 적지 않아도 된다 */
-function sweep(base: Problem, difficulty: Difficulty) {
+function sweep(base: Problem, opponent: OpponentId) {
   const rows: Array<{ label: string; rate: number }> = []
   for (let l = 0; l <= 2; l++) {
     for (let p = 0; p <= 2; p++) {
       for (let w = 0; w <= 2; w++) {
-        const { rate } = measure(base, set(l as Level, p as Level, w as Level), difficulty)
+        const { rate } = measure(base, set(l as Level, p as Level, w as Level), opponent)
         rows.push({ label: `${l}/${p}/${w}`, rate })
       }
     }
@@ -147,25 +153,24 @@ const pct = (v: number) => `${(v * 100).toFixed(1)}%`
  * **격차**(무개입 → 최선)를 찍어, 어느 난이도에서도 "아무것도 안 해도
  * 되는 판"이 되지 않았는지 눈으로 확인한다.
  */
-function runDifficulty(difficulty: Difficulty): boolean {
+function runDifficulty(opponent: OpponentId): boolean {
   let allPassed = true
   const winners: Array<{ title: string; top: string }> = []
   const formationWinners: Array<{ title: string; top: FormationId }> = []
   /** 국면마다 지시가 노이즈 바닥을 넘어 움직인 조합 수 */
   const orderMoved: Array<{ title: string; moved: number }> = []
-  const gated = difficulty === 'NORMAL'
+  const gated = opponent === REFERENCE
 
   console.log(
     `\n${'═'.repeat(72)}\n` +
-      `상대 난이도 ${DIFFICULTY_LABEL[difficulty]} — 우리 ${DIFFICULTY.ourRank}위 대 상대 ` +
-      `${DIFFICULTY.levels[difficulty].rank}위` +
+      `상대 ${LABEL[opponent]}` +
       (gated ? '   ← 합격 기준을 재는 자리' : '   (합격 판정 없음 · 참고용)') +
       `\n${'═'.repeat(72)}`,
   )
 
   for (const p of problems) {
-    const noop = measure(p, [], difficulty)
-    const rows = sweep(p, difficulty)
+    const noop = measure(p, [], opponent)
+    const rows = sweep(p, opponent)
     const top = rows[0]
     const bottom = rows[rows.length - 1]
     const gap = top.rate - noop.rate
@@ -202,7 +207,7 @@ function runDifficulty(difficulty: Difficulty): boolean {
     const [l, pr, w] = top.label.split('/').map(Number) as [Level, Level, Level]
     const byFormation = FORMATION_IDS.map((f) => ({
       id: f,
-      rate: measure({ ...p, initialFormation: f }, set(l, pr, w), difficulty).rate,
+      rate: measure({ ...p, initialFormation: f }, set(l, pr, w), opponent).rate,
     })).sort((a, b) => b.rate - a.rate)
 
     console.log(
@@ -225,7 +230,7 @@ function runDifficulty(difficulty: Difficulty): boolean {
       rate: measure(
         p,
         [...lever, ...plan.picks.map(([target, order]) => ({ tick: 0, type: 'ORDER' as const, target, order }))],
-        difficulty,
+        opponent,
       ).rate,
     }))
     const noOrders = orderRows[0].rate
@@ -251,7 +256,7 @@ function runDifficulty(difficulty: Difficulty): boolean {
     console.log(allPassed ? '전 국면 합격' : '미달 국면 있음 — src/sim/constants.ts 를 조정한다')
   } else {
     console.log(
-      `${DIFFICULTY_LABEL[difficulty]}은 합격 판정 대상이 아니다. ` +
+      `${LABEL[opponent]}은 합격 판정 대상이 아니다. ` +
         `기준은 보통에서만 재고, 여기서는 격차가 살아 있는지만 본다`,
     )
   }
@@ -285,13 +290,13 @@ function runDifficulty(difficulty: Difficulty): boolean {
 console.log(`시드 ${SEEDS}개 × 국면 ${problems.length}개 × 27조합`)
 console.log(`조합은 라인/압박/폭. 0=낮음·약·좁게, 1=보통·중, 2=높음·강·넓게`)
 console.log(
-  `난이도: ${DIFFICULTIES.map((d) => DIFFICULTY_LABEL[d]).join(' · ')}` +
-    (DIFFICULTIES.length === 1 ? '   (--difficulty=ALL 로 셋 다 잰다)' : ''),
+  `난이도: ${DIFFICULTIES.map((d) => LABEL[d]).join(' · ')}` +
+    (DIFFICULTIES.length === 1 ? '   (--opponent=ALL 로 셋 다 잰다)' : ''),
 )
 
 let everythingPassed = true
-for (const difficulty of DIFFICULTIES) {
-  if (!runDifficulty(difficulty)) everythingPassed = false
+for (const opponent of DIFFICULTIES) {
+  if (!runDifficulty(opponent)) everythingPassed = false
 }
 
 if (!everythingPassed) process.exitCode = 1

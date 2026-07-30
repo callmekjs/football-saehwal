@@ -5,7 +5,7 @@ import {
   type MatchAnalysis,
 } from '../analysis/compare'
 import type { CoachFinding } from '../analysis/coach'
-import type { Decision, Difficulty, Level, Problem } from '../sim/types'
+import type { Decision, OpponentId, Level, Problem } from '../sim/types'
 
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
   line: { 0: '낮음', 1: '보통', 2: '높음' },
@@ -56,7 +56,7 @@ export function AnalysisPanel({
   decisions,
   kickoff,
   firstHalf = null,
-  difficulty = 'NORMAL',
+  opponent = 'USA',
 }: {
   problem: Problem
   decisions: Decision[]
@@ -70,7 +70,7 @@ export function AnalysisPanel({
    * 뛰어놓고 무개입 기준선만 보통에서 재면, 상대가 세서 생긴 차이가
    * 감독의 판단 탓으로 찍힌다.
    */
-  difficulty?: Difficulty
+  opponent?: OpponentId
 }) {
   const snapshot = useMemo(() => decisions.map((decision) => ({ ...decision })), [decisions])
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null)
@@ -90,7 +90,7 @@ export function AnalysisPanel({
           ANALYSIS_RUNS,
           kickoff,
           firstHalf,
-          difficulty,
+          opponent,
         )
         if (!cancelled) setAnalysis(next)
       } catch (reason) {
@@ -102,7 +102,7 @@ export function AnalysisPanel({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [difficulty, firstHalf, kickoff, problem, snapshot])
+  }, [opponent, firstHalf, kickoff, problem, snapshot])
 
   return (
     <section className="panel analysis">

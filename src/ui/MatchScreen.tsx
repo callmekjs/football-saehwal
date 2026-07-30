@@ -35,10 +35,10 @@ import {
   formatBreak,
   useBreakClock,
 } from './breakClock'
-import { difficultyInfo, OUR_RANK } from '../analysis/difficulty'
+import { opponentInfo } from '../analysis/opponents'
 import type {
   Decision,
-  Difficulty,
+  OpponentId,
   Level,
   MatchState,
   PlayerOrder,
@@ -421,7 +421,7 @@ const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
 export function MatchScreen({
   problem,
   startHalf,
-  difficulty = 'NORMAL',
+  opponent = 'USA',
   onExit,
   onRetry,
 }: {
@@ -439,7 +439,7 @@ export function MatchScreen({
    * 경기 중에는 못 바꾼다 — 지고 있다고 상대를 약하게 바꿀 수 있으면
    * 그건 난이도가 아니다.
    */
-  difficulty?: Difficulty
+  opponent?: OpponentId
   onExit: () => void
   /**
    * 다시 도전. 없으면 **같은 시작 조건으로** 처음부터 다시 한다.
@@ -475,7 +475,7 @@ export function MatchScreen({
     setPosition,
     startNextHalf,
     decisions,
-  } = useMatch(problem, difficulty)
+  } = useMatch(problem, opponent)
   const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
@@ -754,11 +754,12 @@ export function MatchScreen({
               있으면 그건 난이도가 아니다. 그래서 버튼이 아니라 표시다.
               순위는 전부 창작한 숫자이며 실존 팀·국가를 쓰지 않는다.
             */}
-            <p className="away-rank" data-level={difficulty.toLowerCase()}>
-              <b>{difficultyInfo(difficulty).name}</b>
-              <span>
-                우리 {OUR_RANK}위 · 상대 {difficultyInfo(difficulty).rank}위
-              </span>
+            <p className="away-rank" data-level={opponentInfo(opponent).tier.toLowerCase()}>
+              <b>
+                {opponentInfo(opponent).name}
+                <i>{opponentInfo(opponent).rank}위</i>
+              </b>
+              <span>{opponentInfo(opponent).tag}</span>
             </p>
             <AwayPanel state={visibleOpponentState} />
           </div>
@@ -904,7 +905,7 @@ export function MatchScreen({
             decisions={decisions.current}
             kickoff={kickoff}
             firstHalf={firstHalf ? firstHalf.decisions : null}
-            difficulty={difficulty}
+            opponent={opponent}
           />
         </div>
       )}

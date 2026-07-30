@@ -1,7 +1,7 @@
 import { simulate, simulateHalves } from '../sim/engine'
 import type {
   Decision,
-  Difficulty,
+  OpponentId,
   MatchState,
   Problem,
   Recommendation,
@@ -72,13 +72,13 @@ function runOnce(
   problem: Problem,
   second: Decision[],
   first: Decision[] | null,
-  difficulty: Difficulty,
+  opponent: OpponentId,
 ): { final: MatchState; passed: boolean; halftime: MatchState | null } {
   if (first === null) {
-    const run = simulate(problem, second, difficulty)
+    const run = simulate(problem, second, opponent)
     return { final: run.final, passed: run.passed, halftime: null }
   }
-  return simulateHalves(problem, first, second, difficulty)
+  return simulateHalves(problem, first, second, opponent)
 }
 
 function measure(
@@ -93,7 +93,7 @@ function measure(
    * **이걸 안 맞추면 판단 평가가 통째로 틀린다.** 어려움으로 이겨놓고
    * 보통 기준선과 비교하면 "무개입보다 못했다"가 나온다.
    */
-  difficulty: Difficulty = 'NORMAL',
+  opponent: OpponentId = 'USA',
 ): MeasureResult {
   // 같은 반복 경기의 최종 상태를 함께 모아, 별도 시뮬레이션 없이 채널별 평균을 만든다.
   let passed = 0
@@ -114,7 +114,7 @@ function measure(
 
   for (let i = 0; i < runs; i++) {
     const replay = { ...problem, seed: problem.seed + i }
-    const result = runOnce(replay, decisions, firstHalf, difficulty)
+    const result = runOnce(replay, decisions, firstHalf, opponent)
     if (i === 0) {
       firstFinal = result.final
       firstHalftime = result.halftime
@@ -180,20 +180,20 @@ export function compareDecisions(
    * 무개입 기준선이 다른 난이도에서 재어지면 "당신의 판단이 무개입보다
    * 못했다"가 상대가 세서 생긴 차이를 감독 탓으로 돌리게 된다.
    */
-  difficulty: Difficulty = 'NORMAL',
+  opponent: OpponentId = 'USA',
 ): MatchAnalysis {
   if (!Number.isInteger(runs) || runs <= 0) throw new Error('분석 횟수는 양의 정수여야 한다')
   if (!problem.recommendation) throw new Error(`${problem.id}: 권장 전술이 없다`)
 
   // 무개입과 권장 전술도 사용자와 **같은 반 수**로 돌려야 비교가 성립한다
-  const noop = measure(problem, [], runs, firstHalf && [], difficulty)
-  const user = measure(problem, userDecisions, runs, firstHalf, difficulty)
+  const noop = measure(problem, [], runs, firstHalf && [], opponent)
+  const user = measure(problem, userDecisions, runs, firstHalf, opponent)
   const recommendation = measure(
     problem,
     planOf(problem.recommendation),
     runs,
     firstHalf && planOf(problem.recommendation),
-    difficulty,
+    opponent,
   )
 
   const rows = [

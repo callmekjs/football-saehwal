@@ -1352,7 +1352,7 @@ button {
 
 /* ── 상대 난이도 — 국면 목록 위에 한 벌만 둔다 ──────────── */
 
-.difficulty {
+.opponent {
   display: grid;
   gap: 8px;
   margin: 0 2px 14px;
@@ -1362,23 +1362,23 @@ button {
   background: var(--panel);
 }
 
-.difficulty-head {
+.opponent-head {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 10px;
 }
 
-.difficulty-head > b { font-size: 13px; }
-.difficulty-head > small { color: var(--dim); font-size: 11.5px; }
+.opponent-head > b { font-size: 13px; }
+.opponent-head > small { color: var(--dim); font-size: 11.5px; }
 
-.difficulty-set {
+.opponent-set {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 6px;
 }
 
-.difficulty-btn {
+.opponent-btn {
   display: grid;
   gap: 2px;
   /* 손가락 표적 최소 44px */
@@ -1393,30 +1393,45 @@ button {
   transition: background 0.12s, border-color 0.12s;
 }
 
-.difficulty-btn:hover,
-.difficulty-btn:focus-visible {
+.opponent-btn:hover,
+.opponent-btn:focus-visible {
   background: rgba(255, 255, 255, 0.1);
   border-color: var(--accent);
 }
 
-.difficulty-btn > b { font-size: 13px; }
-.difficulty-btn > small { color: var(--accent); font-size: 11px; }
-.difficulty-btn > em { color: var(--dim); font-size: 10.5px; font-style: normal; }
+.opponent-btn > b { font-size: 12.5px; display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.opponent-btn > b > i { font-style: normal; font-size: 10px; color: var(--dim); font-weight: 500; }
+.opponent-btn > small { color: var(--accent); font-size: 11px; }
+.opponent-btn > em { color: var(--dim); font-size: 10.5px; font-style: normal; }
 
 /*
   고른 것은 **테두리와 배경 둘 다** 바뀐다. 색 하나만 바꾸면 색을
   구분하지 못하는 사람에게는 아무 일도 안 일어난 화면이 된다.
 */
-.difficulty-btn.on {
+.opponent-btn.on {
   border-color: var(--accent);
   background: rgba(62, 207, 142, 0.16);
 }
 
-.difficulty-btn.on > small { color: var(--text); }
+.opponent-btn.on > b > i { color: var(--text); }
+
+/* 순위 묶음 머리줄. 열세 팀을 한 줄로 늘어놓으면 무엇이 센 팀인지 안 읽힌다 */
+.opponent-tier { display: grid; gap: 5px; }
+.opponent-tier-name { font-size: 10.5px; color: var(--dim); letter-spacing: 0.04em; }
+
+/* 고른 팀이 무슨 축구를 하는지 한 줄. 버튼 안에 다 넣으면 카드가 벽이 된다 */
+.opponent-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--accent);
+}
 
 /* 좁은 화면에서는 세 칸이 겹치므로 한 줄에 하나씩 세운다 */
 @media (max-width: 460px) {
-  .difficulty-set { grid-template-columns: 1fr; }
+  .opponent-set { grid-template-columns: 1fr 1fr; }
 }
 
 /* ── 경기 중 상대 순위 표시 — 읽기 전용 ───────────────── */
@@ -1433,12 +1448,13 @@ button {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.away-rank > b { font-size: 12px; }
+.away-rank > b { font-size: 12px; display: flex; gap: 6px; align-items: baseline; }
+.away-rank > b > i { font-style: normal; font-size: 10px; color: var(--dim); font-weight: 500; }
 .away-rank > span { color: var(--dim); font-size: 11px; }
 
 /* 센 상대는 경고색, 약한 상대는 우리 색으로 갈라 놓는다 */
-.away-rank[data-level='hard'] { border-left-color: var(--warn); }
-.away-rank[data-level='easy'] { border-left-color: var(--accent); }
+.away-rank[data-level='top'] { border-left-color: var(--warn); }
+.away-rank[data-level='lower'] { border-left-color: var(--accent); }
 
 /* ── 하프타임 — 라커룸에서 주장이 전반을 정리한다 ────────── */
 

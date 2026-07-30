@@ -19,19 +19,18 @@ export type Mentality = 'PARK_BUS' | 'BALANCED' | 'ALL_OUT'
 export type Position = 'GK' | 'DF' | 'MF' | 'FW'
 
 /**
- * 오늘 만나는 상대가 우리보다 센가 약한가.
+ * 오늘 만나는 상대 팀.
  *
- * 사용자가 정했다 — *"상대 난이도도 설정하자. 우리보다 피파 랭킹이 낮다 =
- * 쉬움 / 비슷하다 = 보통 / 높다 = 어려움"*.
+ * 사용자가 정했다 — *"상대방도 좀 선택이 가능한가? 너무 단조로워서"*.
  *
- * **국면 데이터가 아니라 플레이어가 고르는 값이다.** 같은 국면을 약한
- * 상대와도 센 상대와도 만날 수 있어야 한다. 그래서 `Problem` 이 아니라
- * `MatchState` 에 실린다.
+ * **국면 데이터가 아니라 플레이어가 고르는 값이다.** 같은 국면을 아래
+ * 순위 팀과도 최상위권 팀과도 만날 수 있어야 한다. 그래서 `Problem` 이
+ * 아니라 `MatchState` 에 실린다.
  *
- * 실존 팀·국가·구단의 이름과 순위는 쓰지 않는다. 랭킹은 전부 창작한
- * 숫자이며 `DIFFICULTY` 한 곳에만 적혀 있다.
+ * 팀 목록의 단일 원본은 `constants.ts` 의 `OPPONENTS` 다. 선수 개인
+ * 이름은 넣지 않는다 — 실점 공식이 선수를 기계적으로 지목하기 때문이다.
  */
-export type Difficulty = 'EASY' | 'NORMAL' | 'HARD'
+export type OpponentId = (typeof import('./constants'))['OPPONENTS']['teams'][number]['id']
 
 /**
  * 감독이 배치판에서 지정한 실제 피치 좌표(m).
@@ -162,13 +161,13 @@ export interface MatchState {
   /** [우리, 상대] */
   score: [number, number]
   /**
-   * 오늘 만난 상대가 우리보다 센가 약한가. 플레이어가 킥오프 전에 고른다.
+   * 오늘 만난 상대 팀. 플레이어가 킥오프 전에 고른다.
    *
-   * `NORMAL` 이면 모든 계수가 정확히 1.0이라 이 칸이 생기기 전과 **비트
-   * 단위로 같은 경기**가 된다. 다섯 국면의 합격 기준선은 그 `NORMAL`
-   * 에서만 잰다.
+   * 기준팀(`USA`)이면 모든 계수가 정확히 1.0이라 이 칸이 생기기 전과
+   * **비트 단위로 같은 경기**가 된다. 다섯 국면의 합격 기준선은 그
+   * 기준팀에서만 잰다.
    */
-  difficulty: Difficulty
+  opponentTeam: OpponentId
   tactics: Tactics
   /** 주장이 전한 팀 컨디션. 선수 시작 체력에도 이미 반영돼 있다 */
   captainEffect: CaptainEffect

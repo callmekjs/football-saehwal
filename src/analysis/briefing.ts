@@ -1,7 +1,7 @@
 import { EVENTS, LINE } from '../sim/constants'
 import { getFormation } from '../sim/formations'
 import { AWAY_XI, BENCH, effectivePos, getPlayer } from '../sim/squad'
-import { difficultyInfo, OUR_RANK } from './difficulty'
+import { opponentInfo } from './opponents'
 import { withJosa } from './josa'
 import { LEVEL_WORD, presetOf } from './presets'
 import type {
@@ -286,22 +286,17 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
    * 것이라 주장이 새로 알려줄 일이 아니지만, 그 격차가 **오늘 무엇을
    * 각오해야 하는지**를 정하므로 급수 타임에 한 번 짚는다.
    *
-   * 순위는 `constants.ts` 의 실제 값이고 실존 팀·국가가 아니다.
-   * **비슷한 상대(보통)일 때는 말하지 않는다** — 할 말이 없기 때문이다.
+   * 순위와 성격은 `constants.ts` 의 실제 값이다. 지어내지 않는다.
+   * **어느 팀을 만나든 한 줄은 나온다** — 상대가 누구인지는 언제나 할 말이다.
    */
-  const foe = difficultyInfo(state.difficulty)
-  if (state.difficulty !== 'NORMAL') {
-    const stronger = state.difficulty === 'HARD'
-    say(
-      stronger ? 9 : 21,
-      'rank',
-      '상대',
-      stronger
-        ? `저쪽이 ${foe.rank}위입니다. 우리가 ${OUR_RANK}위니까 한 수 위입니다. 실수 한 번이 그대로 실점입니다.`
-        : `저쪽은 ${foe.rank}위입니다. 우리가 ${OUR_RANK}위니까 해볼 만합니다. 그래도 방심하면 똑같이 먹습니다.`,
-      stronger ? 'ALERT' : 'FACT',
-    )
-  }
+  const foe = opponentInfo(state.opponentTeam)
+  say(
+    foe.tier === 'TOP' ? 9 : 21,
+    'rank',
+    '상대',
+    `오늘 상대는 ${foe.name}, ${foe.rank}위입니다. ${foe.note}`,
+    foe.tier === 'TOP' ? 'ALERT' : 'FACT',
+  )
 
   say(11, 'awayShape', '상대', `상대는 ${withJosa(state.away.formation, '로으로')} 나왔습니다.`)
   if (state.away.booked.length > 0) {
