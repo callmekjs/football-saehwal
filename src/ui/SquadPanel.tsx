@@ -20,6 +20,7 @@ import {
   resolveDrop,
   type DropTarget,
 } from './squadDrag'
+import { playerDataOf } from './playerData'
 import type {
   Level,
   MatchState,
@@ -94,6 +95,62 @@ function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | n
   if (s.stamina < 35) return { tag: '지침', why: '많이 지쳤습니다' }
   if (s.booked) return { tag: '경고', why: '경고가 있습니다' }
   return null
+}
+
+const AVAILABILITY_LABEL = {
+  PLAYING: '경기 중',
+  BENCH: '벤치',
+  OUT: '경기 이탈',
+} as const
+
+/**
+ * 선수 한 명의 실제 데이터.
+ *
+ * 종합 평점·패스·수비처럼 엔진에 없는 값은 만들지 않는다. 체력·속도·
+ * 마무리 승수와 현재 역할처럼 경기 계산이 실제로 읽는 값만 보여준다.
+ */
+export function PlayerDataCard({ state }: { state: PlayerState }) {
+  const data = playerDataOf(state)
+  const moved = data.basePosition !== data.currentPosition
+  const position = state.position ? positionZone(state.position) : null
+
+  return (
+    <section className="player-data-card" aria-label={`${data.number}번 선수 데이터`}>
+      <header>
+        <strong>
+          <b>{data.number}</b>번
+          <span>{data.basePosition}</span>
+        </strong>
+        <div className="player-data-status">
+          <span>{AVAILABILITY_LABEL[data.availability]}</span>
+          {moved && <span>현재 {data.currentPosition}</span>}
+          {data.booked && <span data-alert="on">경고</span>}
+          {state.order !== 'NONE' && <span>{ORDER_LABELS[state.order].name}</span>}
+          {position && <span>{position.depth} · {position.lane}</span>}
+        </div>
+      </header>
+
+      <dl className="player-data-metrics">
+        <div>
+          <dt>현재 체력</dt>
+          <dd>{Math.round(data.stamina)}</dd>
+        </div>
+        <div>
+          <dt>명단 기준 체력</dt>
+          <dd>{data.rosterStamina}</dd>
+        </div>
+        <div>
+          <dt>속도</dt>
+          <dd>{data.speed}</dd>
+        </div>
+        <div>
+          <dt>마무리 영향</dt>
+          <dd>{data.finishing.toFixed(2)}×</dd>
+        </div>
+      </dl>
+      <p>경기 계산에 실제로 쓰이는 값만 표시합니다.</p>
+    </section>
+  )
 }
 
 /** 드래그가 진행 중인 동안만 존재하는 화면 상태 */
@@ -188,10 +245,10 @@ export function SquadPanel({
     return () => clearTimeout(t)
   }, [note])
 
-  // 지시 모드에 갇힌 채 경기를 놓치는 실패를 막는다. 4초 무입력이면 되돌아간다
+  // 선수 데이터를 읽을 시간은 주되 지시 모드에 갇히지는 않게 한다.
   useEffect(() => {
     if (!picked) return
-    const t = setTimeout(() => setPicked(null), 4000)
+    const t = setTimeout(() => setPicked(null), 7000)
     return () => clearTimeout(t)
   }, [picked])
 
@@ -429,7 +486,12 @@ export function SquadPanel({
   const startPress = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
     // 손가락은 지금 그대로 탭 두 단계를 쓴다. 카드 위에서 페이지가 안
     // 내려가면 좁은 화면에서 되던 것이 안 되게 된다
-    if (e.pointerType !== 'mouse' || e.button !== 0 || locked) return
+    if (
+      e.pointerType !== 'mouse' ||
+      e.button !== 0 ||
+      locked ||
+      getPlayer(id).pos === 'GK'
+    ) return
     clearPointerListeners()
     clickGuard.current = false
     pressRef.current = {
@@ -540,7 +602,7 @@ export function SquadPanel({
 
       <p className="squad-caption">
         <b>{getFormation(state.formation).label}</b> · 수비 {shape.DF}명 · 중원 {shape.MF}명
-        · 공격 {shape.FW}명 · 원하는 곳에 놓기
+        · 공격 {shape.FW}명 · 누르면 데이터·지시, 원하는 곳에 놓기
       </p>
 
       <div className="squad-shape" data-dragging={drag ? 'on' : undefined}>
@@ -600,12 +662,13 @@ export function SquadPanel({
                 data-order={s.order !== 'NONE' ? 'on' : undefined}
                 data-position={s.position ? 'on' : undefined}
                 data-warn={warn ? 'on' : undefined}
+                data-immovable={p.pos === 'GK' ? 'on' : undefined}
                 data-drag={held ? (drag.blocked ? 'bad' : 'on') : undefined}
                 aria-pressed={picked === s.id}
-                disabled={locked || p.pos === 'GK'}
+                disabled={locked}
                 title={
                   p.pos === 'GK'
-                    ? `${detail} · 골키퍼는 자리를 옮길 수 없습니다`
+                    ? `${detail} · 골키퍼는 자리를 옮길 수 없습니다 · 누르면 선수 데이터를 봅니다`
                     : `${detail} · 누르거나 원하는 곳으로 끌어 놓으세요`
                 }
                 style={{
@@ -650,65 +713,77 @@ export function SquadPanel({
           </span>
         ) : cur ? (
           <>
-            <span className="squad-orders-head">
-              <b>{getPlayer(cur.id).num}번</b> · 원하는 곳에 놓기
-            </span>
-            <div className="squad-position-grid" aria-label={`${getPlayer(cur.id).num}번 위치`}>
-              {POSITION_CHOICES.map((choice) => {
-                const currentZone = cur.position ? positionZone(cur.position) : null
-                return (
-                  <button
-                    key={`${choice.depth}-${choice.lane}`}
-                    className="chip"
-                    aria-pressed={
-                      currentZone?.depth === choice.depthLabel &&
-                      currentZone?.lane === choice.laneLabel
-                    }
-                    onClick={() => placeFromButton(cur.id, choice.position)}
-                  >
-                    <strong>{choice.depthLabel}</strong>
-                    <small>{choice.laneLabel}</small>
-                  </button>
-                )
-              })}
-              <button
-                className="chip position-default"
-                aria-pressed={cur.position === null}
-                onClick={() => {
-                  const err = onPosition(cur.id, null)
-                  setNote(err ?? `${getPlayer(cur.id).num}번 — 기본 자리`)
-                  if (!err) setPicked(null)
-                }}
-              >
-                기본 자리
-              </button>
-            </div>
-            <span className="squad-orders-head action">행동 지시</span>
-            <div className="squad-order-grid">
-              {orders.map((o) => (
-                <button
-                  key={o}
-                  className="chip"
-                  aria-pressed={cur.order === o}
-                  title={ORDER_LABELS[o].hint}
-                  onClick={() => {
-                    const err = onOrder(cur.id, cur.order === o ? 'NONE' : o)
-                    setNote(
-                      err ??
-                        (cur.order === o
-                          ? `${getPlayer(cur.id).num}번 지시 해제`
-                          : `${getPlayer(cur.id).num}번 — ${ORDER_LABELS[o].name}`),
-                    )
-                    setPicked(null)
-                  }}
-                >
-                  {ORDER_LABELS[o].name}
+            <PlayerDataCard state={cur} />
+            {getPlayer(cur.id).pos === 'GK' ? (
+              <div className="player-data-only">
+                <span>골키퍼는 위치·행동 지시를 바꿀 수 없습니다.</span>
+                <button className="chip" onClick={() => setPicked(null)}>
+                  닫기
                 </button>
-              ))}
-              <button className="chip" onClick={() => setPicked(null)}>
-                취소
-              </button>
-            </div>
+              </div>
+            ) : (
+              <>
+                <span className="squad-orders-head">
+                  <b>{getPlayer(cur.id).num}번</b> · 원하는 곳에 놓기
+                </span>
+                <div className="squad-position-grid" aria-label={`${getPlayer(cur.id).num}번 위치`}>
+                  {POSITION_CHOICES.map((choice) => {
+                    const currentZone = cur.position ? positionZone(cur.position) : null
+                    return (
+                      <button
+                        key={`${choice.depth}-${choice.lane}`}
+                        className="chip"
+                        aria-pressed={
+                          currentZone?.depth === choice.depthLabel &&
+                          currentZone?.lane === choice.laneLabel
+                        }
+                        onClick={() => placeFromButton(cur.id, choice.position)}
+                      >
+                        <strong>{choice.depthLabel}</strong>
+                        <small>{choice.laneLabel}</small>
+                      </button>
+                    )
+                  })}
+                  <button
+                    className="chip position-default"
+                    aria-pressed={cur.position === null}
+                    onClick={() => {
+                      const err = onPosition(cur.id, null)
+                      setNote(err ?? `${getPlayer(cur.id).num}번 — 기본 자리`)
+                      if (!err) setPicked(null)
+                    }}
+                  >
+                    기본 자리
+                  </button>
+                </div>
+                <span className="squad-orders-head action">행동 지시</span>
+                <div className="squad-order-grid">
+                  {orders.map((o) => (
+                    <button
+                      key={o}
+                      className="chip"
+                      aria-pressed={cur.order === o}
+                      title={ORDER_LABELS[o].hint}
+                      onClick={() => {
+                        const err = onOrder(cur.id, cur.order === o ? 'NONE' : o)
+                        setNote(
+                          err ??
+                            (cur.order === o
+                              ? `${getPlayer(cur.id).num}번 지시 해제`
+                              : `${getPlayer(cur.id).num}번 — ${ORDER_LABELS[o].name}`),
+                        )
+                        setPicked(null)
+                      }}
+                    >
+                      {ORDER_LABELS[o].name}
+                    </button>
+                  ))}
+                  <button className="chip" onClick={() => setPicked(null)}>
+                    취소
+                  </button>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>

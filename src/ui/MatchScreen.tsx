@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pitch } from './Pitch'
-import { AwayPanel, ORDER_LABELS, SquadPanel } from './SquadPanel'
+import {
+  AwayPanel,
+  ORDER_LABELS,
+  PlayerDataCard,
+  SquadPanel,
+} from './SquadPanel'
 import { BENCH, effectivePos, getPlayer, meanStamina } from '../sim/squad'
 import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
@@ -379,6 +384,18 @@ function Bench({
   }, [locked])
 
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+  const inactiveStarters = state.players.filter(
+    (s) => !s.onPitch && !BENCH.some((player) => player.id === s.id),
+  )
+  const pickedState = picked
+    ? state.players.find((player) => player.id === picked) ?? null
+    : null
+  const canEnter =
+    pickedState !== null &&
+    !pickedState.onPitch &&
+    !pickedState.out &&
+    state.subsLeft > 0 &&
+    !locked
 
   return (
     <section className="panel bench-panel">
@@ -386,8 +403,10 @@ function Bench({
         벤치 · 교체 카드 {state.subsLeft}장
         {locked ? (
           <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — {endLabel(half)}</span>
-        ) : picked ? (
+        ) : canEnter ? (
           <span style={{ color: 'var(--accent)' }}> — 나갈 선수 선택</span>
+        ) : pickedState ? (
+          <span style={{ color: 'var(--accent)' }}> — 선수 데이터</span>
         ) : (
           <span style={{ color: 'var(--dim)', fontWeight: 400 }}> — 들어올 선수 먼저</span>
         )}
@@ -405,28 +424,52 @@ function Bench({
         </div>
       )}
       <div className="bench-body">
+        {pickedState && <PlayerDataCard state={pickedState} />}
         <div className="bench-row">
           {BENCH.map((b) => {
             const s = state.players.find((p) => p.id === b.id)!
-            const used = s.onPitch || s.out
             return (
               <button
                 key={b.id}
                 className="chip bench-chip"
                 aria-pressed={picked === b.id}
-                disabled={locked || used || state.subsLeft <= 0}
+                data-unavailable={s.onPitch || s.out ? 'on' : undefined}
+                disabled={locked}
                 onClick={() => setPicked(picked === b.id ? null : b.id)}
               >
                 <span className="bench-num">{b.num}</span>
                 <span className="bench-sub">
-                  {b.pos} · 속도 {b.speed}
+                  {s.out ? '이탈' : s.onPitch ? '출전 중' : `${b.pos} · 속도 ${b.speed}`}
                 </span>
               </button>
             )
           })}
         </div>
 
-        {picked && (
+        {inactiveStarters.length > 0 && (
+          <>
+            <span className="bench-history-label">교체·이탈 선수</span>
+            <div className="bench-row">
+              {inactiveStarters.map((s) => {
+                const player = getPlayer(s.id)
+                return (
+                  <button
+                    key={s.id}
+                    className="chip bench-chip"
+                    aria-pressed={picked === s.id}
+                    disabled={locked}
+                    onClick={() => setPicked(picked === s.id ? null : s.id)}
+                  >
+                    <span className="bench-num">{player.num}</span>
+                    <span className="bench-sub">{s.out ? '경기 이탈' : '교체됨'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {canEnter && (
           <div className="bench-row">
             {onPitch.map((s) => {
               const p = getPlayer(s.id)
@@ -435,8 +478,8 @@ function Bench({
                   key={s.id}
                   className="chip bench-chip"
                   onClick={() => {
-                    const err = onSub(s.id, picked)
-                    setNote(err ?? `${p.num}번 → ${getPlayer(picked).num}번`)
+                    const err = onSub(s.id, pickedState.id)
+                    setNote(err ?? `${p.num}번 → ${getPlayer(pickedState.id).num}번`)
                     setPicked(null)
                   }}
                 >

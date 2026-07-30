@@ -956,6 +956,7 @@ button {
  * 마우스가 없는 환경에서는 아무 일도 일어나지 않으므로 잃는 것이 없다.
  */
 .squad-card:not(:disabled) { cursor: grab; }
+.squad-card[data-immovable='on']:not(:disabled) { cursor: pointer; }
 
 /* 드는 동안 카드가 판에서 떠오른다. 그림자가 커지면 손에 들린 것으로 읽힌다 */
 .squad-card[data-drag] {
@@ -1124,6 +1125,138 @@ button {
 
 .squad-orders-head { color: var(--muted); font-size: 11.5px; }
 .squad-orders-head b { color: var(--accent); }
+
+/* 선수 카드를 누르면 실제 경기 계산에 쓰이는 값만 짧게 보여준다. */
+.player-data-card {
+  min-width: 0;
+  padding: 8px 9px;
+  display: grid;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line-3));
+  border-radius: 6px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
+    var(--panel-2);
+}
+
+.player-data-card > header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.player-data-card > header > strong {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.player-data-card > header > strong b {
+  color: var(--accent);
+  font-family: var(--num);
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.player-data-card > header > strong span {
+  margin-left: 4px;
+  color: var(--dim-2);
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.player-data-status {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.player-data-status span {
+  min-height: 21px;
+  padding: 3px 5px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-4);
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.player-data-status span[data-alert='on'] {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+.player-data-metrics {
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+  row-gap: 3px;
+}
+
+.player-data-metrics > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.player-data-metrics dt {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  color: var(--dim-2);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-data-metrics dd {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--num);
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.player-data-card > p {
+  margin: 0;
+  color: var(--dim-3);
+  font-size: 8px;
+}
+
+.player-data-only {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.player-data-only > span {
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.player-data-only > button {
+  min-width: 64px;
+  min-height: 44px;
+}
 
 /* 끌고 있는 동안 이 줄이 결과를 미리 말한다 */
 .squad-orders-head.drag {
@@ -1296,8 +1429,15 @@ button {
   padding: 6px 4px;
 }
 
+.bench-chip[data-unavailable='on'] { opacity: 0.68; }
 .bench-num { font-size: 15px; font-weight: 600; }
 .bench-sub { font-size: 10px; white-space: nowrap; }
+.bench-history-label {
+  color: var(--dim-2);
+  font-family: var(--label);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
 .bench-note { font-size: 12px; color: var(--warn); }
 
 .bench-pending {
