@@ -644,6 +644,20 @@ export function MatchScreen({
     startNextHalf,
     decisions,
   } = useMatch(problem, opponent)
+  /**
+   * 사활 복기는 JSON의 기본값이 아니라 이 판에 실제로 뽑힌 시작 상태를 쓴다.
+   *
+   * 같은 국면도 시드에 따라 체력·경고·물려받은 지시가 달라진다. 종료 뒤
+   * 현재 상태만 보면 그 차이가 사라지므로 첫 렌더의 상태를 보관한다.
+   */
+  const initialSnapshot = useRef({
+    key: `${problem.id}-${problem.seed}-${opponent}`,
+    state,
+  })
+  const snapshotKey = `${problem.id}-${problem.seed}-${opponent}`
+  if (initialSnapshot.current.key !== snapshotKey) {
+    initialSnapshot.current = { key: snapshotKey, state }
+  }
   const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
@@ -816,7 +830,10 @@ export function MatchScreen({
   }, [state, decisions, startNextHalf, problem.seed])
 
   return (
-    <div className="match-screen">
+    <div
+      className="match-screen"
+      data-finished={phase === 'DONE' && half === 2 ? 'true' : undefined}
+    >
       <header className="match-scorebar">
         <button className="match-back" onClick={onExit} aria-label="국면 선택으로">
           ←
@@ -1171,10 +1188,25 @@ export function MatchScreen({
         <div className="match-report">
           <AnalysisPanel
             problem={problem}
+            initialState={initialSnapshot.current.state}
+            finalState={state}
+            passed={passed}
             decisions={decisions.current}
             kickoff={kickoff}
+            kickoffHalf={firstHalf ? 1 : 2}
             firstHalf={firstHalf ? firstHalf.decisions : null}
+            firstHalfState={firstHalf ? firstHalf.state : null}
             opponent={opponent}
+            onReplay={() => {
+              setActiveTab('TACTICS')
+              if (onReplay) onReplay()
+              else reset()
+            }}
+            onRetry={() => {
+              setActiveTab('TACTICS')
+              if (onRetry) onRetry()
+              else reset()
+            }}
           />
         </div>
       )}
