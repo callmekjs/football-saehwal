@@ -56,9 +56,29 @@ describe('우리 팀 배치판', () => {
     expect(html).toContain('골키퍼는 자리를 옮길 수 없습니다')
     expect(html).not.toContain('위아래로 끌어')
   })
+
+  it('우리 주장 카드에 C와 한국어 접근성 이름을 함께 붙인다', () => {
+    const html = renderToStaticMarkup(
+      <SquadPanel
+        state={stateOf('p02')}
+        locked={false}
+        onOrder={() => null}
+        onPosition={() => null}
+        onFormation={() => undefined}
+      />,
+    )
+    expect(html).toContain('class="captain-marker"')
+    expect(html).toContain('aria-label="2번 주장, DF')
+  })
 })
 
 describe('상대 배치판', () => {
+  it('상대 주장 카드에도 C와 한국어 접근성 이름을 함께 붙인다', () => {
+    const html = renderToStaticMarkup(<AwayPanel state={stateOf('p02')} />)
+    expect(html).toContain('class="captain-marker"')
+    expect(html).toContain('aria-label="2번 주장, DF')
+  })
+
   it('전부 올라오는 상대를 뒤로 물러난다고 설명하지 않는다', () => {
     const state = { ...stateOf('p01'), opponent: 'ALL_OUT' as const }
     const text = awaySummary(state)

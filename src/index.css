@@ -3114,6 +3114,31 @@ button {
   letter-spacing: 0.04em;
 }
 
+/* 주장 완장. 등번호·체력바·상대 경고/부상을 피한 왼쪽 위에 둔다. */
+.captain-marker {
+  position: absolute;
+  z-index: 4;
+  top: -2px;
+  left: -2px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  background: #111827;
+  color: #fff;
+  font: 900 9px/1 var(--label);
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.player-data-status span[data-captain='on'] {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: #111827;
+  color: #fff;
+}
+
 /* 지시가 걸린 선수는 테두리가 굵어진다. 색만으로 구분하지 않는다 */
 .squad-card[data-order='on'] {
   border: 2px solid var(--accent-max) !important;

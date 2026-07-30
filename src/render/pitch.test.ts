@@ -3,6 +3,7 @@ import { drawPitch, COLORS } from './pitch'
 import { VisualMatch, PITCH_H, flagTipY } from './visual'
 import { createState } from '../sim/engine'
 import type { Problem } from '../sim/types'
+import { awayCaptainNumber, homeCaptainNumber } from '../captain'
 
 /**
  * 그리기 자체를 검사한다.
@@ -135,6 +136,53 @@ function render(mutate: (vm: VisualMatch) => void) {
 /** 깃발 색으로 칠한 도형들 */
 const flagFills = (ops: Op[]) =>
   ops.filter((o): o is Extract<Op, { op: 'fill' }> => o.op === 'fill' && o.style === COLORS.flag)
+
+describe('양 팀 주장이 경기장에서 보인다', () => {
+  it('우리 팀과 상대 팀에 C를 하나씩 그린다', () => {
+    const state = createState(P)
+    const ops = render(() => {})
+    const marks = ops.filter(
+      (op): op is Extract<Op, { op: 'text' }> =>
+        op.op === 'text' && op.text === 'C' && op.style === COLORS.captainText,
+    )
+    expect(marks).toHaveLength(2)
+
+    const expected = [
+      { num: homeCaptainNumber(state.players), style: COLORS.homeText },
+      {
+        num: awayCaptainNumber(state.away.formation, state.awayCount),
+        style: COLORS.awayText,
+      },
+    ]
+    const r = Math.max(7, Math.min(W, H * 1.6) * 0.021)
+    const used = new Set<Op>()
+
+    for (const captain of expected) {
+      const number = ops.find(
+        (op): op is Extract<Op, { op: 'text' }> =>
+          op.op === 'text' &&
+          op.text === String(captain.num) &&
+          op.style === captain.style,
+      )
+      expect(number).toBeDefined()
+      const mark = marks
+        .filter((candidate) => !used.has(candidate))
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - number!.x, a.y - number!.y) -
+            Math.hypot(b.x - number!.x, b.y - number!.y),
+        )[0]
+      expect(mark).toBeDefined()
+      used.add(mark)
+
+      const distance = Math.hypot(mark.x - number!.x, mark.y - number!.y)
+      // C가 선수 원 안이나 등번호 위가 아니라 원 바깥에 붙어야 한다.
+      expect(distance).toBeGreaterThan(r * 1.35)
+      // 너무 멀리 떨어지면 누구의 주장 표시인지 알 수 없다.
+      expect(distance).toBeLessThan(r * 2.25)
+    }
+  })
+})
 
 describe('부심 깃발이 실제로 그려진다', () => {
   it('깃발을 안 들었으면 깃발 색 도형이 없다', () => {

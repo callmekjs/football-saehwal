@@ -7,6 +7,7 @@ import {
   SquadPanel,
 } from './SquadPanel'
 import { BENCH, effectivePos, getPlayer, meanStamina } from '../sim/squad'
+import { homeCaptainNumber } from '../captain'
 import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
 import { AnalysisPanel } from './AnalysisPanel'
@@ -384,6 +385,7 @@ function Bench({
   }, [locked])
 
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+  const captain = homeCaptainNumber(state.players)
   const inactiveStarters = state.players.filter(
     (s) => !s.onPitch && !BENCH.some((player) => player.id === s.id),
   )
@@ -424,7 +426,12 @@ function Bench({
         </div>
       )}
       <div className="bench-body">
-        {pickedState && <PlayerDataCard state={pickedState} />}
+        {pickedState && (
+          <PlayerDataCard
+            state={pickedState}
+            isCaptain={getPlayer(pickedState.id).num === captain}
+          />
+        )}
         <div className="bench-row">
           {BENCH.map((b) => {
             const s = state.players.find((p) => p.id === b.id)!

@@ -1,5 +1,6 @@
 import { getPlayer } from '../sim/squad'
 import { HALFTIME_RECOVERY } from '../sim/constants'
+import { homeCaptainNumber } from '../captain'
 import { withJosa } from './josa'
 import type { MatchState, Problem } from '../sim/types'
 
@@ -68,12 +69,7 @@ export interface Halftime {
  * 같은 규칙을 써야 급수 타임과 하프타임에서 다른 사람이 말하지 않는다.
  */
 function captainOf(state: MatchState): number {
-  const nums = state.players
-    .filter((s) => s.onPitch && !s.out)
-    .map((s) => getPlayer(s.id))
-    .filter((p) => p.pos !== 'GK')
-    .map((p) => p.num)
-  return nums.length ? Math.min(...nums) : 0
+  return homeCaptainNumber(state.players)
 }
 
 /**

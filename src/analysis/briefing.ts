@@ -1,6 +1,7 @@
 import { EVENTS, LINE } from '../sim/constants'
 import { getFormation } from '../sim/formations'
 import { AWAY_XI, BENCH, effectivePos, getPlayer } from '../sim/squad'
+import { homeCaptainNumber } from '../captain'
 import { opponentInfo } from './opponents'
 import { withJosa } from './josa'
 import { LEVEL_WORD, presetOf } from './presets'
@@ -121,13 +122,7 @@ const CAPTAIN_REPORT: Record<CaptainEffect, { text: string; tone: BriefingTone }
  * 같으므로 여기 적어 둔다.
  */
 export function captainOf(onPitch: PlayerState[]): number {
-  let best = Infinity
-  for (const s of onPitch) {
-    const p = getPlayer(s.id)
-    if (p.pos === 'GK') continue
-    if (p.num < best) best = p.num
-  }
-  return best === Infinity ? 0 : best
+  return homeCaptainNumber(onPitch)
 }
 
 /**

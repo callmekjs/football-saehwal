@@ -12,6 +12,7 @@ import {
   type VPlayer,
 } from './visual'
 import type { MatchState } from '../sim/types'
+import { awayCaptainNumber, homeCaptainNumber } from '../captain'
 
 /**
  * 색은 한 가지 뜻만 가진다.
@@ -55,6 +56,9 @@ export const COLORS = {
   officialTrim: 'rgba(255,255,255,0.72)',
   /** 부심 깃발. 실제 깃발과 같은 노랑-빨강 계열 */
   flag: '#f5c518',
+  /** 주장 배지. 어느 팀 유니폼 위에서도 읽히는 중계 그래픽용 짙은 바탕 */
+  captain: '#101828',
+  captainText: '#ffffff',
 }
 
 /**
@@ -175,6 +179,46 @@ function drawTired(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: num
   ctx.restore()
 }
 
+/**
+ * 주장 완장.
+ *
+ * 등번호 안에 C를 넣으면 한 자리 번호도 못 읽고, 공 소유 링과도 겹친다.
+ * 그래서 선수 원 왼쪽 아래 바깥에 별도 배지로 둔다. 경고·피로 표시는
+ * 위쪽에 있으므로 세 상태가 동시에 떠도 서로 가리지 않는다.
+ *
+ * 터치라인 끝까지 간 선수는 배지가 화면 밖으로 잘리지 않도록 경기장
+ * 안쪽 방향으로 뒤집는다. 위치만 읽어 결정하며 난수나 경기 계산에는
+ * 닿지 않는다.
+ */
+function drawCaptain(
+  ctx: CanvasRenderingContext2D,
+  p: VPlayer,
+  cx: number,
+  cy: number,
+  r: number,
+) {
+  const s = badgeSize(r)
+  const d = badgeOffset(r, s) * 1.08
+  const bx = cx + (p.x < 7 ? d : -d)
+  const by = cy + (p.y > PITCH_H - 5 ? -d * 0.55 : d * 0.55)
+  const br = s * 0.72
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(bx, by, br, 0, Math.PI * 2)
+  ctx.fillStyle = COLORS.captain
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.88)'
+  ctx.lineWidth = Math.max(1.2, s * 0.16)
+  ctx.stroke()
+  ctx.fillStyle = COLORS.captainText
+  ctx.font = `700 ${Math.max(8, Math.round(s * 1.02))}px system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('C', bx, by + 0.3)
+  ctx.restore()
+}
+
 function drawField(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -268,6 +312,7 @@ function drawPlayer(
   ctx: CanvasRenderingContext2D,
   p: VPlayer,
   holder: boolean,
+  captain: boolean,
   r: number,
   X: (v: number) => number,
   Y: (v: number) => number,
@@ -308,6 +353,8 @@ function drawPlayer(
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(String(p.num), cx, cy + 0.5)
+
+  if (captain) drawCaptain(ctx, p, cx, cy, r)
 
   // 상태 배지는 등번호를 가리지 않게 원 바깥에 붙인다.
   // 경고는 오른쪽 위(카드), 체력 고갈은 왼쪽 위(지친 얼굴)
@@ -647,8 +694,11 @@ export function drawPitch(
     drawLeaving(ctx, l, r, X, Y)
   }
 
+  const homeCaptain = homeCaptainNumber(state.players)
+  const awayCaptain = awayCaptainNumber(state.away.formation, state.awayCount)
   for (const p of vm.players) {
-    drawPlayer(ctx, p, b.holder === p.id, r, X, Y)
+    const captain = p.num === (p.side === 'HOME' ? homeCaptain : awayCaptain)
+    drawPlayer(ctx, p, b.holder === p.id, captain, r, X, Y)
     // 방금 들어온 선수에게는 초록 화살표가 붙는다
     if (p.side === 'HOME' && vm.entering.includes(p.num)) {
       const s = badgeSize(r)

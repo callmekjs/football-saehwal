@@ -10,6 +10,7 @@ import {
 import { awaySlots } from '../sim/awayShape'
 import { getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkPosition } from '../sim/engine'
+import { awayCaptainNumber, homeCaptainNumber } from '../captain'
 import {
   POSITION_CHOICES,
   boardPointOf,
@@ -109,7 +110,13 @@ const AVAILABILITY_LABEL = {
  * 종합 평점·패스·수비처럼 엔진에 없는 값은 만들지 않는다. 체력·속도·
  * 마무리 승수와 현재 역할처럼 경기 계산이 실제로 읽는 값만 보여준다.
  */
-export function PlayerDataCard({ state }: { state: PlayerState }) {
+export function PlayerDataCard({
+  state,
+  isCaptain = false,
+}: {
+  state: PlayerState
+  isCaptain?: boolean
+}) {
   const data = playerDataOf(state)
   const moved = data.basePosition !== data.currentPosition
   const position = state.position ? positionZone(state.position) : null
@@ -122,6 +129,7 @@ export function PlayerDataCard({ state }: { state: PlayerState }) {
           <span>{data.basePosition}</span>
         </strong>
         <div className="player-data-status">
+          {isCaptain && <span data-captain="on">주장</span>}
           <span>{AVAILABILITY_LABEL[data.availability]}</span>
           {moved && <span>현재 {data.currentPosition}</span>}
           {data.booked && <span data-alert="on">경고</span>}
@@ -308,6 +316,7 @@ export function SquadPanel({
   }, [dragging])
 
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
+  const captain = homeCaptainNumber(state.players)
   const tenMen = state.homeCount < 11
   const slots = slotsForPlayers(
     state.formation,
@@ -635,6 +644,7 @@ export function SquadPanel({
 
           {placed.map(({ s }) => {
             const p = getPlayer(s.id)
+            const isCaptain = p.num === captain
             const warn = alertOf(s, state.tactics.press)
             const tag =
               s.order !== 'NONE'
@@ -662,14 +672,20 @@ export function SquadPanel({
                 data-order={s.order !== 'NONE' ? 'on' : undefined}
                 data-position={s.position ? 'on' : undefined}
                 data-warn={warn ? 'on' : undefined}
+                data-captain={isCaptain ? 'on' : undefined}
                 data-immovable={p.pos === 'GK' ? 'on' : undefined}
                 data-drag={held ? (drag.blocked ? 'bad' : 'on') : undefined}
                 aria-pressed={picked === s.id}
+                aria-label={
+                  isCaptain
+                    ? `${p.num}번 주장, ${p.pos}, 체력 ${Math.round(s.stamina)}`
+                    : undefined
+                }
                 disabled={locked}
                 title={
                   p.pos === 'GK'
                     ? `${detail} · 골키퍼는 자리를 옮길 수 없습니다 · 누르면 선수 데이터를 봅니다`
-                    : `${detail} · 누르거나 원하는 곳으로 끌어 놓으세요`
+                    : `${detail}${isCaptain ? ' · 주장' : ''} · 누르거나 원하는 곳으로 끌어 놓으세요`
                 }
                 style={{
                   top: `${preview?.y ?? baseDisplay.top}%`,
@@ -690,6 +706,11 @@ export function SquadPanel({
                   setPicked(picked === s.id ? null : s.id)
                 }}
               >
+                {isCaptain && (
+                  <span className="captain-marker" aria-hidden>
+                    C
+                  </span>
+                )}
                 <span className="squad-num">{p.num}</span>
                 <span className="squad-tag">{tag}</span>
                 <span className="squad-stamina" aria-hidden>
@@ -713,7 +734,10 @@ export function SquadPanel({
           </span>
         ) : cur ? (
           <>
-            <PlayerDataCard state={cur} />
+            <PlayerDataCard
+              state={cur}
+              isCaptain={getPlayer(cur.id).num === captain}
+            />
             {getPlayer(cur.id).pos === 'GK' ? (
               <div className="player-data-only">
                 <span>골키퍼는 위치·행동 지시를 바꿀 수 없습니다.</span>
@@ -837,6 +861,7 @@ export function awaySummary(state: MatchState): string {
 
 export function AwayPanel({ state }: { state: MatchState }) {
   const shown = awaySlots(state.away.formation, state.awayCount)
+  const captain = awayCaptainNumber(state.away.formation, state.awayCount)
   /**
    * 상대 체력은 **팀 하나의 값**이다(`state.awayStamina`).
    *
@@ -871,6 +896,7 @@ export function AwayPanel({ state }: { state: MatchState }) {
           {shown.map(([pos, x, y, num]) => {
             const booked = state.away.booked.includes(num)
             const hurt = state.away.injured === num
+            const isCaptain = num === captain
             const mark = booked ? ' · 경고' : ''
             return (
               <span
@@ -878,9 +904,17 @@ export function AwayPanel({ state }: { state: MatchState }) {
                 className="squad-card away"
                 data-booked={booked ? 'on' : undefined}
                 data-hurt={hurt ? 'on' : undefined}
-                title={`${num}번 ${pos}${mark}${hurt ? ' · 무릎이 좋지 않습니다' : ''}`}
+                data-captain={isCaptain ? 'on' : undefined}
+                role="img"
+                aria-label={`${num}번${isCaptain ? ' 주장' : ''}, ${pos}${booked ? ', 경고' : ''}${hurt ? ', 무릎이 좋지 않음' : ''}`}
+                title={`${num}번 ${pos}${isCaptain ? ' · 주장' : ''}${mark}${hurt ? ' · 무릎이 좋지 않습니다' : ''}`}
                 style={{ top: `${awayTop(x)}%`, left: `${slotLeft(y)}%` }}
               >
+                {isCaptain && (
+                  <span className="captain-marker" aria-hidden>
+                    C
+                  </span>
+                )}
                 <span className="squad-num">{num}</span>
                 {booked && <i className="away-card-mark" aria-hidden />}
                 {hurt && <i className="away-hurt-mark" aria-hidden />}
