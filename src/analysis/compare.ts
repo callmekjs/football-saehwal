@@ -1,5 +1,11 @@
 import { simulate, simulateHalves } from '../sim/engine'
-import type { Decision, MatchState, Problem, Recommendation } from '../sim/types'
+import type {
+  Decision,
+  Difficulty,
+  MatchState,
+  Problem,
+  Recommendation,
+} from '../sim/types'
 import {
   buildCoachReport,
   type CoachReport,
@@ -66,12 +72,13 @@ function runOnce(
   problem: Problem,
   second: Decision[],
   first: Decision[] | null,
+  difficulty: Difficulty,
 ): { final: MatchState; passed: boolean; halftime: MatchState | null } {
   if (first === null) {
-    const run = simulate(problem, second)
+    const run = simulate(problem, second, difficulty)
     return { final: run.final, passed: run.passed, halftime: null }
   }
-  return simulateHalves(problem, first, second)
+  return simulateHalves(problem, first, second, difficulty)
 }
 
 function measure(
@@ -80,6 +87,13 @@ function measure(
   runs: number,
   /** 전반 결정. 있으면 두 반을 이어 돌린다 */
   firstHalf: Decision[] | null = null,
+  /**
+   * 사용자가 실제로 만난 상대.
+   *
+   * **이걸 안 맞추면 판단 평가가 통째로 틀린다.** 어려움으로 이겨놓고
+   * 보통 기준선과 비교하면 "무개입보다 못했다"가 나온다.
+   */
+  difficulty: Difficulty = 'NORMAL',
 ): MeasureResult {
   // 같은 반복 경기의 최종 상태를 함께 모아, 별도 시뮬레이션 없이 채널별 평균을 만든다.
   let passed = 0
@@ -100,7 +114,7 @@ function measure(
 
   for (let i = 0; i < runs; i++) {
     const replay = { ...problem, seed: problem.seed + i }
-    const result = runOnce(replay, decisions, firstHalf)
+    const result = runOnce(replay, decisions, firstHalf, difficulty)
     if (i === 0) {
       firstFinal = result.final
       firstHalftime = result.halftime
@@ -160,18 +174,26 @@ export function compareDecisions(
    * 있으면 무개입·나의 판단·권장 전술을 전부 **두 반**으로 돌린다.
    */
   firstHalf: Decision[] | null = null,
+  /**
+   * 사용자가 실제로 만난 상대. 세 채널을 **모두** 이 난이도로 돌린다.
+   *
+   * 무개입 기준선이 다른 난이도에서 재어지면 "당신의 판단이 무개입보다
+   * 못했다"가 상대가 세서 생긴 차이를 감독 탓으로 돌리게 된다.
+   */
+  difficulty: Difficulty = 'NORMAL',
 ): MatchAnalysis {
   if (!Number.isInteger(runs) || runs <= 0) throw new Error('분석 횟수는 양의 정수여야 한다')
   if (!problem.recommendation) throw new Error(`${problem.id}: 권장 전술이 없다`)
 
   // 무개입과 권장 전술도 사용자와 **같은 반 수**로 돌려야 비교가 성립한다
-  const noop = measure(problem, [], runs, firstHalf && [])
-  const user = measure(problem, userDecisions, runs, firstHalf)
+  const noop = measure(problem, [], runs, firstHalf && [], difficulty)
+  const user = measure(problem, userDecisions, runs, firstHalf, difficulty)
   const recommendation = measure(
     problem,
     planOf(problem.recommendation),
     runs,
     firstHalf && planOf(problem.recommendation),
+    difficulty,
   )
 
   const rows = [

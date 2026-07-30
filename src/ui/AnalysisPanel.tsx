@@ -5,7 +5,7 @@ import {
   type MatchAnalysis,
 } from '../analysis/compare'
 import type { CoachFinding } from '../analysis/coach'
-import type { Decision, Level, Problem } from '../sim/types'
+import type { Decision, Difficulty, Level, Problem } from '../sim/types'
 
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
   line: { 0: '낮음', 1: '보통', 2: '높음' },
@@ -56,12 +56,21 @@ export function AnalysisPanel({
   decisions,
   kickoff,
   firstHalf = null,
+  difficulty = 'NORMAL',
 }: {
   problem: Problem
   decisions: Decision[]
   kickoff: number
   /** 전반에 내린 결정. 전반부터 뛴 경기에서만 있다 */
   firstHalf?: Decision[] | null
+  /**
+   * 사용자가 실제로 만난 상대.
+   *
+   * 150판 비교의 세 채널이 **모두** 이 난이도로 돌아야 한다. 어려움으로
+   * 뛰어놓고 무개입 기준선만 보통에서 재면, 상대가 세서 생긴 차이가
+   * 감독의 판단 탓으로 찍힌다.
+   */
+  difficulty?: Difficulty
 }) {
   const snapshot = useMemo(() => decisions.map((decision) => ({ ...decision })), [decisions])
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null)
@@ -75,7 +84,14 @@ export function AnalysisPanel({
     // 종료 결과를 먼저 그린 뒤 계산한다. 폰에서도 버튼이 멈춘 것처럼 보이지 않는다.
     const timer = window.setTimeout(() => {
       try {
-        const next = compareDecisions(problem, snapshot, ANALYSIS_RUNS, kickoff, firstHalf)
+        const next = compareDecisions(
+          problem,
+          snapshot,
+          ANALYSIS_RUNS,
+          kickoff,
+          firstHalf,
+          difficulty,
+        )
         if (!cancelled) setAnalysis(next)
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
@@ -86,7 +102,7 @@ export function AnalysisPanel({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [firstHalf, kickoff, problem, snapshot])
+  }, [difficulty, firstHalf, kickoff, problem, snapshot])
 
   return (
     <section className="panel analysis">

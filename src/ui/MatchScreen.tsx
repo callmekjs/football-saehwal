@@ -37,7 +37,15 @@ import {
   formatBreak,
   useBreakClock,
 } from './breakClock'
-import type { Decision, Level, MatchState, PlayerOrder, Problem } from '../sim/types'
+import { difficultyInfo, OUR_RANK } from '../analysis/difficulty'
+import type {
+  Decision,
+  Difficulty,
+  Level,
+  MatchState,
+  PlayerOrder,
+  Problem,
+} from '../sim/types'
 
 const LEVER_LABELS = {
   LINE: ['낮음', '보통', '높음'],
@@ -471,6 +479,7 @@ const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
 export function MatchScreen({
   problem,
   startHalf,
+  difficulty = 'NORMAL',
   onExit,
   onRetry,
 }: {
@@ -482,6 +491,13 @@ export function MatchScreen({
    * 고르면 후반 하나만 뛴다.
    */
   startHalf: Half
+  /**
+   * 오늘 만난 상대가 우리보다 센가 약한가. 국면 선택 화면에서 고른다.
+   *
+   * 경기 중에는 못 바꾼다 — 지고 있다고 상대를 약하게 바꿀 수 있으면
+   * 그건 난이도가 아니다.
+   */
+  difficulty?: Difficulty
   onExit: () => void
   /**
    * 다시 도전. 없으면 **같은 시작 조건으로** 처음부터 다시 한다.
@@ -517,7 +533,7 @@ export function MatchScreen({
     setPosition,
     startNextHalf,
     decisions,
-  } = useMatch(problem)
+  } = useMatch(problem, difficulty)
   const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
@@ -812,6 +828,19 @@ export function MatchScreen({
 
         <div className="match-col right">
           <div className="pane" data-pane="AWAY">
+            {/*
+              오늘 만난 상대가 누구인가.
+
+              경기 중에는 못 바꾼다 — 지고 있다고 상대를 약하게 만들 수
+              있으면 그건 난이도가 아니다. 그래서 버튼이 아니라 표시다.
+              순위는 전부 창작한 숫자이며 실존 팀·국가를 쓰지 않는다.
+            */}
+            <p className="away-rank" data-level={difficulty.toLowerCase()}>
+              <b>{difficultyInfo(difficulty).name}</b>
+              <span>
+                우리 {OUR_RANK}위 · 상대 {difficultyInfo(difficulty).rank}위
+              </span>
+            </p>
             <AwayPanel state={visibleOpponentState} />
           </div>
 
@@ -956,6 +985,7 @@ export function MatchScreen({
             decisions={decisions.current}
             kickoff={kickoff}
             firstHalf={firstHalf ? firstHalf.decisions : null}
+            difficulty={difficulty}
           />
         </div>
       )}

@@ -5,6 +5,7 @@ import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
 import type {
   Decision,
+  Difficulty,
   Level,
   MatchState,
   PlayerOrder,
@@ -128,8 +129,8 @@ export function changePosition(
  * 따라잡는다. 탭을 벗어났다 돌아왔을 때 수백 틱이 한 번에 밀려드는 것을
  * 막기 위해 한 프레임에 처리할 틱 수를 제한한다.
  */
-export function useMatch(problem: Problem) {
-  const [state, setState] = useState<MatchState>(() => createState(problem))
+export function useMatch(problem: Problem, difficulty: Difficulty = 'NORMAL') {
+  const [state, setState] = useState<MatchState>(() => createState(problem, difficulty))
   const [phase, setPhase] = useState<Phase>('READY')
 
   const rngRef = useRef<Rng>(createRng(problem.seed))
@@ -144,11 +145,11 @@ export function useMatch(problem: Problem) {
     clearInterval(timerRef.current)
     rngRef.current = createRng(problem.seed)
     decisionsRef.current = []
-    const fresh = createState(problem)
+    const fresh = createState(problem, difficulty)
     stateRef.current = fresh
     setState(fresh)
     setPhase('READY')
-  }, [problem])
+  }, [problem, difficulty])
 
   useEffect(() => reset(), [reset])
 

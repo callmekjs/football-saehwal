@@ -1,6 +1,7 @@
 import { createRng, type Rng } from './rng'
 import {
   applyAwayFatigue,
+  applyDifficulty,
   applyOrders,
   applyPositions,
   drainFactorOf,
@@ -25,6 +26,7 @@ import { rollAway, awayRngFor, rollSetup } from './setup'
 import { EVENTS, FREE_POSITION, TOTAL_TICKS } from './constants'
 import type {
   Decision,
+  Difficulty,
   MatchState,
   Mentality,
   PlayerOrder,
@@ -46,7 +48,18 @@ export function mentalityOf(score: [number, number]): Mentality {
   return 'BALANCED'
 }
 
-export function createState(problem: Problem): MatchState {
+/**
+ * 고르지 않았을 때의 상대. **보통이 기준선이다.**
+ *
+ * 기존 호출부와 저장된 시드가 전부 이 값을 쓴다. 여기를 바꾸면 다섯 국면의
+ * 합격 기준선이 통째로 다른 난이도에서 잰 숫자가 된다.
+ */
+export const DEFAULT_DIFFICULTY: Difficulty = 'NORMAL'
+
+export function createState(
+  problem: Problem,
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
+): MatchState {
   /**
    * 시작 조건은 국면 시드에서 뽑는다.
    *
@@ -64,6 +77,8 @@ export function createState(problem: Problem): MatchState {
   return {
     tick: 0,
     score: [...problem.score] as [number, number],
+    // 플레이어가 고른 상대. 국면 데이터가 아니라 이 판의 설정이다
+    difficulty,
     // 앞 감독이 걸어놓은 지시를 그대로 물려받는다
     tactics: rolled.tactics,
     captainEffect: rolled.captainEffect,
@@ -317,22 +332,26 @@ function nextBall(
 export function tick(state: MatchState, rng: Rng): MatchState {
   // 레버가 정한 계수 위에 개별 지시를 얹는다.
   // 지시가 하나도 없으면 `applyOrders` 는 항등이라 계수가 그대로 나간다
-  const c = applyAwayFatigue(
-    applyPositions(
-      applyOrders(
-        resolveCoefficients(
-          state.tactics,
-          state.opponent,
-          state.awayCount < 11,
-          state.homeCount < 11,
-          state.formation,
+  const c = applyDifficulty(
+    applyAwayFatigue(
+      applyPositions(
+        applyOrders(
+          resolveCoefficients(
+            state.tactics,
+            state.opponent,
+            state.awayCount < 11,
+            state.homeCount < 11,
+            state.formation,
+          ),
+          state.players,
         ),
         state.players,
       ),
-      state.players,
+      // 상대도 뛴 만큼 무뎌진다. 이 줄이 없으면 90분 내내 싱싱하다
+      state.awayStamina,
     ),
-    // 상대도 뛴 만큼 무뎌진다. 이 줄이 없으면 90분 내내 싱싱하다
-    state.awayStamina,
+    // 오늘 만난 상대가 우리보다 센가 약한가. 보통이면 항등이다
+    state.difficulty,
   )
 
   // 체력 소모는 선수마다 다르다. 아껴 뛰라고 한 선수만 덜 닳는다 —
@@ -693,8 +712,9 @@ export function simulateHalves(
   problem: Problem,
   first: Decision[],
   second: Decision[],
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
 ): { final: MatchState; passed: boolean; halftime: MatchState } {
-  const firstRun = simulate(problem, first)
+  const firstRun = simulate(problem, first, difficulty)
   const carried = carryToNextHalf(firstRun.final)
 
   const rng = createRng(secondHalfSeed(problem.seed))
@@ -715,9 +735,10 @@ export function simulateHalves(
 export function simulate(
   problem: Problem,
   decisions: Decision[],
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
 ): { final: MatchState; passed: boolean } {
   const rng = createRng(problem.seed)
-  let state = createState(problem)
+  let state = createState(problem, difficulty)
 
   const byTick = new Map<number, Decision[]>()
   for (const d of decisions) {

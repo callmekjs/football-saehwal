@@ -3,8 +3,9 @@ import raw from './data/problems.json' with { type: 'json' }
 import { toProblem } from './sim/problems'
 import { Backdrop } from './ui/Backdrop'
 import { MatchScreen } from './ui/MatchScreen'
+import { DIFFICULTIES, OUR_RANK } from './analysis/difficulty'
 import { addedTimeOf, breakStart, halfLabel, segmentEnd, type Half } from './matchClock'
-import type { Problem } from './sim/types'
+import type { Difficulty, Problem } from './sim/types'
 
 /** 국면 카드에 띄울 정보. 국면 데이터에서 파생한다 */
 interface Entry {
@@ -32,6 +33,46 @@ function HalfButton({ half, onPick }: { half: Half; onPick: () => void }) {
         {breakStart(half)}분 급수 · +{addedTimeOf(half)}
       </small>
     </button>
+  )
+}
+
+/**
+ * 오늘 만날 상대를 고른다.
+ *
+ * **국면마다 따로 고르지 않는다.** 카드 다섯 장에 버튼을 세 개씩 더 붙이면
+ * 카드 하나에 조작이 다섯 개가 되어 무엇을 눌러야 하는지가 흐려진다.
+ * 상대는 판 전체의 설정이므로 국면 목록 위에 한 벌만 둔다.
+ *
+ * 순위 숫자는 전부 창작이다. 실존 팀·국가·구단을 쓰지 않는다.
+ */
+function DifficultyPicker({
+  value,
+  onPick,
+}: {
+  value: Difficulty
+  onPick: (value: Difficulty) => void
+}) {
+  return (
+    <div className="difficulty">
+      <span className="difficulty-head">
+        <b>상대 난이도</b>
+        <small>우리 순위는 {OUR_RANK}위입니다. 오늘 만날 상대를 고르세요.</small>
+      </span>
+      <span className="difficulty-set" role="group" aria-label="상대 난이도">
+        {DIFFICULTIES.map((d) => (
+          <button
+            key={d.id}
+            className={`difficulty-btn${value === d.id ? ' on' : ''}`}
+            aria-pressed={value === d.id}
+            onClick={() => onPick(d.id)}
+          >
+            <b>{d.name}</b>
+            <small>상대 {d.rank}위</small>
+            <em>{d.hint}</em>
+          </button>
+        ))}
+      </span>
+    </div>
   )
 }
 
@@ -110,14 +151,22 @@ export function App() {
    * 비슷해 보일 수 있다. 멀리 떨어뜨리면 그럴 일이 없다.
    */
   const [attempt, setAttempt] = useState(0)
+  /**
+   * 오늘 만날 상대. 국면과 반과 함께 한 판을 정한다.
+   *
+   * 기본값이 **보통**이다. 다섯 국면의 밸런스를 잰 자리가 보통이므로,
+   * 아무것도 안 고른 사람은 검증된 난이도를 만나야 한다.
+   */
+  const [difficulty, setDifficulty] = useState<Difficulty>('NORMAL')
 
   if (picked) {
     const problem = { ...picked.entry.problem, seed: picked.entry.problem.seed + attempt * 7919 }
     return (
       <MatchScreen
-        key={`${picked.entry.problem.id}#${picked.half}#${attempt}`}
+        key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${difficulty}`}
         problem={problem}
         startHalf={picked.half}
+        difficulty={difficulty}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
       />
@@ -178,6 +227,7 @@ export function App() {
             같은 전술이 모든 판을 풀어주지 않습니다 · <b>전반 또는 후반을 선택하세요</b>
           </span>
         </div>
+        <DifficultyPicker value={difficulty} onPick={setDifficulty} />
         <div className="fixtures">
           {entries.map((e, i) => (
             <FixtureCard

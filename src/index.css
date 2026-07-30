@@ -1350,6 +1350,96 @@ button {
 /* 카드가 버튼이 아니라 상자가 됐다 — 안의 버튼 둘이 조작 대상이다 */
 .fixture { cursor: default; }
 
+/* ── 상대 난이도 — 국면 목록 위에 한 벌만 둔다 ──────────── */
+
+.difficulty {
+  display: grid;
+  gap: 8px;
+  margin: 0 2px 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.difficulty-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.difficulty-head > b { font-size: 13px; }
+.difficulty-head > small { color: var(--dim); font-size: 11.5px; }
+
+.difficulty-set {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.difficulty-btn {
+  display: grid;
+  gap: 2px;
+  /* 손가락 표적 최소 44px */
+  min-height: 44px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.difficulty-btn:hover,
+.difficulty-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+}
+
+.difficulty-btn > b { font-size: 13px; }
+.difficulty-btn > small { color: var(--accent); font-size: 11px; }
+.difficulty-btn > em { color: var(--dim); font-size: 10.5px; font-style: normal; }
+
+/*
+  고른 것은 **테두리와 배경 둘 다** 바뀐다. 색 하나만 바꾸면 색을
+  구분하지 못하는 사람에게는 아무 일도 안 일어난 화면이 된다.
+*/
+.difficulty-btn.on {
+  border-color: var(--accent);
+  background: rgba(62, 207, 142, 0.16);
+}
+
+.difficulty-btn.on > small { color: var(--text); }
+
+/* 좁은 화면에서는 세 칸이 겹치므로 한 줄에 하나씩 세운다 */
+@media (max-width: 460px) {
+  .difficulty-set { grid-template-columns: 1fr; }
+}
+
+/* ── 경기 중 상대 순위 표시 — 읽기 전용 ───────────────── */
+
+.away-rank {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border-left: 3px solid var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.away-rank > b { font-size: 12px; }
+.away-rank > span { color: var(--dim); font-size: 11px; }
+
+/* 센 상대는 경고색, 약한 상대는 우리 색으로 갈라 놓는다 */
+.away-rank[data-level='hard'] { border-left-color: var(--warn); }
+.away-rank[data-level='easy'] { border-left-color: var(--accent); }
+
 /* ── 하프타임 — 라커룸에서 주장이 전반을 정리한다 ────────── */
 
 .halftime-talk {
