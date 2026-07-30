@@ -2636,3 +2636,96 @@ button {
   .toast { animation: none; }
   .lever-mark { transition: none; }
 }
+
+/* ── 배치판을 시안의 세로 피치로 ──────────────────────────
+ *
+ * 디자인 핸드오프 4순위. 실제 잔디·유니폼 실루엣 마커·포지션 라벨.
+ *
+ * **좌표와 조작은 건드리지 않는다.** 시안은 선수 열한 명의 위치를 고정
+ * %로 적어놨지만, 우리 배치판은 감독이 끌어다 놓은 **실제 피치 좌표**를
+ * 그린다. 시안 좌표를 쓰면 자유 배치 기능이 통째로 죽는다. 모양만 바꾼다.
+ */
+.squad-shape {
+  /* 잔디. 아래에서 위로 공격하는 세로 피치다 */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      var(--turf-a) 0 40px,
+      var(--turf-b) 40px 80px
+    ) !important;
+  border-radius: 5px;
+}
+
+/* 하프라인과 센터서클을 실제 피치 선 굵기로 */
+.squad-shape::before {
+  left: 0 !important;
+  right: 0 !important;
+  border-top: 2px solid rgba(255, 255, 255, 0.22) !important;
+}
+
+.squad-shape::after {
+  width: 92px !important;
+  height: 92px !important;
+  border: 2px solid rgba(255, 255, 255, 0.22) !important;
+}
+
+/*
+ * 유니폼 실루엣.
+ *
+ * 위가 각지고 아래가 둥근 사각이라 셔츠로 읽힌다. 동그라미로 두면
+ * 경기장 캔버스의 선수 원과 같은 모양이 되어 둘이 헷갈린다.
+ */
+.squad-card {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 4px 4px 9px 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: linear-gradient(170deg, var(--accent), var(--accent-mid)) !important;
+  color: var(--on-accent) !important;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.45) !important;
+}
+
+.squad-card .squad-num {
+  font-family: var(--num);
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+/* 지시가 걸린 선수는 테두리가 굵어진다. 색만으로 구분하지 않는다 */
+.squad-card[data-order='on'] {
+  border: 2px solid var(--accent-max) !important;
+  background: linear-gradient(170deg, var(--accent-hi), var(--accent)) !important;
+}
+
+.squad-card[data-position='on'] {
+  border: 2px dashed var(--accent-max) !important;
+}
+
+.squad-card[data-warn='on'] {
+  border-color: var(--warn) !important;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.45), 0 0 0 2px rgba(243, 201, 95, 0.5) !important;
+}
+
+.squad-card[aria-pressed='true'] {
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(211, 247, 229, 0.55) !important;
+}
+
+/* 상대는 붉은 유니폼. 우리와 색으로 갈린다 */
+.squad-card.away {
+  background: linear-gradient(170deg, var(--away), var(--away-mid)) !important;
+  color: var(--on-away) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* 체력 막대를 유니폼 아래쪽에 얇게 깐다. 평점이 없으므로 이것이 상태다 */
+.squad-card .squad-stamina {
+  width: 26px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.squad-card .squad-tag { font-size: 8.5px; }
