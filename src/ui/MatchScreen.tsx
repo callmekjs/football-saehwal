@@ -36,6 +36,7 @@ import {
   useBreakClock,
 } from './breakClock'
 import { opponentInfo } from '../analysis/opponents'
+import { clockRatio, clockTone, secondsLeft, urgencyOf } from './urgency'
 import type {
   Decision,
   OpponentId,
@@ -408,6 +409,70 @@ function Bench({
   )
 }
 
+/**
+ * 긴급 바 — 남은 시간 · 지금 위험 · 교체 카드.
+ *
+ * 세 칸이 서로 다른 종류의 압박을 전한다. 왼쪽은 **시간**(줄어든다),
+ * 가운데는 **판단**(지금 무엇이 급한가), 오른쪽은 **자원**(쓸 수 있는
+ * 카드가 몇 장 남았나). 셋 다 되돌릴 수 없는 것들이다.
+ *
+ * 색만으로 구분하지 않는다 — 등급이 바뀌면 삼각형 마커와 문장이 함께
+ * 바뀐다. `urgency.ts` 의 검사가 그 규칙을 지킨다.
+ */
+function UrgencyBar({ state, cards }: { state: MatchState; cards: number }) {
+  const left = secondsLeft(state.tick)
+  const tone = clockTone(left)
+  const danger = urgencyOf(state)
+  /**
+   * 시안은 카드를 세 장으로 그렸지만 **국면마다 다르다**(3·3·2·2·2).
+   * 상수로 박으면 두 장짜리 국면에서 쓰지도 않은 카드가 하나 남아 보인다.
+   * 국면이 준 처음 장수를 그대로 쓴다.
+   */
+  const used = Math.max(0, cards - state.subsLeft)
+
+  return (
+    <div className="urgency">
+      <div className="urgency-clock" data-tone={tone.toLowerCase()}>
+        <span className="urgency-label">남은 시간</span>
+        {/*
+          경기 분(88:12)이 아니라 **실제로 남은 초**다. 둘을 일부러 갈라
+          놓았다 — 화면의 88분은 경기 안의 시각이고 이 숫자는 감독에게
+          진짜로 남은 시간이다.
+        */}
+        <b role="timer" aria-label={`남은 시간 ${left}초`}>
+          {left}
+          <i>초</i>
+        </b>
+        <span className="urgency-gauge">
+          <i style={{ width: `${clockRatio(state.tick) * 100}%` }} />
+        </span>
+      </div>
+
+      <div className="urgency-risk" data-tone={danger.tone.toLowerCase()}>
+        {/* 색을 못 가리는 사람을 위한 두 번째 신호. 색이 아니라 모양이다 */}
+        <span className="urgency-mark" aria-hidden />
+        <span className="urgency-body">
+          <span className="urgency-label">지금 위험</span>
+          {/*
+            등급이 올라간 순간에만 읽어준다. 매 틱 읽으면 화면 낭독기가
+            75초 내내 같은 문장을 반복한다
+          */}
+          <strong role={danger.tone === 'DANGER' ? 'status' : undefined}>{danger.text}</strong>
+        </span>
+      </div>
+
+      <div className="urgency-cards">
+        <span className="urgency-label">교체 카드</span>
+        <span className="urgency-chips" aria-label={`교체 카드 ${state.subsLeft}장 남음`}>
+          {Array.from({ length: cards }, (_, i) => (
+            <i key={i} data-used={i < used ? 'on' : undefined} />
+          ))}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /** 좁은 화면에서만 쓰는 탭. 넓은 화면은 네 영역을 한꺼번에 편다 */
 type ControlTab = 'TACTICS' | 'SQUAD' | 'AWAY' | 'INFO'
 
@@ -668,6 +733,17 @@ export function MatchScreen({
           <span className="match-subs">교체 카드 {state.subsLeft}장</span>
         )}
       </header>
+
+      {/*
+        긴급 바 — 디자인 개편의 핵심이다.
+
+        핸드오프 원문: *"경고를 여러 개 띄우지 않고 우선순위 하나만 문장으로
+        보여준다"*. 한 판이 75초라 경고를 셋 띄우면 셋 다 안 읽힌다.
+
+        **경기가 흐르는 동안에만 뜬다.** 급수 타임에는 시계가 멈춰 있고
+        주장 브리핑이 같은 일을 더 자세히 하므로 두 개를 겹쳐 놓지 않는다.
+      */}
+      {phase === 'RUNNING' && <UrgencyBar state={state} cards={problem.subsLeft} />}
 
       {/* 좁은 화면 전용 요약 줄 */}
       <div className="match-brief">

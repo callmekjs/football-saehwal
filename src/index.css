@@ -2350,3 +2350,138 @@ button {
   .coach-findings { grid-template-columns: 1fr; }
   .coach-overview h3 { font-size: 16px; }
 }
+
+/* ── 긴급 바 — 남은 시간 · 지금 위험 · 교체 카드 ───────────
+ *
+ * 디자인 개편의 핵심. 한 판이 75초라 경고를 여러 개 띄우면 하나도 안
+ * 읽힌다. 세 칸이 각각 다른 종류의 압박을 전한다 — 시간·판단·자원.
+ */
+.urgency {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) 1fr auto;
+  gap: 1px;
+  margin: 0 0 12px;
+  background: var(--line-3);
+  border: 1px solid var(--line-3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.urgency > * {
+  background: var(--panel-head);
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.urgency-label {
+  font-family: var(--label);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--dim-2);
+  white-space: nowrap;
+}
+
+/* 남은 시간 — 숫자·막대·색이 함께 급해진다 */
+.urgency-clock {
+  display: grid !important;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 2px 10px;
+  align-items: baseline !important;
+}
+
+.urgency-clock > b {
+  grid-row: 2;
+  font-family: var(--num);
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  transition: color 0.2s;
+}
+
+.urgency-clock > b > i {
+  font-style: normal;
+  font-size: 12px;
+  margin-left: 3px;
+  color: var(--dim-2);
+}
+
+.urgency-gauge {
+  grid-row: 2;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+  align-self: center;
+}
+
+.urgency-gauge > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s linear, background 0.2s;
+}
+
+.urgency-clock[data-tone='warn'] > b,
+.urgency-clock[data-tone='warn'] .urgency-gauge > i { color: var(--warn); background: var(--warn); }
+.urgency-clock[data-tone='warn'] > b { background: none; }
+.urgency-clock[data-tone='danger'] > b { color: var(--away); background: none; }
+.urgency-clock[data-tone='danger'] .urgency-gauge > i { background: var(--away); }
+/* 마지막 15초는 칸 자체가 붉어진다. 곁눈으로도 보여야 한다 */
+.urgency-clock[data-tone='danger'] { box-shadow: inset 0 0 0 1px rgba(255, 107, 97, 0.45); }
+
+/*
+ * 지금 위험 — 삼각형 마커.
+ *
+ * 색을 못 가리는 사람에게 색은 존재하지 않는 정보다. 그래서 **모양**으로
+ * 한 겹, **문장**으로 또 한 겹 구분한다. 셋이 함께 바뀐다.
+ */
+.urgency-mark {
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid var(--accent);
+}
+
+.urgency-risk[data-tone='warn'] .urgency-mark { border-bottom-color: var(--warn); }
+.urgency-risk[data-tone='danger'] .urgency-mark { border-bottom-color: var(--away); }
+
+.urgency-body { display: grid; gap: 1px; min-width: 0; }
+
+.urgency-body > strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.urgency-risk[data-tone='danger'] .urgency-body > strong { color: var(--away-hi); }
+
+/* 교체 카드 — 유한하고 회수 불가라는 것이 한눈에 보여야 한다 */
+.urgency-cards { justify-content: flex-end; }
+.urgency-chips { display: flex; gap: 4px; }
+
+.urgency-chips > i {
+  width: 16px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--accent);
+  border: 1px solid var(--accent-hi);
+}
+
+.urgency-chips > i[data-used] {
+  background: none;
+  border-color: var(--dim-3);
+  opacity: 0.35;
+}
+
+/* 좁은 화면에서는 세 칸을 쌓는다. 가로로 밀어 넣으면 문장이 잘린다 */
+@media (max-width: 900px) {
+  .urgency { grid-template-columns: 1fr; }
+  .urgency-cards { justify-content: flex-start; }
+}
