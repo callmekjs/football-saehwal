@@ -66,7 +66,7 @@ function decisionText(decision: Decision): string {
   if (decision.type === 'POSITION') {
     return `${numberOf(decision.target)} → ${decision.position ? '직접 배치' : '기본 자리'}`
   }
-  return '결정 내용 확인 불가'
+  return '무엇을 바꿨는지 기록에 없음'
 }
 
 function clockAt(tick: number, kickoff: number): string {
@@ -207,7 +207,7 @@ export function buildOneMove(
       decision:
         observed?.decision ??
         concrete?.decision ??
-        withoutTime(timing?.title ?? '결정 내용은 현재 기록으로 확인할 수 없습니다.', timing?.time),
+        withoutTime(timing?.title ?? '무엇을 바꿨는지는 지금 기록으로 확인할 수 없습니다.', timing?.time),
       impactLabel: '이 결정을 포함한 판단 · 방치 대비',
       deltaText,
       tone,
@@ -221,7 +221,7 @@ export function buildOneMove(
     : reached
     ? withoutTime(reached.title, reached.time)
     : concrete?.decision ??
-      withoutTime(timing?.title ?? '대표 결정을 현재 기록으로 특정할 수 없습니다.', timing?.time)
+      withoutTime(timing?.title ?? '대표로 뽑을 결정을 지금 기록에서 고를 수 없습니다.', timing?.time)
 
   return {
     kind: 'representative',

@@ -118,7 +118,9 @@ describe('Coach 경기 분석', () => {
 
     expect(confidenceRank[low.confidence]).toBeLessThan(confidenceRank[medium.confidence])
     expect(confidenceRank[medium.confidence]).toBeLessThan(confidenceRank[high.confidence])
-    expect(low.explanation).toContain('확정할 수 없습니다')
+    // 근거가 없을 때는 원인을 하나로 못박지 않고 말끝을 흐린다.
+    // 문구 자체가 아니라 '단정하지 않는다'는 성질을 지킨다
+    expect(low.explanation).toMatch(/(?:없습니다|어렵습니다)\.$/)
   })
 
   it('내부 세트피스 위험값에는 실제 횟수처럼 회를 붙이지 않는다', () => {
@@ -173,7 +175,7 @@ describe('Coach 경기 분석', () => {
       },
     }
     const report = buildCoachReport(problem, final, [], metrics, 78)
-    expect(report.goalsFor[0].title).toContain('슈팅')
+    expect(report.goalsFor[0].title).toMatch(/슛|슈팅/)
     expect(report.goalsFor[0].evidence.join(' ')).toContain('0.0%')
     expect(JSON.stringify(report)).not.toContain('NaN')
   })

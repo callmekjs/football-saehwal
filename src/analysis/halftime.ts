@@ -98,9 +98,11 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
     if (us >= them) say('goal', '따라붙었습니다. 이 상태로 끝내면 됩니다.', 'GOOD')
     else say('goal', `아직 ${them - us}골이 모자랍니다. 후반 45분이 남았습니다.`, 'BAD')
   } else {
-    if (us > them) say('goal', '리드는 지켰습니다. 후반이 더 깁니다.', 'GOOD')
+    // 두 반의 길이는 같다. 후반이 더 무거운 것은 시간이 아니라 다리다
+    if (us > them) say('goal', '리드는 지켰습니다. 다만 후반이 더 힘듭니다.', 'GOOD')
     else if (us === them) say('goal', '리드를 놓쳤습니다. 다시 앞서야 합니다.', 'BAD')
-    else say('goal', '역전당했습니다. 두 골이 필요합니다.', 'BAD')
+    // 지키는 국면은 앞서야 통과다. 동점으로는 모자라서 한 골을 더 센다
+    else say('goal', `역전당했습니다. ${them - us + 1}골이 필요합니다.`, 'BAD')
   }
 
   // ── 슈팅 대비. 경기를 누가 쥐고 있었나 ──
@@ -143,7 +145,7 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   if (booked.length > 0) {
     say(
       'booked',
-      `${booked.sort((a, b) => a - b).join('번, ')}번은 경고가 있습니다. 한 장 더 받으면 나갑니다.`,
+      `${booked.sort((a, b) => a - b).join('번, ')}번은 이미 경고를 받았습니다. 한 장 더 받으면 나갑니다.`,
       'BAD',
     )
   }

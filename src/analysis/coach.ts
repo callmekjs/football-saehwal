@@ -279,7 +279,7 @@ function causeLabel(cause: string): string {
   if (cause === 'OPEN_PLAY') return '상대 공격'
   if (cause === 'SET_PIECE') return '세트피스'
   if (cause === 'PENALTY') return '페널티킥'
-  return '기록으로 특정할 수 없는 경로'
+  return '기록만으로는 알 수 없는 경로'
 }
 
 function goalFinding(
@@ -299,40 +299,43 @@ function goalFinding(
   const primary = causes[0]
 
   let explanation: string
-  const evidence = [`득점 시각 ${time}`, `당시 설정: ${setupText(setup)}`]
+  const evidence = [
+    `${side === 'FOR' ? '득점' : '실점'} 시각 ${time}`,
+    `당시 설정: ${setupText(setup)}`,
+  ]
 
   if (side === 'FOR') {
     explanation =
       primary === 'BUILD_UP'
-        ? '박스 안까지 전진한 뒤 슈팅했고, 그 슛으로 득점했습니다.'
-        : '득점은 확인되지만 현재 기록만으로 전개 경로까지 단정할 수 없습니다.'
+        ? '박스 안까지 파고든 뒤 슛을 때렸고, 그대로 골이 됐습니다.'
+        : '골이 들어간 것은 분명하지만, 지금 기록만으로는 어떻게 만들었는지까지 말하기 어렵습니다.'
     evidence.push(`우리 공격 전개 ${totals.homeAttempt}회 중 슈팅 ${totals.homeShot}회`)
     if (primary === 'BUILD_UP') {
       evidence.push(
-        `라인을 ${withJosa(LEVEL_LABEL.line[setup.tactics.line], '로으로')} 두면 박스 진입 뒤 슈팅 가능성이 달라지고, 폭을 ${withJosa(
+        `라인을 ${withJosa(LEVEL_LABEL.line[setup.tactics.line], '로으로')} 두면 박스 안까지 들어가 슛을 때릴 가능성이 달라지고, 폭을 ${withJosa(
           LEVEL_LABEL.width[setup.tactics.width],
           '로으로',
-        )} 두면 전진 횟수가 달라집니다.`,
+        )} 두면 앞으로 나가는 횟수가 달라집니다.`,
       )
     }
   } else {
     if (primary === 'BEHIND') {
       explanation =
-        '상대가 수비 뒷공간을 찌른 뒤 일대일로 슈팅해 실점했습니다.'
+        '상대가 수비 뒷공간을 파고들어 골키퍼와 일대일로 맞섰고, 그대로 골을 내줬습니다.'
       evidence.push(`경기 전체 배후 침투 허용 ${totals.behind}회`)
       if (setup.tactics.line === 2) {
         evidence.push('라인을 높이면 수비 뒷공간을 더 내줍니다.')
       }
     } else if (primary === 'OPEN_PLAY') {
       explanation =
-        '상대가 일반 공격으로 박스 안까지 들어와 슈팅했고, 막지 못했습니다.'
+        '상대가 흐르는 공에서 박스 안까지 들어와 슛을 때렸고, 막지 못했습니다.'
       evidence.push(`상대 공격 전개 ${totals.awayAttempt}회 중 슈팅 ${totals.awayShot}회`)
       if (setup.tactics.width === 2) {
         evidence.push('폭을 넓히면 공격할 길이 늘지만 중앙도 비웁니다.')
       }
     } else if (primary === 'SET_PIECE') {
       explanation =
-        '일반 공격이 아니라 세트피스에서 실점했습니다. 같은 위험이 반복됐는지와 당시 라인을 함께 봐야 합니다.'
+        '흐르는 공이 아니라 세트피스에서 골을 내줬습니다. 같은 위험이 되풀이됐는지, 그때 라인이 어땠는지 함께 봐야 합니다.'
       evidence.push(`경기 전체 세트피스 위험 ${totals.setPiece}`)
       if (setup.tactics.line === 0) {
         evidence.push('라인을 낮추면 배후 침투는 줄지만 세트피스 위험은 크게 커집니다.')
@@ -341,14 +344,14 @@ function goalFinding(
       evidence.push(`득점 시점 골문 앞 지시 ${holding}명`)
     } else if (primary === 'PENALTY') {
       explanation =
-        '박스 안에서 반칙해 페널티킥을 내줬고, 실점했습니다. 당시 압박 강도도 함께 봐야 합니다.'
+        '박스 안에서 반칙해 페널티킥을 내줬고, 그대로 골로 이어졌습니다. 그때 압박을 얼마나 세게 걸고 있었는지도 함께 봐야 합니다.'
       evidence.push(`당시 압박 ${LEVEL_LABEL.press[setup.tactics.press]}`)
       if (setup.tactics.press === 2) {
-        evidence.push('강하게 압박하면 공을 되찾기 쉬운 대신 파울도 늘어납니다.')
+        evidence.push('세게 압박하면 공을 되찾기 쉬운 대신 반칙도 늘어납니다.')
       }
     } else {
       explanation =
-        '실점은 확인되지만 현재 경기 기록만으로 배후·오픈플레이·세트피스 중 하나를 확정할 수 없습니다.'
+        '골을 내준 것은 분명하지만, 지금 기록만으로는 배후 침투인지 흐르는 공인지 세트피스인지 가릴 수 없습니다.'
     }
   }
 
@@ -397,11 +400,11 @@ function noGoalFinding(
     return {
       id: 'for-none',
       label: '득점 분석',
-      title: totals.homeShot === 0 ? '슈팅까지 연결하지 못했다' : '슈팅은 만들었지만 득점은 없었다',
+      title: totals.homeShot === 0 ? '슛까지 가지 못했다' : '슛까지는 갔지만 골이 없었다',
       explanation:
         totals.homeShot === 0
-          ? '공격은 전개했지만 박스 안에서 슈팅하지 못했습니다. 이 기록만 보면 마무리보다 진입 과정부터 살펴야 합니다.'
-          : '슈팅 기회는 만들었습니다. 다만 슈팅 위치와 선방 기록이 없어 마무리가 문제였다고 단정할 수 없습니다.',
+          ? '공격은 만들었지만 박스 안에서 슛까지 가지 못했습니다. 이 기록만 보면 마무리보다 들어가는 과정부터 살펴야 합니다.'
+          : '슛까지 갈 기회는 만들었습니다. 다만 어디서 찼는지와 선방 기록이 없어 마무리 탓이라고 잘라 말할 수는 없습니다.',
       evidence,
       confidence: confidenceOf(evidence, {
         observed: true,
@@ -420,8 +423,8 @@ function noGoalFinding(
     title: '실점 없이 막아냈다',
     explanation:
       attack.shots === 0
-        ? '상대의 공격을 슈팅 이전에 끊었습니다.'
-        : '상대에게 슈팅은 내줬지만 실점하지는 않았습니다.',
+        ? '상대 공격을 슛까지 가기 전에 끊었습니다.'
+        : '상대에게 슛은 내줬지만 골까지 가지는 않았습니다.',
     evidence,
     confidence: confidenceOf(evidence, {
       observed: true,
@@ -645,8 +648,8 @@ function decisionFindings(
       title: `${firstTime}에 첫 개입, 총 ${timeline.length}회 결정`,
       explanation:
         first.g <= totalTicks * 0.2
-          ? '초반에 방향을 정해 바꾼 전술을 시험할 시간을 충분히 벌었습니다.'
-          : '경기 중반이 지나서야 처음 바꿨습니다. 같은 선택도 늦게 내리면 효과를 낼 시간이 줄어듭니다.',
+          ? '초반에 방향을 정한 덕에 바꾼 전술을 시험할 시간이 넉넉했습니다.'
+          : '경기 중반이 지나서야 처음 바꿨습니다. 같은 선택도 늦게 내리면 효과를 볼 시간이 줄어듭니다.',
       evidence,
       confidence: confidenceOf(evidence, {
         observed: true,
@@ -815,7 +818,9 @@ function prescriptionsOf(
   const reached = reachesRecommendation(problem, timeline, legs)
   const totalTicks = legs.length * TOTAL_TICKS
   if (reached === null) {
-    items.push('네 항목을 따로 늦게 바꾸지 말고 초반에 한 번에 맞춰 효과를 낼 시간을 확보하세요.')
+    items.push(
+      '네 가지를 하나씩 늦게 바꾸지 말고 초반에 한꺼번에 맞추세요. 그래야 효과를 볼 시간이 남습니다.',
+    )
   } else if (reached.g > totalTicks * 0.2) {
     items.push(
       `${stamp(reached.leg, reached.tick, showHalf)}에 완성한 권장 설정을 다음에는 킥오프 직후부터 적용하세요.`,
@@ -825,7 +830,7 @@ function prescriptionsOf(
   const firstAgainst = goalsAgainst.find((finding) => finding.id !== 'against-none')
   if (firstAgainst) {
     items.push(
-      `${firstAgainst.time}의 ${firstAgainst.title} 실점을 반복하지 않도록 당시 설정과 권장안을 먼저 비교하세요.`,
+      `${firstAgainst.time}에 ${withJosa(firstAgainst.title, '로으로')} 내준 골이 되풀이되지 않도록, 그때 설정과 권장안을 먼저 비교하세요.`,
     )
   } else {
     items.push(recommendation.explanation)

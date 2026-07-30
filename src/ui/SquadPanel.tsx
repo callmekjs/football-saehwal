@@ -91,10 +91,10 @@ const ORDER_TAG: Record<Exclude<PlayerOrder, 'NONE'>, string> = {
 function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | null {
   if (s.stamina < 25) return { tag: '위험', why: '체력이 바닥나 부상 위험이 큽니다' }
   if (s.booked && press === 2) {
-    return { tag: '퇴장', why: '경고가 있는데 강하게 압박 중입니다. 퇴장 위험이 큽니다' }
+    return { tag: '퇴장', why: '이미 경고를 받았는데 계속 세게 압박하고 있습니다. 퇴장 위험이 큽니다' }
   }
   if (s.stamina < 35) return { tag: '지침', why: '많이 지쳤습니다' }
-  if (s.booked) return { tag: '경고', why: '경고가 있습니다' }
+  if (s.booked) return { tag: '경고', why: '경고를 한 장 받았습니다' }
   return null
 }
 
@@ -927,7 +927,7 @@ export function AwayPanel({ state }: { state: MatchState }) {
       <p className="away-note">
         {awaySummary(state)}
         {state.away.booked.length > 0 &&
-          ` 경고가 있는 선수는 ${state.away.booked.map((n) => `${n}번`).join(' · ')}입니다.`}
+          ` 경고를 받은 선수는 ${state.away.booked.map((n) => `${n}번`).join(' · ')}입니다.`}
         {state.away.injured !== null &&
           ` ${state.away.injured}번은 무릎 상태가 좋지 않습니다.`}
         {' '}개별 능력치는 확인할 수 없습니다. 등번호와 위치만 보입니다.

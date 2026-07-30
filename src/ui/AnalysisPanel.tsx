@@ -278,7 +278,7 @@ export function AnalysisPanel({
             <span className="story-index">03</span>
             <small>실제 경기 흐름</small>
             {story.flow.integrity === 'UNAVAILABLE' ? (
-              <strong className="no-response">기록 확인 불가</strong>
+              <strong className="no-response">남은 기록 없음</strong>
             ) : story.flow.events.length === 0 ? (
               <strong className="no-response">점수 변화 없음</strong>
             ) : (

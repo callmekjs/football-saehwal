@@ -211,9 +211,11 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
   const [us, them] = state.score
   const standing =
     us > them
-      ? `지금 ${us} 대 ${withJosa(them, '로으로')} 앞섭니다.`
+      ? `지금 ${us} 대 ${withJosa(them, '로으로')} 앞서고 있습니다.`
       : us < them
-        ? `지금 ${us} 대 ${withJosa(them, '로으로')} 뒤집니다.`
+        ? // '뒤집니다' 는 '뒤집다' 로 읽혀 뜻이 반대로 잡힌다. 중계에서 쓰는
+          // '뒤지고 있습니다' 를 쓴다
+          `지금 ${us} 대 ${withJosa(them, '로으로')} 뒤지고 있습니다.`
         : `지금 ${us} 대 ${withJosa(them, '로으로')} 동점입니다.`
   const goal = chasing ? '최소 동점까지 따라가야 합니다.' : '이대로 끝까지 지켜야 합니다.'
   say(0, 'score', '상황', `${standing} ${goal}`, us < them ? 'ALERT' : 'FACT')
@@ -244,7 +246,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       10,
       'send-off-risk',
       '위험',
-      `${numberList(booked)}은 경고가 있는데 강하게 압박 중입니다. 한 번 더 받으면 나갑니다. 압박을 낮추면 위험도 줄어듭니다.`,
+      `${numberList(booked)}은 이미 경고를 받았는데 계속 세게 압박하고 있습니다. 한 장 더 받으면 나갑니다. 압박을 낮추면 위험이 줄어듭니다.`,
       'ALERT',
     )
   }
@@ -299,7 +301,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       16,
       'awayBooked',
       '상대',
-      `상대 ${state.away.booked.map((n) => `${n}번`).join(' · ')}에게 경고가 있습니다.`,
+      `상대는 ${state.away.booked.map((n) => `${n}번`).join(' · ')}이 경고를 받았습니다.`,
     )
   }
   if (state.away.injured !== null) {
@@ -389,7 +391,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       35,
       'booked',
       '위험',
-      `${numberList(booked)}은 경고가 있습니다. 지금 압박이면 괜찮지만, 강하게 올리면 퇴장 위험이 생깁니다.`,
+      `${numberList(booked)}은 이미 경고를 받았습니다. 지금 압박이면 괜찮지만, 더 세게 올리면 퇴장 위험이 생깁니다.`,
     )
   }
 

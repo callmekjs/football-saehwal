@@ -141,7 +141,7 @@ function SituationCard({
       <span className="kickoff-survival">
         <small>미국 기준 · 아무것도 안 하면</small>
         <b>{(noActionRate * 100).toFixed(1)}%</b>
-        <em>만 살아남음</em>
+        <em>만 버팁니다</em>
       </span>
       <span className="kickoff-selected-mark" aria-hidden>
         ✓ 선택
