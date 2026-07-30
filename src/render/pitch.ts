@@ -608,8 +608,15 @@ export function drawPitch(
   const r = Math.max(7, Math.min(w, h * 1.6) * 0.021)
   const b = vm.ball
 
-  // 패스·슛 경로. 공이 어디서 어디로 가는지가 보여야 축구로 읽힌다
-  if (b.mode === 'PASS' || b.mode === 'SHOT') {
+  /**
+   * 패스·슛 경로. 공이 어디서 어디로 가는지가 보여야 축구로 읽힌다.
+   *
+   * **흘린 공에는 그리지 않는다.** 뺏긴 공은 `mode` 가 `'PASS'` 라(궤적
+   * 계산을 같이 쓴다) 여기까지 흘러들어와, 우리 선수에서 상대 선수로
+   * 향하는 하얀 점선이 판당 4.7번 그려지고 있었다. 그건 "건네줬다"는
+   * 뜻이 되어버린다. 실수로 흘린 공에는 의도한 경로가 없다.
+   */
+  if ((b.mode === 'PASS' && b.kick !== 'SPILL') || b.mode === 'SHOT') {
     ctx.save()
     ctx.globalAlpha = 0.35
     ctx.strokeStyle = b.mode === 'SHOT' ? '#ffd479' : '#ffffff'

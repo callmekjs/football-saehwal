@@ -143,6 +143,18 @@ const FOUL_ZONE = 38
  * 앞으로 나와 끊는 거리를 남긴다.
  */
 const MISS_CUT_GAP = 3.4
+
+/**
+ * 흘린 공이 뺏는 선수에게 **닿기 전에 멈추는** 거리(미터).
+ *
+ * 전에는 상대 발밑을 직접 겨눠(중앙값 1.1m) "건네준 패스"로 보였다.
+ * 이만큼 앞에 떨어뜨리면 상대가 달려 나와야 잡는다 — 실제 축구의 "터치가
+ * 길어 뺏겼다"가 그런 그림이다. `MISS_CUT_GAP` 과 같은 원리다.
+ */
+const SPILL_GAP = 4.2
+
+/** 흘린 공이 일직선을 벗어나는 각도(라디안). 정확히 겨눈 것처럼 보이지 않게 한다 */
+const SPILL_SCATTER = 0.9
 /**
  * 반칙한 상대 선수가 경고를 받는 비율.
  *
@@ -1567,8 +1579,48 @@ export class VisualMatch {
    * 길어 뺏겼다"에 해당한다.
    */
   private spill(holder: VPlayer, to: VPlayer) {
-    const tx = clamp(to.x + to.vx * 0.3, 2, PITCH_W - 2)
-    const ty = clamp(to.y + to.vy * 0.3, 2, PITCH_H - 2)
+    /**
+     * ★ **상대 발밑을 겨누지 않는다.**
+     *
+     * 사용자 지적이다 — *"패스는 아주 낮은 확률로 상대편에게 하는걸로 해줘
+     * 보니까 너무 패스를 상대방에 난발하는거 같아"*.
+     *
+     * 전에는 `to.x + to.vx * 0.3` 이었다. **동료에게 리드 패스를 넣는 것과
+     * 똑같은 계산**을 상대에게 하고 있었다. 실측으로 조준점이 가장 가까운
+     * 상대의 1.1m 앞(중앙값)이었고, 55.7%가 1.2m 안이었으며, 상대가 0.48초
+     * 만에 90%를 회수했다. 판당 4.67회. 화면에는 하얀 점선까지 그려져서
+     * "우리 선수가 상대에게 정확히 굴려줬다"로 보인다.
+     *
+     * 게다가 이건 붙지도 않은 상대에게 한다 — 흘리는 순간 가장 가까운
+     * 상대가 중앙값 7.2m 떨어져 있고, 42.9%는 8m 안에 아무도 없었다.
+     *
+     * 실제 축구의 "터치가 길어 뺏겼다"는 공이 **발에서 벗어나 빈 곳으로
+     * 굴러가고** 상대가 달려와 잡는 것이다. 그래서 상대 쪽으로 굴리되
+     * **발밑까지 배달하지 않고 그 앞에서 멈춘다.** 상대가 나와야 잡는
+     * 자리이며, 이는 빗나간 패스를 7/29에 고친 방식과 같은 원리다.
+     */
+    const dx = to.x - holder.x
+    const dy = to.y - holder.y
+    const d = Math.hypot(dx, dy) || 1
+    // 상대에게 닿기 전에 멈춘다. 너무 짧으면 홀더가 도로 줍는다
+    const reach = clamp(d - SPILL_GAP, 2.5, d)
+    /**
+     * 정확히 일직선이면 그것대로 겨눈 것처럼 보인다. 옆으로 흩는다.
+     *
+     * ★ **난수를 새로 뽑지 않는다.** 연출 난수(`this.rng`)는 경기 결과를
+     * 바꾸지는 않지만, 한 번 더 뽑으면 이후 수열이 통째로 밀려 같은 시드의
+     * 화면이 달라진다. 실제로 그렇게 했다가 스로인 거리·슛 거리·오프사이드
+     * 빈도·골 함성 검사 넷이 한꺼번에 깨졌다. 그래서 자리 좌표에서
+     * 결정적으로 만든다 — 같은 상황은 언제나 같은 방향으로 흩어진다.
+     */
+    const mix = ((Math.round(holder.x * 100) * 73856093) ^ (Math.round(holder.y * 100) * 19349663)) >>> 0
+    const ang = ((mix % 2000) / 2000 - 0.5) * SPILL_SCATTER
+    const cos = Math.cos(ang)
+    const sin = Math.sin(ang)
+    const ux = (dx / d) * cos - (dy / d) * sin
+    const uy = (dx / d) * sin + (dy / d) * cos
+    const tx = clamp(holder.x + ux * reach, 2, PITCH_W - 2)
+    const ty = clamp(holder.y + uy * reach, 2, PITCH_H - 2)
     // 흘린 공은 세게 차인 것이 아니다. 느리게 굴러가 상대가 달려와 줍는다
     this.kickBall(holder, tx, ty, 7 + this.rng.next() * 4, 0, 'PASS', to.id, 'SPILL')
     holder.recover = 0.35
