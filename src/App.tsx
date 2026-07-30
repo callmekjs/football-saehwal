@@ -162,6 +162,19 @@ export function App() {
    */
   const [attempt, setAttempt] = useState(0)
   /**
+   * **같은 판을 몇 번째 다시 푸는가.**
+   *
+   * `attempt` 와 나뉘어 있는 것이 핵심이다. `attempt` 는 **시드를 옮겨**
+   * 새 판을 만들고, 이쪽은 **시드를 그대로 둔 채** 화면만 처음으로
+   * 되돌린다. 둘 다 `key` 에 들어가 경기 화면을 다시 마운트하지만 시드에
+   * 닿는 것은 `attempt` 뿐이다.
+   *
+   * 이 구분이 없으면 이 게임은 사활이 아니다. 바둑 사활문제집의 핵심은
+   * *"틀렸지? 같은 자리 다시 놔봐"* 인데, 재도전마다 판이 달라지면
+   * 보고서에서 원인을 읽어도 그것을 써먹을 자리가 없다.
+   */
+  const [replay, setReplay] = useState(0)
+  /**
    * 오늘 만날 상대. 국면과 반과 함께 한 판을 정한다.
    *
    * 기본값이 **기준팀**이다. 다섯 국면의 밸런스를 잰 자리가 그 팀이므로,
@@ -173,12 +186,16 @@ export function App() {
     const problem = { ...picked.entry.problem, seed: picked.entry.problem.seed + attempt * 7919 }
     return (
       <MatchScreen
-        key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${opponent}`}
+        // `replay` 도 키에 들어가야 같은 시드로도 화면이 처음부터 다시 선다
+        key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${replay}#${opponent}`}
         problem={problem}
         startHalf={picked.half}
         opponent={opponent}
         onExit={() => setPicked(null)}
+        // 새 판 — 시드를 옮긴다
         onRetry={() => setAttempt((n) => n + 1)}
+        // 같은 판 — 시드는 그대로 두고 화면만 되돌린다
+        onReplay={() => setReplay((n) => n + 1)}
       />
     )
   }

@@ -2859,3 +2859,22 @@ button {
   .squad-strip { grid-template-columns: 1fr; }
   .strip-list { grid-template-columns: repeat(11, minmax(62px, 1fr)); overflow-x: auto; }
 }
+
+/* ── 다시 하기 두 갈래 ─────────────────────────────────
+ *
+ * **같은 판**은 배운 것을 시험하는 자리, **새 판**은 다른 상황을 만나는
+ * 자리다. 같은 판이 먼저이고 더 크다 — 사활문제집의 기본 동작이 그쪽이다.
+ */
+.retry-pair { display: grid; gap: 7px; }
+
+.kickoff-button.ghost {
+  background: none;
+  border: 1px solid var(--line-3);
+  color: var(--text-4);
+}
+
+.kickoff-button.ghost:hover,
+.kickoff-button.ghost:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+}

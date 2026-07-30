@@ -583,6 +583,7 @@ export function MatchScreen({
   opponent = 'USA',
   onExit,
   onRetry,
+  onReplay,
 }: {
   problem: Problem
   /**
@@ -608,6 +609,14 @@ export function MatchScreen({
    * 새 판을 받으려면 바깥에서 시드를 바꿔줘야 한다.
    */
   onRetry?: () => void
+  /**
+   * **같은 판 다시.** 시드를 그대로 두고 화면만 처음으로 되돌린다.
+   *
+   * 체력·경고·앞 감독이 걸어둔 지시·상대가 전부 똑같은 자리에 다시 앉는다.
+   * 달라지는 것은 감독의 판단 하나뿐이라, 보고서에서 읽은 원인을 실제로
+   * 시험해볼 수 있다. 이것이 없으면 사활이 아니라 확률 놀이다.
+   */
+  onReplay?: () => void
 }) {
   /**
    * 지금 뛰고 있는 반.
@@ -1093,17 +1102,44 @@ export function MatchScreen({
                   {problem.title} · {objective}
                 </span>
                 <small>아래 감독 보고서에서 무엇이 결과를 갈랐는지 볼 수 있습니다.</small>
-                <button
-                  className="kickoff-button"
-                  onClick={() => {
-                    setActiveTab('TACTICS')
-                    if (onRetry) onRetry()
-                    else reset()
-                  }}
-                >
-                  다시 도전
-                  <small>같은 국면 · 새로운 시작 조건</small>
-                </button>
+                {/*
+                  ★ **같은 판 다시 — 이 게임이 사활인 이유다.**
+
+                  바둑 사활문제집의 핵심은 *"틀렸지? 같은 자리 다시 놔봐"* 다.
+                  답을 알고 같은 자리에 다시 앉아야 배운 것이 확인된다.
+
+                  전에는 재도전이 **시드를 옮겼다.** 매번 다른 판이라 보고서에서
+                  원인을 읽어도 그것을 써먹을 자리가 없었다. 그러면 확률 놀이지
+                  퍼즐이 아니다. 이제 두 갈래를 나눠 둔다 — **같은 판**은 배운
+                  것을 시험하는 자리, **새 판**은 다른 상황을 만나는 자리다.
+
+                  같은 판은 체력·경고·앞 감독이 걸어둔 지시·상대까지 전부
+                  똑같다. 달라지는 것은 감독의 판단 하나뿐이다.
+                */}
+                <div className="retry-pair">
+                  <button
+                    className="kickoff-button"
+                    onClick={() => {
+                      setActiveTab('TACTICS')
+                      if (onReplay) onReplay()
+                      else reset()
+                    }}
+                  >
+                    같은 판 다시
+                    <small>똑같은 조건 · 판단만 바꿔봅니다</small>
+                  </button>
+                  <button
+                    className="kickoff-button ghost"
+                    onClick={() => {
+                      setActiveTab('TACTICS')
+                      if (onRetry) onRetry()
+                      else reset()
+                    }}
+                  >
+                    새 판
+                    <small>같은 국면 · 새로운 시작 조건</small>
+                  </button>
+                </div>
               </div>
             </section>
           )}
