@@ -2485,3 +2485,154 @@ button {
   .urgency { grid-template-columns: 1fr; }
   .urgency-cards { justify-content: flex-start; }
 }
+
+/* ── 전술 패널 — 프리셋 카드 + 세그먼트 레버 ────────────── */
+
+.tactics-now {
+  font-family: var(--label);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin-left: 8px;
+}
+
+.tactics-now.off { color: var(--dim-2); }
+
+/*
+ * 원탭 프리셋. 75초에 레버를 세 번 누를 여유가 없다는 전제다.
+ * 이름이 붙은 전술 하나가 레버 셋보다 빠르고, 무엇을 하려는지도 읽힌다.
+ */
+.tactics-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.preset-card {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  /* 손가락 표적. 시안의 52px 보다 우리 44px 규칙이 우선이지만 둘 다 넘긴다 */
+  min-height: 52px;
+  padding: 7px 9px;
+  text-align: left;
+  border: 1px solid var(--line-3);
+  border-radius: 4px;
+  background: var(--panel-deep);
+  transition: background 0.14s, border-color 0.14s;
+}
+
+.preset-card > strong { font-size: 13px; }
+.preset-card > small {
+  font-size: 10.5px;
+  color: var(--dim-2);
+  line-height: 1.3;
+}
+
+.preset-card:hover:not(:disabled),
+.preset-card:focus-visible { border-color: var(--accent); }
+
+.preset-card[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgba(100, 212, 155, 0.09);
+}
+
+.preset-card:disabled { opacity: 0.45; cursor: default; }
+
+/*
+ * 레버 — 3분할 세그먼트.
+ *
+ * 지금 값이 **위치**로 보인다. 색만 바꾸면 색을 못 가리는 사람에게는
+ * 세 칸이 전부 같아 보인다.
+ */
+.lever-list { display: grid; gap: 7px; padding: 0 12px 12px; }
+
+.lever-row {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.lever-name {
+  font-family: var(--label);
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+  color: var(--text-4);
+}
+
+.lever-seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--line-3);
+  border-radius: 4px;
+  background: var(--panel-deep);
+  overflow: hidden;
+}
+
+/* 미끄러지는 표시자. 어느 칸에 있는지가 움직임으로 읽힌다 */
+.lever-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 33.34%;
+  background: rgba(100, 212, 155, 0.18);
+  border-bottom: 2px solid var(--accent);
+  transition: left 0.22s ease;
+  pointer-events: none;
+}
+
+.lever-opt {
+  position: relative;
+  z-index: 1;
+  /* 손가락 표적 최소 44px */
+  min-height: 44px;
+  font-size: 12.5px;
+  color: var(--dim-2);
+  background: none;
+  transition: color 0.14s;
+}
+
+.lever-opt[aria-pressed='true'] { color: var(--text); font-weight: 700; }
+.lever-opt:hover:not(:disabled) { color: var(--text-3); }
+.lever-opt:disabled { opacity: 0.45; cursor: default; }
+
+/* ── 토스트 — 방금 무엇을 눌렀는가 ────────────────────── */
+
+/*
+ * 되돌릴 수 없는 게임이라 **지금** 알아야 다음 지시로 만회할 수 있다.
+ * 경기장을 보고 있으면 칩 테두리가 바뀐 것은 눈에 안 들어온다.
+ */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 5px;
+  background: rgba(11, 26, 20, 0.96);
+  border: 1px solid rgba(100, 212, 155, 0.45);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  animation: toastin 0.18s ease-out;
+  pointer-events: none;
+}
+
+.toast > strong { font-size: 14px; color: var(--text); }
+.toast > small { font-size: 11px; color: var(--dim-2); }
+
+@keyframes toastin {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* 움직임을 줄여달라고 한 사람에게는 나타나기만 한다 */
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+  .lever-mark { transition: none; }
+}

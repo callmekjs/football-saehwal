@@ -37,6 +37,7 @@ import {
 } from './breakClock'
 import { opponentInfo } from '../analysis/opponents'
 import { clockRatio, clockTone, secondsLeft, urgencyOf } from './urgency'
+import { leverToast, presetToast, subToast, useToast, type ToastMessage } from './toast'
 import type {
   Decision,
   OpponentId,
@@ -163,10 +164,13 @@ export function Levers({
   tactics,
   locked,
   onSet,
+  onPreset,
 }: {
   tactics: MatchState['tactics']
   locked: boolean
   onSet: (t: 'LINE' | 'PRESS' | 'WIDTH', v: Level) => void
+  /** 프리셋 한 번으로 레버 셋을 세운다. 토스트 문구가 달라 따로 받는다 */
+  onPreset?: (name: string, v: readonly [Level, Level, Level]) => void
 }) {
   const rows = [
     ['LINE', '수비라인', tactics.line],
@@ -181,22 +185,37 @@ export function Levers({
       <h2>
         전술
         {matched ? (
-          <span style={{ color: 'var(--accent)' }}> · {matched.name}</span>
+          <span className="tactics-now">{matched.name}</span>
         ) : (
-          <span style={{ color: 'var(--dim)', fontWeight: 400 }}> · 직접 맞춤</span>
+          <span className="tactics-now off">직접 맞춤</span>
         )}
       </h2>
+
+      {/*
+        원탭 프리셋 — 핸드오프의 2순위다.
+
+        원문: *"레버 3개를 각각 고를 시간이 없다는 전제로 원탭 프리셋을
+        둔다"*. 75초에 세 번 탭할 여유가 없다. 실제 축구도 "역습으로 간다"고
+        하지 "라인 낮음 압박 약 폭 보통으로 간다"고 하지 않는다.
+
+        시안은 카드 셋(잠그기·균형·밀어올리기)이었지만 지시대로 **우리
+        프리셋 다섯을 그대로 쓴다.** 시안의 셋은 레버를 0/1/2로 미는 단축일
+        뿐이라, 이름이 붙은 우리 전술이 감독에게 더 많은 것을 말해준다.
+      */}
       <div className="tactics-presets">
         {PRESETS.map((p) => (
           <button
             key={p.name}
-            className="chip tactic-preset"
+            className="preset-card"
             aria-pressed={matched?.name === p.name}
             disabled={locked}
             onClick={() => {
-              onSet('LINE', p.v[0])
-              onSet('PRESS', p.v[1])
-              onSet('WIDTH', p.v[2])
+              if (onPreset) onPreset(p.name, p.v)
+              else {
+                onSet('LINE', p.v[0])
+                onSet('PRESS', p.v[1])
+                onSet('WIDTH', p.v[2])
+              }
             }}
           >
             <strong>{p.name}</strong>
@@ -204,30 +223,56 @@ export function Levers({
           </button>
         ))}
       </div>
-      <details className="advanced-tactics">
-        <summary>라인 · 압박 · 폭 세부 조정</summary>
-        <div className="lever-list">
-          {rows.map(([key, label, value]) => (
-            <div key={key} className="lever-row">
-              <span>{label}</span>
-              <div className="lever-options">
-                {LEVER_LABELS[key].map((text, i) => (
-                  <button
-                    key={text}
-                    className="chip"
-                    aria-pressed={value === i}
-                    disabled={locked}
-                    onClick={() => onSet(key, i as Level)}
-                  >
-                    {text}
-                  </button>
-                ))}
-              </div>
+
+      {/*
+        레버는 접지 않는다.
+
+        전에는 `<details>` 안에 숨어 있었다. 프리셋이 뼈대를 세우고 레버로
+        다듬는 것이 감독이 실제로 하는 일인데, 다듬는 쪽이 두 번 눌러야
+        나오면 75초 안에는 아무도 안 연다.
+
+        3분할 세그먼트에 미끄러지는 표시자를 둔다. 지금 어디에 있는지가
+        **위치**로 보여야 색을 못 가려도 읽힌다.
+      */}
+      <div className="lever-list">
+        {rows.map(([key, label, value]) => (
+          <div key={key} className="lever-row">
+            <span className="lever-name">{label}</span>
+            <div className="lever-seg" data-value={value}>
+              <i className="lever-mark" aria-hidden style={{ left: `${value * 33.34}%` }} />
+              {LEVER_LABELS[key].map((text, i) => (
+                <button
+                  key={text}
+                  className="lever-opt"
+                  aria-pressed={value === i}
+                  disabled={locked}
+                  onClick={() => onSet(key, i as Level)}
+                >
+                  {text}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
-      </details>
+          </div>
+        ))}
+      </div>
     </section>
+  )
+}
+
+/**
+ * 방금 무엇을 눌렀는지 알려주는 한 줄.
+ *
+ * 되돌릴 수 없는 게임이라 **지금** 알아야 다음 지시로 만회할 수 있다.
+ * 경기장을 보고 있으면 칩 테두리가 바뀐 것은 눈에 안 들어온다.
+ */
+function Toast({ message }: { message: ToastMessage | null }) {
+  if (!message) return null
+  return (
+    // `key` 로 같은 문장을 다시 눌러도 등장 애니메이션이 다시 돈다
+    <div className="toast" key={message.seq} role="status">
+      <strong>{message.text}</strong>
+      <small>되돌릴 수 없습니다</small>
+    </div>
   )
 }
 
@@ -546,6 +591,49 @@ export function MatchScreen({
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
   /**
+   * 무엇을 눌렀는지 확인시켜 주는 한 줄. **화면 전용이다.**
+   *
+   * 결정 이력에 남지 않고 경기 결과에도 닿지 않는다. 토스트가 떠 있든
+   * 없든 경기는 똑같이 흘러간다.
+   */
+  const { toast, show } = useToast()
+
+  /** 레버 하나를 바꾸고 무엇을 바꿨는지 알린다 */
+  const setLeverLoud = useCallback(
+    (type: 'LINE' | 'PRESS' | 'WIDTH', value: Level) => {
+      setLever(type, value)
+      show(leverToast(type, value))
+    },
+    [setLever, show],
+  )
+
+  /**
+   * 프리셋 — 레버 셋을 한 번에 세운다.
+   *
+   * 토스트는 **한 번만** 띄운다. 레버마다 띄우면 셋이 연달아 덮어써서
+   * 마지막 것만 보이고, 감독은 "폭만 바뀌었나" 로 읽는다.
+   */
+  const applyPreset = useCallback(
+    (name: string, v: readonly [Level, Level, Level]) => {
+      setLever('LINE', v[0])
+      setLever('PRESS', v[1])
+      setLever('WIDTH', v[2])
+      show(presetToast(name))
+    },
+    [setLever, show],
+  )
+
+  /** 교체는 카드를 태운다. 누가 바뀌었는지가 가장 중요하다 */
+  const substituteLoud = useCallback(
+    (out: string, inId: string): string | null => {
+      const reason = substitute(out, inId)
+      if (!reason) show(subToast(getPlayer(out).num, getPlayer(inId).num))
+      return reason
+    },
+    [substitute, show],
+  )
+
+  /**
    * 연출이 지금까지 실제로 보여준 골.
    *
    * 시뮬은 확률로 득점을 정하는데, 그 순간의 경기 상황이 골을 그릴 수
@@ -796,7 +884,7 @@ export function MatchScreen({
             />
           </div>
           <div className="pane" data-pane="SQUAD">
-            <Bench state={state} locked={phase === 'DONE'} half={half} onSub={substitute} />
+            <Bench state={state} locked={phase === 'DONE'} half={half} onSub={substituteLoud} />
           </div>
         </div>
 
@@ -817,7 +905,12 @@ export function MatchScreen({
           </div>
 
           <div className="pane" data-pane="TACTICS">
-            <Levers tactics={state.tactics} locked={phase === 'DONE'} onSet={setLever} />
+            <Levers
+              tactics={state.tactics}
+              locked={phase === 'DONE'}
+              onSet={setLeverLoud}
+              onPreset={applyPreset}
+            />
           </div>
         </div>
 
@@ -985,6 +1078,9 @@ export function MatchScreen({
           />
         </div>
       )}
+
+      {/* 화면 맨 아래 고정. 경기장을 가리지 않는 자리다 */}
+      <Toast message={toast} />
     </div>
   )
 }
