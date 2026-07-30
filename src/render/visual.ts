@@ -7,7 +7,18 @@ import {
 import { effectivePos, getPlayer } from '../sim/squad'
 import { AWAY_SHAPES, awaySlots } from '../sim/awayShape'
 import { TOTAL_TICKS } from '../sim/constants'
+import { calloutOf, type Callout } from './callout'
 import type { MatchState, PlayerOrder, Position } from '../sim/types'
+
+/**
+ * 판정 한 줄이 화면에 남아 있는 시간(초).
+ *
+ * 재개는 0.35~0.95초 만에 끝나는 것이 있어서 `restart` 수명에 맞추면 글자를
+ * 읽기도 전에 사라진다. 이 화면은 15분을 75초로 압축하므로 1.6초는 실제
+ * 경기의 19초에 해당한다 — 판정 하나를 알아보기에 넉넉하고, 다음 장면을
+ * 가릴 만큼 길지 않다.
+ */
+const CALLOUT_LIFE = 1.2
 
 /**
  * 관전용 경기 연출.
@@ -760,6 +771,17 @@ export class VisualMatch {
   celebration: Celebration | null = null
   /** 공이 밖으로 나가 재개를 기다리는 중 */
   restart: Restart | null = null
+  /**
+   * 지금 경기장에 띄워둘 판정 한 줄. 없으면 `null`.
+   *
+   * 사용자 지적에서 나왔다 — *"왜 갑자기 공을 주는 지 모르잖아"*.
+   * 오른쪽 이벤트 목록은 골·경고·교체만 싣고 파울은 아예 걸러내므로,
+   * 경기를 보는 동안 스로인인지 파울인지 알 길이 없었다.
+   */
+  callout: (Callout & { life: number }) | null = null
+  /** 지금 띄운 판정이 어느 재개·휘슬에서 나왔는지. 같은 사건을 다시 읽지 않는다 */
+  private calloutRestart: Restart | null = null
+  private calloutWhistle: Whistle | null = null
   /**
    * 주심 하나와 부심 둘.
    *
@@ -2440,6 +2462,43 @@ export class VisualMatch {
     }
     if (this.offsideMute > 0) this.offsideMute -= step
     if (this.foulMute > 0) this.foulMute -= step
+
+    /**
+     * 왜 공이 넘어갔는지 알리는 한 줄.
+     *
+     * **자기 시계를 따로 갖는다.** 재개는 0.35~0.95초 만에 끝나는 것이
+     * 있어서, `restart` 가 살아 있는 동안에만 띄우면 글자를 읽기도 전에
+     * 사라진다. 사건이 성립하는 순간 붙잡아 두고 정해진 시간 동안 보여준다.
+     *
+     * 판정을 만들어내지는 않는다 — `calloutOf` 는 `restart` 와 `whistle`
+     * 에 이미 있는 값만 읽는 순수 함수이고, 난수를 쓰지 않는다.
+     */
+    /**
+     * **사건이 새로 생긴 순간에만 정한다. 그 뒤로는 다시 계산하지 않는다.**
+     *
+     * 매 프레임 다시 계산하면 두 가지가 망가진다.
+     *
+     * 하나는 표시 시간이다. 되감기가 계속되어 `재개 시간 + 수명` 만큼
+     * 글자가 남는다 — 실측으로 프레임의 43.6%를 안내판이 덮었다.
+     *
+     * 다른 하나가 더 나쁘다. **오프사이드가 도중에 파울로 바뀐다.** 휘슬은
+     * 1.2초 살고 재개는 그보다 오래 가는데, 오프사이드 재개의 `kind` 는
+     * `FREE_KICK` 이라 휘슬이 꺼지는 순간 남은 것만 보고 "파울"로 읽힌다.
+     * 판정이 눈앞에서 바뀌는 것은 없느니만 못하다.
+     */
+    const r = this.restart
+    const w = this.whistle
+    if ((r !== null && r !== this.calloutRestart) || (w !== null && w !== this.calloutWhistle)) {
+      const now = calloutOf(r, w)
+      if (now) this.callout = { ...now, life: CALLOUT_LIFE }
+    }
+    this.calloutRestart = r
+    this.calloutWhistle = w
+
+    if (this.callout) {
+      this.callout.life -= step
+      if (this.callout.life <= 0) this.callout = null
+    }
   }
 
   /**

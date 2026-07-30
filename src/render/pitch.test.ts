@@ -23,6 +23,7 @@ type Op =
   | { op: 'fill'; style: string; pts: Array<[number, number]> }
   | { op: 'stroke'; style: string; width: number; pts: Array<[number, number]> }
   | { op: 'fillRect'; style: string; x: number; y: number; w: number; h: number }
+  | { op: 'text'; style: string; text: string; x: number; y: number }
 
 function recorder() {
   const ops: Op[] = []
@@ -86,7 +87,15 @@ function recorder() {
       ops.push({ op: 'fillRect', style: st.fillStyle, x, y, w, h })
     },
     strokeRect: () => {},
-    fillText: () => {},
+    // 글자도 받아 적는다. 판정 한 줄이 실제로 캔버스 안에 그려지는지 봐야 한다
+    fillText: (text: string, x: number, y: number) => {
+      ops.push({ op: 'text', style: st.fillStyle, text, x, y })
+    },
+    // 실제 캔버스에는 있고 예전 가짜 캔버스에는 없던 둘. 없으면 그리다 터진다
+    measureText: (text: string) => ({ width: text.length * 8 }),
+    roundRect: (x: number, y: number, w: number, h: number) => {
+      pts.push([x, y], [x + w, y + h])
+    },
     setLineDash: () => {},
     translate: () => {},
     rotate: () => {},
@@ -322,5 +331,76 @@ describe('오프사이드 라인', () => {
       (o) => o.style === COLORS.home || o.style === COLORS.away,
     )
     expect(teamColours).toHaveLength(0)
+  })
+})
+
+/**
+ * 판정 한 줄이 실제로 경기장 안에 그려지는가.
+ *
+ * 좌표 계산이 맞아도 캔버스 밖에 그리면 소용없다는 것을 부심 깃발에서
+ * 이미 한 번 겪었다. 그래서 글자를 받아 적는 가짜 캔버스로 직접 확인한다.
+ */
+const texts = (ops: Op[]) => ops.filter((o): o is Extract<Op, { op: 'text' }> => o.op === 'text')
+
+describe('왜 공이 넘어갔는지 경기장에 뜬다', () => {
+  it('아무 판정도 없으면 판정 글자가 없다', () => {
+    const ops = render((vm) => {
+      vm.callout = null
+      vm.offside = null
+    })
+    const shown = texts(ops).map((t) => t.text)
+    expect(shown).not.toContain('스로인')
+    expect(shown).not.toContain('파울')
+  })
+
+  it('스로인이면 종류와 누구 공인지 둘 다 그린다', () => {
+    const ops = render((vm) => {
+      vm.offside = null
+      vm.callout = { text: '스로인', side: '우리 공', tone: 'OUT', life: 1.6 }
+    })
+    const shown = texts(ops).map((t) => t.text)
+    expect(shown).toContain('스로인')
+    expect(shown).toContain('우리 공')
+  })
+
+  it('글자가 경기장 안에 있다', () => {
+    // ★ 깃발이 화면 밖에 그려졌던 결함과 같은 종류를 막는다
+    const ops = render((vm) => {
+      vm.offside = null
+      vm.callout = { text: '페널티킥', side: '', tone: 'BIG', life: 1.6 }
+    })
+    const drawn = texts(ops).filter((t) => t.text === '페널티킥')
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0].x).toBeGreaterThan(0)
+    expect(drawn[0].x).toBeLessThan(W)
+    expect(drawn[0].y).toBeGreaterThan(0)
+    expect(drawn[0].y).toBeLessThan(H)
+  })
+
+  it('페널티킥과 퇴장은 스로인과 다른 색으로 그린다', () => {
+    const big = render((vm) => {
+      vm.offside = null
+      vm.callout = { text: '퇴장', side: '', tone: 'BIG', life: 1.6 }
+    })
+    const out = render((vm) => {
+      vm.offside = null
+      vm.callout = { text: '골킥', side: '상대 공', tone: 'OUT', life: 1.6 }
+    })
+    const colorOf = (ops: Op[], word: string) =>
+      texts(ops).find((t) => t.text === word)?.style
+    expect(colorOf(big, '퇴장')).toBe(COLORS.cardRed)
+    expect(colorOf(out, '골킥')).not.toBe(COLORS.cardRed)
+  })
+
+  it('오프사이드일 때는 같은 글자를 두 번 그리지 않는다', () => {
+    /**
+     * 오프사이드는 위쪽에서 판정 자리에 선과 점까지 붙여 이미 더 잘
+     * 설명한다. 둘 다 그리면 "오프사이드"가 화면에 두 번 뜬다.
+     */
+    const ops = render((vm) => {
+      vm.offside = { x: 60, y: 30, by: 'AR_TOP', life: 1.8 }
+      vm.callout = { text: '오프사이드', side: '', tone: 'FOUL', life: 1.6 }
+    })
+    expect(texts(ops).filter((t) => t.text === '오프사이드')).toHaveLength(1)
   })
 })

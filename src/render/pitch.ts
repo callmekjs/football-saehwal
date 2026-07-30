@@ -733,6 +733,58 @@ export function drawPitch(
     ctx.restore()
   }
 
+  /**
+   * 왜 공이 넘어갔는지 — 경기장 위 한 줄.
+   *
+   * 사용자 지적이다 — *"반칙을 하면 파울, 핸드볼, 아웃 표시를 해줘 왜
+   * 갑자기 공을 주는 지 모르잖아"*. 위 오프사이드 글자와 **정확히 같은
+   * 이유**다. 깃발은 화면 가장자리의 작은 삼각형이고 휘슬은 소리라, 축구
+   * 규칙을 아는 사람이 아니면 공이 왜 저쪽 것이 됐는지 알 수 없다.
+   *
+   * 오른쪽 `경기 이벤트` 목록으로는 대신할 수 없다. 그쪽은 시뮬 기록만
+   * 실어서 스로인·코너킥·골킥이 **원리적으로 뜰 수 없고**, 파울은 아예
+   * 걸러낸다. 무엇보다 눈이 경기장에 가 있는 동안 옆 목록을 읽지 않는다.
+   *
+   * **오프사이드일 때는 그리지 않는다.** 바로 위에서 판정 자리에 선과
+   * 점까지 붙여 이미 더 잘 설명하고 있다. 둘 다 그리면 같은 글자가 두 번
+   * 뜬다.
+   */
+  if (vm.callout && !vm.offside) {
+    const call = vm.callout
+    const k = Math.min(1, call.life / 0.4)
+    const big = call.tone === 'BIG'
+    const size = Math.max(13, Math.round(h * (big ? 0.075 : 0.055)))
+    const sub = Math.max(10, Math.round(h * 0.036))
+    const midY = h * 0.115
+
+    ctx.save()
+    ctx.globalAlpha = k
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    // 잔디 위 글자는 그냥 얹으면 초록에 묻힌다. 어두운 띠를 깔아 읽히게 한다
+    ctx.font = `700 ${size}px system-ui, sans-serif`
+    const textW = ctx.measureText(call.text).width
+    const subW = call.side ? ctx.measureText(call.side).width * 0.72 : 0
+    const boxW = Math.max(textW, subW) + size * 1.5
+    const boxH = size * (call.side ? 2.25 : 1.5)
+    ctx.fillStyle = 'rgba(6,20,14,0.76)'
+    ctx.beginPath()
+    ctx.roundRect(w / 2 - boxW / 2, midY - boxH / 2, boxW, boxH, size * 0.35)
+    ctx.fill()
+
+    // 판정의 무게를 색으로도 나눈다. 페널티킥·퇴장이 스로인과 같아 보이면 안 된다
+    ctx.fillStyle = big ? COLORS.cardRed : call.tone === 'FOUL' ? COLORS.cardYellow : '#ffffff'
+    ctx.fillText(call.text, w / 2, midY - (call.side ? size * 0.42 : 0))
+
+    if (call.side) {
+      ctx.font = `500 ${sub}px system-ui, sans-serif`
+      ctx.fillStyle = 'rgba(255,255,255,0.86)'
+      ctx.fillText(call.side, w / 2, midY + size * 0.62)
+    }
+    ctx.restore()
+  }
+
   // 태클·슛·골 순간 표시
   for (const f of vm.flashes) {
     const k = f.kind === 'GOAL' ? f.life / 1.4 : f.life / 0.55
