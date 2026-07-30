@@ -12,8 +12,59 @@
   --radius: 12px;
   --display: 'Black Han Sans', system-ui, sans-serif;
 
+  /**
+   * 아래는 UI 개편(2026-07-30)에서 들어온 토큰이다.
+   *
+   * 기존 `--bg` · `--panel` · `--accent` 등은 그대로 두고 **필요한 것만
+   * 더한다.** 기존 화면(경기 분석 등)이 아직 옛 변수를 쓰고 있어서,
+   * 값을 갈아치우면 손대지 않은 화면이 조용히 망가진다.
+   */
+
+  /* 더 어두운 바탕. 경기장이 화면의 주인공이 되려면 주변이 가라앉아야 한다 */
+  --bg-deep: #05090e;
+  --panel-deep: #0d151e;
+  --panel-flat: #0e1822;
+  --panel-head: #0a1219;
+  --panel-nav: #080f16;
+
+  --text-2: #dbe4ec;
+  --text-3: #c4d0dc;
+  --text-4: #a8b6c5;
+  --dim-2: #7d8b9b;
+  --dim-3: #4d5b6b;
+  --dim-4: #3c4a58;
+
+  --accent-lo: #2f9d70;
+  --accent-mid: #39a874;
+  --accent-hi: #a9f0cb;
+  --accent-max: #d3f7e5;
+  --on-accent: #06251a;
+
+  --away-lo: #b83c34;
+  --away-mid: #c0453c;
+  --away-hi: #ffd0cc;
+  --on-away: #2b0a08;
+
+  /* 붉은 LIVE 는 상대 색과 다르다. 둘이 같으면 "상대"와 "생중계"가 섞인다 */
+  --live: #ff2f3d;
+
+  --line-1: rgba(255, 255, 255, 0.05);
+  --line-2: rgba(255, 255, 255, 0.07);
+  --line-3: rgba(255, 255, 255, 0.09);
+
+  /* 잔디. 가로 피치와 세로 패널이 서로 다른 톤을 쓴다 */
+  --turf-a: #0f3220;
+  --turf-b: #123a25;
+  --turf-far-a: #0e2d1e;
+  --turf-far-b: #113520;
+
+  /** 큰 숫자 — 스코어·시계·등번호 */
+  --num: 'Bebas Neue', system-ui, sans-serif;
+  /** 라벨·캡스. 좁은 글자라 letter-spacing 을 벌려 쓴다 */
+  --label: 'Barlow Condensed', system-ui, sans-serif;
+
   color-scheme: dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+  font-family: 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
   font-synthesis: none;
 }
 
