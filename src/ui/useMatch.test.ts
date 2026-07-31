@@ -3,9 +3,16 @@ import { createState, simulate, tick } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
 import { createRng } from '../sim/rng'
 import { TOTAL_TICKS } from '../sim/constants'
-import { effectivePos, formationRoleOf } from '../sim/squad'
+import { effectivePos, formationRoleOf, HOME_SQUAD, rollRoster } from '../sim/squad'
 import type { Decision, MatchState } from '../sim/types'
-import { catchUp, changeFormation, changePosition, openForOrders, targetTick } from './useMatch'
+import {
+  catchUp,
+  changeFormation,
+  changePosition,
+  createFreshMatchState,
+  openForOrders,
+  targetTick,
+} from './useMatch'
 
 const problem = PROBLEMS.find((entry) => entry.id === 'p02')!
 type LineDecision = {
@@ -13,6 +20,62 @@ type LineDecision = {
   type: 'LINE'
   value: MatchState['tactics']['line']
 }
+
+describe('고른 선발 전달', () => {
+  const selectedStarters = () => {
+    const ids = new Set(HOME_SQUAD.filter((player) => !player.onBench).map((player) => player.id))
+    ids.delete('GK01')
+    ids.add('GK12')
+    ids.delete('DF05')
+    ids.add('DF15')
+    return ids
+  }
+
+  const onPitchIds = (state: MatchState) =>
+    state.players
+      .filter((player) => player.onPitch && !player.out)
+      .map((player) => player.id)
+
+  it('골키퍼와 수비수 교환이 급수 타임과 실제 경기 모두에 남는다', () => {
+    const starters = selectedStarters()
+    const roster = rollRoster(73112)
+    const squad = { starters, roster }
+
+    // useMatch의 첫 READY 상태와 마운트 직후 reset이 같은 길을 쓴다.
+    const hydration = createFreshMatchState(problem, 'USA', squad)
+    const resetMatch = createFreshMatchState(problem, 'USA', squad)
+    const running = tick(resetMatch, createRng(problem.seed))
+
+    for (const state of [hydration, running]) {
+      expect(onPitchIds(state)).toHaveLength(11)
+      expect(onPitchIds(state)).toContain('GK12')
+      expect(onPitchIds(state)).toContain('DF15')
+      expect(onPitchIds(state)).not.toContain('GK01')
+      expect(onPitchIds(state)).not.toContain('DF05')
+      expect(state.players.find((player) => player.id === 'GK12')?.ability).toEqual(
+        roster.get('GK12'),
+      )
+      expect(state.players.find((player) => player.id === 'DF15')?.ability).toEqual(
+        roster.get('DF15'),
+      )
+    }
+  })
+
+  /**
+   * 대조군.
+   *
+   * 위 검사만으로는 「고른 선발이 반영된다」가 아니라 「12번·15번이 원래
+   * 선발이다」여도 통과한다. 아무것도 안 고른 판이 1번·5번으로 서는 것을
+   * 함께 확인해야 선택이 원인임이 선다.
+   */
+  it('아무것도 안 고르면 기본 선발이 그대로 선다', () => {
+    const plain = createFreshMatchState(problem, 'USA')
+    expect(onPitchIds(plain)).toContain('GK01')
+    expect(onPitchIds(plain)).toContain('DF05')
+    expect(onPitchIds(plain)).not.toContain('GK12')
+    expect(onPitchIds(plain)).not.toContain('DF15')
+  })
+})
 
 /**
  * 절대 시각과 조작 시점 — QA-31.

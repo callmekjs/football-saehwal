@@ -179,6 +179,26 @@ export function changePosition(
   }
 }
 
+export type MatchSquad = {
+  starters?: ReadonlySet<string>
+  roster?: ReadonlyMap<string, MatchAbility>
+}
+
+/**
+ * 급수 타임에 올릴 이번 판의 상태를 한 곳에서 만든다.
+ *
+ * 첫 렌더는 감독이 고른 선발과 다시 뽑은 명단을 넘기고 있었지만, 곧바로
+ * 실행되는 `reset`은 두 값을 빼먹어 기본 명단으로 덮어썼다. 첫 시작과
+ * 다시 시작이 같은 함수를 써야 골키퍼를 포함한 선발 선택이 경기까지 남는다.
+ */
+export function createFreshMatchState(
+  problem: Problem,
+  opponent: OpponentId = 'USA',
+  squad?: MatchSquad,
+): MatchState {
+  return createState(problem, opponent, squad?.starters, squad?.roster)
+}
+
 /**
  * 10Hz 엔진을 화면에 연결한다.
  *
@@ -191,11 +211,18 @@ export function useMatch(
   problem: Problem,
   opponent: OpponentId = 'USA',
   /** 감독이 고른 선발과 다시 뽑은 명단. 없으면 기본 선수단이다 */
-  squad?: { starters?: ReadonlySet<string>; roster?: ReadonlyMap<string, MatchAbility> },
+  squad?: MatchSquad,
 ) {
-  const [state, setState] = useState<MatchState>(() =>
-    createState(problem, opponent, squad?.starters, squad?.roster),
+  const selectedStarters = squad?.starters
+  const selectedRoster = squad?.roster
+  const freshState = useCallback(
+    () => createFreshMatchState(problem, opponent, {
+      starters: selectedStarters,
+      roster: selectedRoster,
+    }),
+    [opponent, problem, selectedRoster, selectedStarters],
   )
+  const [state, setState] = useState<MatchState>(freshState)
   const [phase, setPhase] = useState<Phase>('READY')
 
   const rngRef = useRef<Rng>(createRng(problem.seed))
@@ -213,11 +240,11 @@ export function useMatch(
     clearInterval(timerRef.current)
     rngRef.current = createRng(problem.seed)
     decisionsRef.current = []
-    const fresh = createState(problem, opponent)
+    const fresh = freshState()
     stateRef.current = fresh
     setState(fresh)
     setPhase('READY')
-  }, [problem, opponent])
+  }, [freshState, problem.seed])
 
   useEffect(() => reset(), [reset])
 
