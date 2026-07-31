@@ -1,6 +1,6 @@
 # Codex 인수인계 — 이 파일 하나만 읽으면 된다
 
-> 마지막 갱신 **2026-07-31 밤** · P0 일곱 건 수정과 최종 회귀까지 완료.
+> 마지막 갱신 **2026-07-31 밤** · `final_eval` 86점 통과 뒤 Vercel 직전.
 > 전에 `docs/CODEX_RESUME.md` 가 따로 있었으나 **이 파일로 합쳤다.**
 >
 > 배경 규칙은 `AGENTS.md`, 오늘 이전의 기록은 이 문서 아래쪽에 있다.
@@ -12,6 +12,103 @@ git status          # 남의 미완성 작업이 있으면 건드리지 말고 �
 npm test            # 664개 통과
 npx tsc --noEmit    # 0
 ```
+
+---
+
+## ★ 지금 Claude가 이어서 할 곳 — 86점 통과 뒤 배포 직전
+
+### 최종 평가 결과
+
+깨끗한 `3d5e8ce`를 `final_eval`이 직접 검사했고 **86/100**으로 Vercel
+배포 관문 80점을 통과했다. 실격 관문도 전부 통과했다.
+
+| 영역 | 점수 | 근거 |
+|---|---:|---|
+| A 실제 실행 | 23/30 | 전반→하프타임→후반→결과 완주. 선발 초기화 결함으로 감점 |
+| B 기계 검사 | 15/15 | 44파일·664/664, 타입 0, 생산 빌드 통과 |
+| C 핵심 불변식 | 15/15 | `drawTick()` 18개, 순수 시뮬레이션, 라인·폭 대가 유지 |
+| D 첫인상 | 29/30 | 데스크톱·375px·결과 분석이 좋고 첫 행동 촉구만 약함 |
+| E 문서·이력 | 4/10 | 여러 문서의 607개·옛 기준선과 `f31f7f8` 설명 불일치 |
+| **합계** | **86/100** | **80점 관문 통과** |
+
+평가 때 직접 확인한 값:
+
+```text
+npm test          44파일 · 664/664
+npx tsc --noEmit  오류 0
+npm run build     성공 · 97모듈
+npm run sim       전 국면 합격 · 376.4초
+
+무개입  10.7 / 48.0 / 46.8 / 37.0 / 19.5 %
+격차    20.5 / 22.6 / 27.6 / 28.0 / 26.3 %p
+```
+
+배포본 `<https://callmekjs.github.io/football-saehwal/>`에서 콘솔 오류·경고
+0개, 375×812 가로 넘침 0, 확인한 버튼 최소 높이 44px였다. 포메이션과
+전술은 실제 반영됐고 새로고침 뒤 첫 화면과 지난 기록도 살아 있었다.
+
+### 배포 전 반드시 닫을 한 건 — 고른 선발이 경기에서 사라진다
+
+재현은 명확하다.
+
+1. 01 「우리 팀」에서 GK 1→12, DF 5→15로 바꾼다.
+2. 선발 목록과 홈 미리보기에는 12번·15번이 보인다.
+3. KICK OFF 뒤 급수 타임과 실제 경기에는 다시 1번·5번이 나온다.
+
+원인은 `src/ui/useMatch.ts`다. 첫 `useState`는 `starters/roster`를 넘기지만,
+마운트 직후 `useEffect(reset)`이 실행되고 기존 `reset()`이
+`createState(problem, opponent)`만 호출해 **고른 선발과 다시 뽑은 능력을
+기본 명단으로 덮어썼다.**
+
+Codex의 game-agent가 최소 수정을 만들다가 사용자가 턴을 중단해 멈췄다.
+따라서 지금 작업 트리는 깨끗하지 않다.
+
+```text
+ M src/ui/useMatch.ts
+ M src/ui/useMatch.test.ts
+```
+
+두 파일은 **미커밋·미검증**이다. `git stash`·`git checkout`·`git reset`으로
+없애지 마라. 현재 diff는 첫 상태와 `reset()`이 모두
+`createFreshMatchState(problem, opponent, squad)`를 쓰게 하고, GK12·DF15가
+급수 타임과 첫 틱에 남는 회귀검사를 추가한다. Claude가 먼저 diff를 검토하고
+이 수정을 완성해야 한다.
+
+권장 확인 순서:
+
+```bash
+git status
+git diff -- src/ui/useMatch.ts src/ui/useMatch.test.ts
+npx vitest run src/ui/useMatch.test.ts
+npm test
+npx tsc --noEmit
+npm run build
+```
+
+`src/sim/`과 확률은 건드리지 않았으므로 이 수정 자체는 밸런스를 바꾸지
+않아야 한다. 커밋·푸시 뒤 배포 URL에서 다시 GK12·DF15를 골라 급수 타임,
+전반, 하프타임, 후반에 계속 남는지 확인한다. **코드가 바뀌면 86점은 옛
+HEAD의 점수이므로 `final_eval`을 한 번 더 돌려 80점 이상인지 확인한다.**
+
+### Vercel 상태
+
+- Vercel CLI, `.vercel`, `vercel.json`은 아직 없다.
+- 브라우저에서 Vercel 로그인까지 갔고, ChatGPT 계정으로 계속할 수 있다.
+- 현재는 이름·이메일·프로필 사진을 Vercel과 공유한다는 **개인정보 동의
+  화면**에서 멈췄다. 사용자의 명시적 동의 없이 「계속」을 누르지 마라.
+- 동의 뒤 기존 GitHub 저장소를 가져온다. Framework `Vite`, Root `./`,
+  Build `npm run build`, Output `dist`다.
+- 저장소에 설정 파일이나 배포 커밋을 자동으로 추가하는 선택은 거절한다.
+  기존 GitHub Pages도 끄지 않는다.
+- Vercel URL이 나오면 선발 교환을 포함해 한 경기를 다시 완주한다.
+
+### 그다음 낮은 우선순위
+
+- 첫 화면과 상대 선택 하단의 `11.1~48.9%` 문구를 최신
+  `10.7~48.0%`로 맞춘다.
+- 과거 커밋 `f31f7f8`은 `docs:` 제목이지만 코드까지 들어 있다. 이력은
+  다시 쓰거나 강제 푸시하지 말고 문서에 사실만 남긴다.
+- 첫 화면 문구는 멋있지만 사용자가 당장 무엇을 해야 하는지는 한 줄 약하다.
 
 ---
 
@@ -107,7 +204,7 @@ docs/agents/uxui-agent.md 와 AGENTS.md 를 끝까지 읽고 시작해라.
 지킬 것: `src/sim/` 을 고치지 마라(값을 읽기만 한다). 난수를 추가로
 소비하지 마라. 375px 가로 넘침 0, 조작 요소 최소 44px.
 
-끝내기 전: npm test(607개) · npx tsc --noEmit(0) · npm run build.
+끝내기 전: npm test(664개 이상) · npx tsc --noEmit(0) · npm run build.
 `npm run sim` 은 필요 없다 — 확률에 안 닿았으면.
 브라우저에서 실제로 끌어놓아 보고, 나온 숫자가 계수와 맞는지 확인해라.
 ```
@@ -392,10 +489,10 @@ docs/agents/coach-agent.md 를 끝까지 읽고 시작해라.
 빌드해 올리고 **저장소에 커밋을 만들지 않는다.** Vercel 은 사용자가
 "완성도가 올라오면 직접 하겠다"고 정해서 일부러 안 붙였다.
 
-## 검증 기준 — 이 숫자가 지금 실제 값이다
+## (당시 기록) 검증 기준 — 최신 값은 문서 맨 위를 따른다
 
 ```bash
-npm test          # 607개
+npm test          # 당시 607개
 npx tsc --noEmit  # 0
 npm run build
 npm run sim       # 기준팀(미국). 다섯 국면 합격
