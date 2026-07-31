@@ -389,18 +389,19 @@ const HOLD_RANGE = 22
  * 실제 규칙은 신체 일부가 앞서기만 해도 오프사이드다. 그대로 옮기면 안
  * 된다 — 우리 선수는 반지름 7픽셀짜리 점이고 자리가 매 프레임 흔들린다.
  *
- * 7미터는 재서 나온 값이다. 시드 40개 × 다섯 국면(200판)으로 잰 판당
- * 판정 횟수:
+ * 6미터는 재서 나온 값이다. 시드 60개 × 다섯 국면(300판)으로 잰 판당
+ * 판정 횟수다. **위치에 있는 것만으로는 반칙이 아니라는 규칙을 넣고,
+ * 페널티 지역 예외를 없앤 뒤에** 다시 잰 값이다:
  *
- * | 기준 | 판당 평균 | 자동검사 |
- * |---|---|---|
- * | 1.2m | 4.4회 | 6~10개 실패 |
- * | 3m | 2.0회 | 3개 실패 |
- * | 5m | 1.2회 | 4개 실패 |
- * | **7m** | **0.63회** | **95개 전부 통과** |
+ * | 기준 | 판당 평균 |
+ * |---|---|
+ * | 5m | 0.94회 |
+ * | **6m** | **0.75회** |
+ * | 7m | 0.63회 |
  *
- * 실제 축구를 이 15분 구간으로 환산하면 0.7~1.0회다. 7미터가 빈도로도
- * 맞고 나머지 관전 품질을 하나도 깎지 않는다.
+ * 실제 축구를 이 15분 구간으로 환산하면 0.7~1.0회다. 6미터가 그 범위
+ * 안이고, 규칙을 고치기 전 빈도(0.76회)와도 같은 자리다 — 판정 횟수는
+ * 그대로 두고 **판정의 내용만** 규칙에 맞춘 셈이다.
  *
  * 낮은 기준이 왜 나쁜가: 판정이 잦아지면 데드볼이 늘어(정지 비율 15% →
  * 27.6%) 75초짜리 관전에서 볼 것이 사라지고, 예약된 골이 전개 시간을
@@ -410,16 +411,58 @@ const HOLD_RANGE = 22
  * 이건 편법이 아니라 규칙에 있는 원칙이다 — **의심스러우면 공격 측에
  * 유리하게.** 실제 부심도 확신이 없으면 깃발을 올리지 않는다.
  */
-const OFFSIDE_MARGIN = 7
+const OFFSIDE_MARGIN = 6
 
 /**
- * 재개 뒤 이 시간 동안은 오프사이드를 불지 않는다(초).
+ * **오프사이드 「위치」인가** — 경기 규칙 11조의 세 조건.
  *
- * 규칙이다. 스로인·골킥·코너킥에서 직접 받는 공은 오프사이드가 아니다.
- * 시간으로 두는 이유는 재개 직후 첫 패스만 정확히 짚어내려면 상태를 하나
- * 더 들고 다녀야 하는데, 이 화면의 재개는 1초 안에 끝나기 때문이다.
+ * 셋을 모두 만족해야 위치다. 공을 **차는 그 순간**의 자리로 따진다.
+ *
+ * 1. 몸이 **상대 진영**에 있다
+ * 2. **공보다** 상대 골라인에 가깝다
+ * 3. **뒤에서 두 번째 상대**보다 상대 골라인에 가깝다
+ *
+ * **위치인 것만으로는 반칙이 아니다.** 그 뒤에 플레이에 관여해야 반칙이
+ * 되고, 그 판단은 `settleFlag` 가 한다. 이 함수는 부심이 깃발에 손을
+ * 얹을지만 정한다.
+ *
+ * **나란히 서 있으면 온사이드다.** 규칙이 그렇다 — 공과 나란히, 또는
+ * 뒤에서 두 번째 수비수와 나란히 서 있는 선수는 오프사이드가 아니다.
+ * 그래서 비교가 전부 `>` 이고 같으면 거짓이다.
+ *
+ * @param lineX 뒤에서 두 번째 상대의 x. `VisualMatch.offsideLine` 이 준다
+ * @param margin 사람과 사람을 견줄 때만 쓰는 여유. 하프라인에는 안 쓴다
  */
-const OFFSIDE_MUTE = 1.4
+export function offsidePosition(o: {
+  /** 공을 찬 팀 */
+  attacking: 'HOME' | 'AWAY'
+  /** 패스를 받는 선수의 x */
+  toX: number
+  /** 공의 x */
+  ballX: number
+  /** 뒤에서 두 번째 상대의 x */
+  lineX: number
+  margin?: number
+}): boolean {
+  const margin = o.margin ?? OFFSIDE_MARGIN
+  const dir = o.attacking === 'HOME' ? 1 : -1
+  // ① 상대 진영. 하프라인은 그려진 선이라 흔들리지 않으므로 여유가 없다.
+  //    자기 진영에 있거나 하프라인과 나란하면 오프사이드가 아니다
+  if ((o.toX - PITCH_W / 2) * dir <= 0) return false
+  // ② 공보다 앞. 찬 사람이 아니라 **공**과 견주는 것이 규칙이다
+  if ((o.toX - o.ballX) * dir <= margin) return false
+  // ③ 뒤에서 두 번째 상대보다 앞
+  return (o.toX - o.lineX) * dir > margin
+}
+
+/**
+ * 아무도 공을 안 만지면 이만큼 뒤에 깃발을 내린다(초).
+ *
+ * 규칙상 깃발은 오프사이드 위치의 선수가 **플레이에 관여할 때까지** 올라가
+ * 있다. 공이 아무도 없는 곳으로 굴러가면 관여가 영영 안 생기므로, 실제
+ * 부심이 그러듯 적당한 때에 내리고 경기를 계속시킨다.
+ */
+const FLAG_WAIT_MAX = 3
 
 /** 깃발을 들고 있는 시간(초) */
 const FLAG_LIFT = 1.8
@@ -951,17 +994,44 @@ export class VisualMatch {
   private chaseIds: Record<'HOME' | 'AWAY', string[]> = { HOME: [], AWAY: [] }
   private chaseAt: Record<'HOME' | 'AWAY', number> = { HOME: -9, AWAY: -9 }
   /**
-   * 이 시간이 남아 있는 동안은 오프사이드를 불지 않는다(초).
+   * **골킥·스로인·코너킥을 직접 차는 선수.**
    *
-   * 재개(스로인·골킥·코너킥)에서 직접 받는 공과 킥오프가 여기 걸린다.
-   * 규칙이 그렇다. 이걸 안 두면 코너킥마다 깃발이 올라간다 — 코너킥은
-   * 정의상 공보다 앞에 사람이 잔뜩 서 있는 상황이다.
+   * 규칙 11조의 예외다 — 이 셋에서 **직접 받은** 공은 오프사이드가 아니다.
+   * 프리킥과 킥오프는 예외가 아니므로 여기 들어오지 않는다.
+   *
+   * 전에는 재개 뒤 1.4초 동안 통째로 안 부는 타이머였다. 그건 규칙보다
+   * 넓기도 하고(프리킥·킥오프까지 봐줬다) 좁기도 했다(1.4초가 지나면
+   * 코너킥을 직접 받는 공도 잡혔다). 누가 차는 공인지로 두면 둘 다 사라진다.
    */
-  private offsideMute = OFFSIDE_MUTE
-  /** 깃발은 올라갔지만 아직 휘슬이 안 분 상태. 공이 멎으면 분다 */
-  private flagged: { against: 'HOME' | 'AWAY'; by: Official['kind'] } | null = null
+  private directFrom: string | null = null
+  /**
+   * 깃발은 올라갔지만 아직 휘슬이 안 분 상태.
+   *
+   * `toId` 는 오프사이드 위치에 있던 선수다. **그 선수가 공을 건드려야**
+   * 반칙이 된다 — 위치에 있는 것만으로는 반칙이 아니라는 것이 규칙의
+   * 핵심이다. `touched` 가 그 판단을 들고 있다.
+   */
+  private flagged: {
+    against: 'HOME' | 'AWAY'
+    by: Official['kind']
+    /** 오프사이드 위치였던 선수 */
+    toId: string
+    /** 깃발이 오른 뒤 공을 처음 만진 사람이 누구였나 */
+    touched: 'NONE' | 'OFFSIDE' | 'OTHER'
+    /** 깃발을 들고 있은 시간(초). 아무도 안 만지면 내린다 */
+    age: number
+  } | null = null
   /** 이 경기에서 분 오프사이드 횟수. 빈도를 재는 데 쓴다 */
   offsideCount = 0
+  /**
+   * 부심이 깃발을 든 횟수. 휘슬로 이어지지 않은 것까지 센다.
+   *
+   * `offsideCount` 와의 차이가 곧 **깃발을 들었다 내린 횟수**다. 규칙상
+   * 그 차이가 있어야 정상이다 — 오프사이드 위치였어도 그 선수가 공에
+   * 관여하지 않으면 반칙이 아니기 때문이다. 둘이 늘 같다면 위치만으로
+   * 불고 있다는 뜻이라 자동검사가 그것을 잡는다.
+   */
+  flagsRaised = 0
   /** 상대가 범한 반칙과 그 때문에 나온 경고. 빈도를 재는 데 쓴다 */
   awayFouls = 0
   awayCards = 0
@@ -1148,8 +1218,12 @@ export class VisualMatch {
 
   private giveTo(p: VPlayer) {
     const b = this.ball
+    // 깃발이 올라가 있으면 **누가 이 공을 만졌는지**가 판정을 가른다
+    this.noteTouch(p)
     // 공 주인이 바뀌면 스로인 예약은 사라진다. 재개할 때 다시 건다
     this.throwBy = null
+    // 재개를 직접 차는 선수도 마찬가지다. 공이 남에게 가면 예외는 끝난다
+    this.directFrom = null
     b.mode = 'HELD'
     b.holder = p.id
     b.targetId = null
@@ -1949,9 +2023,10 @@ export class VisualMatch {
    * 진영으로 돌아가고, 차는 선수만 센터서클에 선다.
    */
   private kickoff(side: 'HOME' | 'AWAY') {
-    // 킥오프 직후 첫 패스에는 깃발이 올라가지 않는다. 전원이 자기 진영에
-    // 있어 애초에 성립하지 않지만, 배후로 찔러 넣는 첫 공에는 걸릴 수 있다
-    this.offsideMute = OFFSIDE_MUTE
+    // 킥오프는 오프사이드 예외가 아니다. 규칙이 빼주는 것은 골킥·스로인·
+    // 코너킥 셋뿐이라, 킥오프에서 배후로 찔러 넣는 공에는 깃발이 오른다
+    this.flagged = null
+    this.directFrom = null
     // 킥오프는 주심의 휘슬로 시작한다
     this.blowWhistle('KICKOFF', PITCH_W / 2, PITCH_H / 2)
     for (const p of this.players) {
@@ -2085,8 +2160,6 @@ export class VisualMatch {
     if (kind !== 'FREE_KICK') {
       this.audioCues.push({ sequence: this.nextAudioSequence++, kind: 'OUT' })
     }
-    // 재개에서 직접 받는 공은 오프사이드가 아니다. 규칙이다
-    this.offsideMute = OFFSIDE_MUTE
     this.foulMute = FOUL_MUTE
     /**
      * 누가 신호하는가.
@@ -2292,8 +2365,15 @@ export class VisualMatch {
     }
   }
 
-  /** 스로인이면 다음 릴리스를 손으로 던지게 표시해둔다 */
+  /**
+   * 재개를 직접 차는 선수를 표시해둔다.
+   *
+   * 두 가지가 걸린다. **스로인은 발이 아니라 손이고**(표시가 없으면
+   * 초속 26미터짜리 40미터 롱볼이 나온다), **골킥·스로인·코너킥을 직접
+   * 받는 공은 오프사이드가 아니다**(규칙 11조). 프리킥은 둘 다 아니다.
+   */
   private armThrow(kind: Restart['kind'], taker: VPlayer) {
+    if (kind !== 'FREE_KICK') this.directFrom = taker.id
     if (kind !== 'THROW_IN') return
     this.throwBy = taker.id
     // 던지는 데 오래 안 걸린다. 라인 밖에 오래 서 있으면 대형이 어긋난다
@@ -2384,21 +2464,17 @@ export class VisualMatch {
   /**
    * 이 자리가 `side` 의 페널티 지역 안인가.
    *
-   * 오프사이드를 여기서는 보지 않는다. **정직하게 적어두는 한계다.**
-   * 실제 수비진은 공격을 받으면 골 에어리어까지 물러나 골라인 5~6미터
-   * 앞에 선다. 우리 수비 블록은 자기 자리에서 공 쪽으로 42%만 끌려오는
-   * 모델이라, 상대가 박스 앞까지 밀고 들어와도 라인이 박스 **밖**
-   * 83~86미터에 머문다.
+   * **여기서 오프사이드를 안 보던 예외는 없앴다.** 규칙 11조에 페널티
+   * 지역 예외 같은 것은 없다. 예외를 뒀던 이유는 우리 수비 블록이 자기
+   * 골대까지 안 물러나 오프사이드 라인이 박스 **밖** 83~86미터에 머물고,
+   * 그러면 "박스 안으로 주는 패스"가 곧 "오프사이드 패스"가 되어 골대
+   * 앞 장면이 사라진다는 것이었다.
    *
-   * 그 상태에서 규칙을 그대로 적용하면 **"박스 안으로 주는 패스"가 곧
-   * "오프사이드 패스"** 가 되어버린다. 실측으로 여섯 판 슛이 11회로
-   * 줄고(기준 12), 슛 거리 중앙값이 32미터가 됐으며, 페널티 지역 안
-   * 표본이 4회로 떨어졌다. 규칙을 지키려다 축구를 잃는다.
-   *
-   * 그래서 박스 안은 판정하지 않는다. 놓치는 것은 실제 오프사이드의
-   * 일부이고, 얻는 것은 골대 앞 장면 전부다. 제대로 고치려면 수비
-   * 블록이 자기 골대까지 물러나게 만들어야 하고, 그건 압박·태클·실점
-   * 연출이 전부 걸린 대형 작업이라 마감 안에 재측정할 수 없다.
+   * 그 진단은 **패스 선택에 벌점을 주던 시절**의 것이다. 지금은 패스를
+   * 막지 않고, 오프사이드 위치의 선수가 **실제로 공을 잡았을 때만**
+   * 분다. 재서 확인했다 — 예외를 없애도 판당 판정이 0.70에서 0.75로
+   * 오를 뿐이고(실제 축구 0.7~1.0), 골 장면·슛 횟수·박스 안 표본을
+   * 재는 자동검사가 전부 그대로 통과한다.
    */
   private inBoxOf(side: 'HOME' | 'AWAY', x: number) {
     return Math.abs(x - this.ownGoalX(side)) <= PENALTY_DEPTH
@@ -2552,7 +2628,6 @@ export class VisualMatch {
       this.whistle.life -= step
       if (this.whistle.life <= 0) this.whistle = null
     }
-    if (this.offsideMute > 0) this.offsideMute -= step
     if (this.foulMute > 0) this.foulMute -= step
 
     /**
@@ -2594,15 +2669,15 @@ export class VisualMatch {
   }
 
   /**
-   * 이 패스가 오프사이드인가.
+   * 이 패스로 부심이 깃발을 드는가.
    *
-   * 규칙 그대로다. 받는 선수가 **공을 찬 순간에**
-   * ① 상대 진영에 있고 ② 공보다 앞에 있고 ③ 뒤에서 두 번째 상대보다
-   * 앞에 있으면 오프사이드다. 셋 중 하나라도 아니면 아니다.
+   * 판정 시점은 **공을 차는 그 순간**이다. 공이 날아가는 동안 받는 선수가
+   * 내려와도 판정은 안 바뀐다 — 규칙이 그렇다. 세 조건은
+   * `offsidePosition` 이 규칙 그대로 본다.
    *
-   * 세 조건 모두 `OFFSIDE_MARGIN` 만큼 확실히 앞서야 한다. 나란히 선
-   * 선수는 오프사이드가 아니고(규칙이 그렇다), 우리 좌표는 프레임마다
-   * 조금씩 흔들리기 때문이다.
+   * **여기서 정해지는 것은 「위치」까지다.** 반칙이 되려면 그 선수가
+   * 플레이에 관여해야 하고, 그 판단은 `settleFlag` 가 공을 누가 만졌는지
+   * 보고 내린다.
    *
    * **골이 예약된 팀에게는 불지 않는다.** 시뮬이 이미 득점으로 판정한
    * 공격이라 화면이 전개를 만들고 있는 중이고, 여기서 끊으면 만들던
@@ -2610,9 +2685,16 @@ export class VisualMatch {
    * 뿐 사라지지는 않지만, 규칙보다 점수판 일치가 먼저다.
    */
   private isOffside(holder: VPlayer, to: VPlayer): boolean {
-
-    if (this.offsideMute > 0) return false
-    if (this.throwBy) return false
+    // 깃발은 한 번에 하나다. 앞의 판정이 아직 안 끝났으면 새로 들지 않는다
+    if (this.flagged) return false
+    /**
+     * **골킥·스로인·코너킥에서 직접 받는 공은 오프사이드가 아니다.**
+     * 규칙 11조의 예외 셋이고, 프리킥과 킥오프는 여기 안 들어간다.
+     * 스로인은 `throwIn` 으로 나가 여기까지 오지도 않는다.
+     */
+    if (this.directFrom === holder.id) return false
+    // 골키퍼는 자기 진영에 있어 조건 ①에서 이미 걸러지지만, 하프라인을
+    // 넘어 나온 골키퍼에게 백패스하는 그림까지 잡지는 않는다
     if (to.pos === 'GK') return false
     /**
      * 예약된 골이 **하나라도** 있으면 불지 않는다.
@@ -2625,16 +2707,13 @@ export class VisualMatch {
      */
     if (this.pending.length > 0) return false
 
-    const dir = holder.side === 'HOME' ? 1 : -1
-    // ① 상대 진영에 있어야 한다. 자기 진영에서는 오프사이드가 없다
-    if ((to.x - PITCH_W / 2) * dir <= OFFSIDE_MARGIN) return false
-    // ② 공보다 앞에 있어야 한다
-    if ((to.x - holder.x) * dir <= OFFSIDE_MARGIN) return false
-    // ③ 뒤에서 두 번째 상대보다 앞에 있어야 한다
     const other: 'HOME' | 'AWAY' = holder.side === 'HOME' ? 'AWAY' : 'HOME'
-    if (this.inBoxOf(other, to.x)) return false
-    const line = this.offsideLine(other)
-    return (to.x - line) * dir > OFFSIDE_MARGIN
+    return offsidePosition({
+      attacking: holder.side,
+      toX: to.x,
+      ballX: this.ball.x,
+      lineX: this.offsideLine(other),
+    })
   }
 
   /**
@@ -2675,25 +2754,60 @@ export class VisualMatch {
     const by: Official['kind'] = to.x <= PITCH_W / 2 ? 'AR_TOP' : 'AR_BOTTOM'
     const ar = this.officials.find((o) => o.kind === by)
     if (ar) ar.flag = FLAG_LIFT
-    this.flagged = { against, by }
-    this.offsideMute = OFFSIDE_MUTE
+    this.flagged = { against, by, toId: to.id, touched: 'NONE', age: 0 }
+    this.flagsRaised += 1
   }
 
   /**
-   * 깃발이 올라간 뒤 공이 멎으면 휘슬을 분다.
+   * 공을 누가 만졌는지 깃발에 기록한다.
    *
-   * 공이 아직 날아가는 중이면 기다린다. 공이 이미 라인 밖으로 나가
-   * 다른 재개가 걸렸으면 그쪽이 먼저다 — 깃발을 내리고 없던 일로 한다.
-   * 실제로도 공이 아웃되면 부심은 깃발을 내린다.
+   * **위치에 있는 것만으로는 반칙이 아니다.** 규칙 11조의 핵심이고, 이
+   * 한 줄이 그 판단을 만든다. 오프사이드 위치였던 선수가 공을 건드려야
+   * 반칙이고, 수비수가 먼저 끊거나 다른 동료가 받으면 반칙이 아니다.
    */
-  private settleFlag() {
+  private noteTouch(p: VPlayer) {
+    const f = this.flagged
+    if (!f || f.touched !== 'NONE') return
+    f.touched = p.id === f.toId ? 'OFFSIDE' : 'OTHER'
+  }
+
+  /**
+   * 깃발이 올라간 뒤 **그 선수가 공을 건드리면** 휘슬을 분다.
+   *
+   * 규칙 11조에서 반칙이 되는 것은 오프사이드 위치에 있는 것 자체가
+   * 아니라 그 뒤에 **플레이에 관여**하는 것이다. 그래서 부심의 깃발은
+   * 선언이 아니라 질문이고, 답은 다음 셋 중 하나로 나온다.
+   *
+   * - 그 선수가 공을 잡았다 → 반칙이다. 휘슬.
+   * - 수비수가 먼저 끊었거나 다른(온사이드) 동료가 받았다 → 깃발을
+   *   내린다. 규칙이 "상대가 의도적으로 플레이한 공"과 "관여하지 않은
+   *   선수"를 모두 반칙에서 빼기 때문이다.
+   * - 공이 아웃돼 다른 재개가 걸렸다 → 그쪽이 먼저다. 실제로도 부심은
+   *   공이 나가면 깃발을 내린다.
+   *
+   * 이걸 안 보고 불면 **빗나간 패스에도 휘슬이 분다.** 실측으로 휘슬
+   * 마흔넷 중 열다섯(34%)이 그 선수가 공을 끝내 만지지도 않은 판정이었다.
+   */
+  private settleFlag(step: number) {
     const f = this.flagged
     if (!f) return
+    f.age += step
     if (this.restart) {
       this.flagged = null
       return
     }
+    // 수비수나 다른 동료가 공을 가졌다 — 관여가 없었으므로 반칙이 아니다
+    if (f.touched === 'OTHER') {
+      this.flagged = null
+      return
+    }
     if (this.ball.mode === 'PASS' || this.ball.mode === 'SHOT') return
+    if (f.touched === 'NONE') {
+      // 공은 멎었는데 아직 아무도 안 잡았다. 주인이 정해질 때까지 기다린다
+      if (f.age < FLAG_WAIT_MAX) return
+      this.flagged = null
+      return
+    }
 
     this.flagged = null
     // 공이 멎은 자리가 곧 프리킥 자리다. 여기까지 공이 실제로 굴러왔으므로
@@ -2705,7 +2819,6 @@ export class VisualMatch {
     this.blowWhistle('OFFSIDE', px, py)
     const defending: 'HOME' | 'AWAY' = f.against === 'HOME' ? 'AWAY' : 'HOME'
     this.beginRestart('FREE_KICK', defending, px, py)
-    this.offsideMute = OFFSIDE_MUTE
   }
 
   /**
@@ -3862,7 +3975,7 @@ export class VisualMatch {
     this.separate()
     this.moveBall(step)
     // 공이 멎었으면 들고 있던 깃발이 휘슬이 된다
-    this.settleFlag()
+    this.settleFlag(step)
     // 공이 움직인 뒤에 센다. 전개 시간은 "지금 공이 어디 있나"의 함수다
     this.updateAttackTime(step)
     this.reconcileOwner(step)

@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { VisualMatch, PITCH_W, PITCH_H, GOAL_HALF, GOAL_MID, flagTipY, FLAG_REACH } from './visual'
+import {
+  VisualMatch,
+  PITCH_W,
+  PITCH_H,
+  GOAL_HALF,
+  GOAL_MID,
+  flagTipY,
+  FLAG_REACH,
+  offsidePosition,
+} from './visual'
 import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
 import { getPlayer } from '../sim/squad'
@@ -2190,6 +2199,99 @@ describe('심판 셋과 오프사이드', () => {
         expect(d).toBeLessThan(0.01)
       }
     }
+  })
+
+  it('위치에만 있고 관여하지 않은 선수는 잡지 않는다', () => {
+    /**
+     * 규칙 11조의 핵심이다. **오프사이드 위치에 있는 것 자체는 반칙이
+     * 아니다.** 그 선수가 공을 건드려 플레이에 관여해야 반칙이 된다.
+     *
+     * 그래서 부심의 깃발은 선언이 아니라 질문이고, 수비수가 먼저 끊거나
+     * 다른 동료가 받으면 깃발은 내려간다. 든 깃발이 **전부** 휘슬이
+     * 된다면 위치만으로 불고 있다는 뜻이다.
+     *
+     * 숫자를 박지 않고 부등호로 쓴다 — 비율은 시드마다 다르다.
+     */
+    const raised = RUNS.reduce((a, r) => a + r.vm.flagsRaised, 0)
+    const blown = RUNS.reduce((a, r) => a + r.vm.offsideCount, 0)
+    expect(raised, '깃발이 한 번도 안 올라갔다').toBeGreaterThan(0)
+    expect(blown, '휘슬이 한 번도 안 불렸다').toBeGreaterThan(0)
+    expect(blown, `깃발 ${raised}회 중 휘슬 ${blown}회`).toBeLessThan(raised)
+  })
+})
+
+/**
+ * 오프사이드 **위치** 판정 — 경기 규칙 11조 그대로인가.
+ *
+ * 위의 검사들이 "경기에서 몇 번 나오는가"를 본다면, 여기서는 규칙 자체를
+ * 한 줄씩 짚는다. 자리를 직접 만들어 넣으므로 시드에 흔들리지 않는다.
+ *
+ * HOME 은 x 가 커지는 쪽으로, AWAY 는 작아지는 쪽으로 공격한다.
+ */
+describe('오프사이드 위치 — 규칙 11조', () => {
+  /** 상대 진영 깊숙이 · 공보다 앞 · 뒤에서 두 번째 상대보다 앞 */
+  const OFF = { attacking: 'HOME' as const, toX: 90, ballX: 60, lineX: 80 }
+
+  it('세 조건을 모두 만족하면 오프사이드 위치다', () => {
+    expect(offsidePosition(OFF)).toBe(true)
+  })
+
+  it('자기 진영에 있으면 오프사이드가 아니다', () => {
+    // 공도 뒤에서 두 번째 상대도 다 제쳤지만 하프라인을 안 넘었다
+    expect(offsidePosition({ attacking: 'HOME', toX: 40, ballX: 10, lineX: 20 })).toBe(false)
+  })
+
+  it('하프라인과 나란히 서 있으면 오프사이드가 아니다', () => {
+    // 공과 수비는 확실히 제쳤고 오직 ①만 아슬아슬하게 안 넘었다
+    expect(offsidePosition({ attacking: 'HOME', toX: PITCH_W / 2, ballX: 30, lineX: 40 })).toBe(
+      false,
+    )
+  })
+
+  it('공보다 뒤에 있으면 오프사이드가 아니다', () => {
+    // 상대 진영이고 수비를 제쳤어도 공이 더 앞에 있으면 아니다 — ②만 어긴다
+    expect(offsidePosition({ attacking: 'HOME', toX: 85, ballX: 95, lineX: 70 })).toBe(false)
+  })
+
+  it('공과 나란히 있으면 오프사이드가 아니다', () => {
+    expect(offsidePosition({ ...OFF, ballX: OFF.toX, margin: 0 })).toBe(false)
+  })
+
+  it('뒤에서 두 번째 상대와 나란히 있으면 오프사이드가 아니다', () => {
+    expect(offsidePosition({ ...OFF, lineX: OFF.toX, margin: 0 })).toBe(false)
+  })
+
+  it('뒤에서 두 번째 상대보다 뒤에 있으면 오프사이드가 아니다', () => {
+    expect(offsidePosition({ ...OFF, lineX: 95 })).toBe(false)
+  })
+
+  it('반대 방향으로 공격하는 팀에도 같은 규칙이 선다', () => {
+    // AWAY 는 x 가 작아지는 쪽이 상대 골라인이다. HOME 의 거울상이어야 한다
+    const mirror = (x: number) => PITCH_W - x
+    expect(
+      offsidePosition({
+        attacking: 'AWAY',
+        toX: mirror(OFF.toX),
+        ballX: mirror(OFF.ballX),
+        lineX: mirror(OFF.lineX),
+      }),
+    ).toBe(true)
+    expect(
+      offsidePosition({ attacking: 'AWAY', toX: mirror(40), ballX: mirror(10), lineX: mirror(20) }),
+    ).toBe(false)
+  })
+
+  it('애매하면 안 분다 — 여유만큼 확실히 앞서야 한다', () => {
+    /**
+     * 실제 규칙은 신체 일부가 앞서기만 해도 오프사이드지만, 우리 선수는
+     * 매 프레임 흔들리는 점이라 그대로 옮길 수 없다. 규칙에 있는 원칙을
+     * 따른다 — **의심스러우면 공격 측에 유리하게.**
+     *
+     * 여유를 크게 줄수록 덜 분다. 방향만 검사하고 값은 박지 않는다
+     */
+    const near = { ...OFF, lineX: OFF.toX - 1 }
+    expect(offsidePosition({ ...near, margin: 0 })).toBe(true)
+    expect(offsidePosition({ ...near, margin: 5 })).toBe(false)
   })
 })
 
