@@ -115,16 +115,38 @@ export function checkSub(state: MatchState, out: string, inId: string): string |
   if (state.pendingSubs.some((p) => p.out === out || p.in === inId)) {
     return '선택한 선수는 이미 교체를 기다리고 있습니다'
   }
-  // 골키퍼를 필드 플레이어로 바꾸면 골문이 빈다. 벤치에 백업 골키퍼가
-  // 없으므로 되돌릴 방법도 없다. 규칙상 존재할 수 없는 수를 화면이
-  // 허용하면 그건 선택지가 아니라 함정이다.
-  if (getPlayer(out).pos === 'GK' && getPlayer(inId).pos !== 'GK') {
+  // 어느 방향이든 골키퍼와 필드 플레이어를 맞바꾸면 골키퍼가 둘이 되거나
+  // 골문이 빈다. 양쪽 역할이 같을 때만 교체를 허용한다.
+  const outgoingIsGoalkeeper = getPlayer(out).pos === 'GK'
+  const incomingIsGoalkeeper = getPlayer(inId).pos === 'GK'
+  if (outgoingIsGoalkeeper !== incomingIsGoalkeeper) {
     return '골키퍼는 골키퍼와만 교체할 수 있습니다'
   }
   return null
 }
 
 export function applySub(players: PlayerState[], out: string, inId: string): PlayerState[] {
+  const outgoing = players.find((player) => player.id === out)
+  const incoming = players.find((player) => player.id === inId)
+  /**
+   * 교체를 예약한 뒤 6초 사이에 나갈 선수가 퇴장·부상할 수 있다.
+   *
+   * 그 선수를 더는 교체할 수 없으므로 들어올 선수도 투입하지 않는다.
+   * 예약 때 쓴 카드는 회수하지 않지만, 퇴장으로 줄어든 인원을 교체가
+   * 되살려서는 안 된다. 하프타임에 남은 예약을 처리할 때도 같은 규칙을
+   * 쓰도록 이 가장 낮은 적용 함수에서 막는다.
+   */
+  if (
+    !outgoing ||
+    !incoming ||
+    !outgoing.onPitch ||
+    outgoing.out ||
+    incoming.onPitch ||
+    incoming.out
+  ) {
+    return players
+  }
+
   return players.map((s) => {
     // 나간 선수의 지시는 함께 걷힌다. 들어온 선수는 지시 없이 시작한다 —
     // 안 그러면 벤치에 앉아 있던 선수에게 유령 지시가 붙어 들어온다
@@ -389,8 +411,11 @@ export function tick(state: MatchState, rng: Rng): MatchState {
   const stillPending = []
   for (const p of state.pendingSubs) {
     if (p.atTick <= state.tick) {
-      players = applySub(players, p.out, p.in)
-      log.push({ tick: state.tick, kind: 'SUB', target: p.in, detail: p.out })
+      const substituted = applySub(players, p.out, p.in)
+      if (substituted !== players) {
+        players = substituted
+        log.push({ tick: state.tick, kind: 'SUB', target: p.in, detail: p.out })
+      }
     } else {
       stillPending.push(p)
     }
@@ -403,6 +428,11 @@ export function tick(state: MatchState, rng: Rng): MatchState {
   const attacks = resolveAttacks(draws, c, homeFactor, minDefenderSpeed(players))
 
   const ev = resolveEvents(draws, c, players, state.tactics.press, state.tick)
+  // 주심이 반칙을 불면 그 순간의 일반 공격은 중단된다. 페널티 득점은
+  // 반칙 사건에 속하므로 남기되, 같은 틱의 일반 득점은 함께 확정하지 않는다.
+  const foulStoppedPlay = ev.events.some((event) => event.kind === 'FOUL')
+  const homeGoals = foulStoppedPlay ? 0 : attacks.homeGoals
+  const awayGoals = foulStoppedPlay ? 0 : attacks.awayGoals
 
   if (ev.booked) {
     players = players.map((s) => (s.id === ev.booked ? { ...s, booked: true } : s))
@@ -421,23 +451,23 @@ export function tick(state: MatchState, rng: Rng): MatchState {
     })
   }
 
-  score[0] += attacks.homeGoals
-  score[1] += attacks.awayGoals + ev.awayGoals
-  if (attacks.homeGoals) {
+  score[0] += homeGoals
+  score[1] += awayGoals + ev.awayGoals
+  if (homeGoals) {
     const detail = attacks.homeGoalCauses?.join('+')
     log.push({ tick: state.tick, kind: 'GOAL', ...(detail ? { detail } : {}) })
   }
-  if (attacks.awayGoals) {
+  if (awayGoals) {
     const detail = attacks.awayGoalCauses?.join('+')
     log.push({ tick: state.tick, kind: 'CONCEDE', ...(detail ? { detail } : {}) })
   }
 
-  const ball = nextBall(state.ball, draws, c, attacks.homeGoals > 0, attacks.awayGoals > 0)
+  const ball = nextBall(state.ball, draws, c, homeGoals > 0, awayGoals > 0)
 
   const s = state.stats
   /** 이번 틱에 점수가 움직였으면 성향을 다시 읽는다 */
   const nextMood =
-    attacks.homeGoals || attacks.awayGoals || ev.awayGoals ? mentalityOf(score) : state.opponent
+    homeGoals || awayGoals || ev.awayGoals ? mentalityOf(score) : state.opponent
 
   return {
     ...state,
@@ -544,13 +574,7 @@ export function carryToNextHalf(
   // 대기 중이던 교체를 먼저 성사시킨다
   let players = state.players
   for (const p of state.pendingSubs) {
-    players = players.map((s) =>
-      s.id === p.out
-        ? { ...s, onPitch: false }
-        : s.id === p.in
-          ? { ...s, onPitch: true }
-          : s,
-    )
+    players = applySub(players, p.out, p.in)
   }
   players = players.map((player) =>
     recoveryEligible.has(player.id) && player.onPitch && !player.out

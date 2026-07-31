@@ -101,8 +101,8 @@ describe('resolveAttacks — 무개입 기준', () => {
       1,
       70,
     )
-    expect(away.awayGoals).toBe(3)
-    expect(away.awayGoalCauses).toEqual(['BEHIND', 'OPEN_PLAY', 'SET_PIECE'])
+    expect(away.awayGoals).toBe(1)
+    expect(away.awayGoalCauses).toEqual(['BEHIND'])
     expect(away.awayGoalCauses).toHaveLength(away.awayGoals)
   })
 

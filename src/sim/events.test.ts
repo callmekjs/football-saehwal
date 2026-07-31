@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { simulate, createState, checkSub } from './engine'
+import { simulate, createState, checkSub, tick } from './engine'
 import { EVENTS, TOTAL_TICKS } from './constants'
 import { BENCH, HOME_XI } from './squad'
+import { PROBLEMS } from './problems'
+import { createRng } from './rng'
 import type { Decision, Problem } from './types'
 
 const P: Problem = {
@@ -149,5 +151,93 @@ describe('교체 카드', () => {
       return total
     }
     expect(conceded(0)).toBeLessThan(conceded(500))
+  })
+
+  it('예약 뒤 퇴장한 선수는 교체가 되살리지 않는다', () => {
+    const accumulatedCards = PROBLEMS.find((problem) => problem.id === 'p03')!
+    const cases = [
+      [83502, 'DF03'],
+      [83510, 'DF04'],
+      [83539, 'MF10'],
+      [83540, 'DF03'],
+      [83543, 'DF02'],
+      [83568, 'DF03'],
+    ] as const
+
+    for (const [seed, outgoing] of cases) {
+      const problem = { ...accumulatedCards, seed }
+      const rng = createRng(seed)
+      let state = createState(problem)
+
+      // 1틱에 교체를 예약한다. 6초 안에 나갈 선수가 두 번째 경고로
+      // 퇴장하는 직접 재현 시드들이다.
+      state = tick(state, rng)
+      state = {
+        ...state,
+        subsLeft: state.subsLeft - 1,
+        pendingSubs: [{
+          out: outgoing,
+          in: 'DF15',
+          atTick: state.tick + EVENTS.subDelayTicks,
+        }],
+      }
+      while (state.tick <= 1 + EVENTS.subDelayTicks) state = tick(state, rng)
+
+      expect(
+        state.log.some((event) => event.kind === 'SEND_OFF' && event.target === outgoing),
+        `${seed}: 예약한 선수가 먼저 퇴장해야 한다`,
+      ).toBe(true)
+      expect(state.players.find((player) => player.id === outgoing)?.out).toBe(true)
+      expect(state.players.find((player) => player.id === 'DF15')?.onPitch).toBe(false)
+      expect(
+        state.log.some((event) => event.kind === 'SUB' && event.target === 'DF15'),
+      ).toBe(false)
+      expect(state.homeCount, `${seed}: 퇴장 뒤 인원`).toBe(10)
+    }
+  })
+
+  it.each([40712, 40729])(
+    '시드 %i에서 필드 선수와 골키퍼의 양방향 교체를 막고 골키퍼끼리만 허용한다',
+    (seed) => {
+      const state = createState({ ...P, seed })
+
+      expect(checkSub(state, 'DF04', 'GK12')).not.toBeNull()
+      expect(checkSub(state, 'GK01', 'DF15')).not.toBeNull()
+      expect(checkSub(state, 'GK01', 'GK12')).toBeNull()
+    },
+  )
+})
+
+describe('한 틱의 사건 우선순위', () => {
+  const collisionCases = [
+    { problemId: 'p02', seed: 1831661670, tick: 212 },
+    { problemId: 'p04', seed: 1662164807, tick: 470 },
+  ]
+
+  for (const sample of collisionCases) {
+    it(`${sample.problemId} 시드 ${sample.seed}에서 양 팀 득점을 함께 확정하지 않는다`, () => {
+      const problem = PROBLEMS.find((entry) => entry.id === sample.problemId)!
+      const events = simulate({ ...problem, seed: sample.seed }, []).final.log.filter(
+        (event) => event.tick === sample.tick,
+      )
+      const goals = events.filter(
+        (event) => event.kind === 'GOAL' || event.kind === 'CONCEDE',
+      )
+
+      expect(goals).toHaveLength(1)
+    })
+  }
+
+  it('반칙 판정 뒤 같은 틱의 일반 득점을 함께 확정하지 않는다', () => {
+    const problem = PROBLEMS.find((entry) => entry.id === 'p04')!
+    const events = simulate({ ...problem, seed: 2937000874 }, []).final.log.filter(
+      (event) => event.tick === 524,
+    )
+
+    expect(events.some((event) => event.kind === 'FOUL')).toBe(true)
+    expect(events.some((event) => event.kind === 'CARD')).toBe(true)
+    expect(
+      events.some((event) => event.kind === 'GOAL' || event.kind === 'CONCEDE'),
+    ).toBe(false)
   })
 })

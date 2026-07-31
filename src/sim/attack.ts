@@ -88,6 +88,9 @@ export function resolveAttacks(
   homeFactor: number,
   minDefenderSpeed: number,
 ): AttackOutcome {
+  // 한 틱은 경기 화면의 한 순간이다. 먼저 확정된 득점 뒤에 같은 순간의
+  // 다른 공격 채널이 또 득점으로 굳지 않도록 하나의 득점만 인정한다.
+  let goalClaimed = false
   const o: AttackOutcome = {
     homeGoals: 0,
     awayGoals: 0,
@@ -111,6 +114,7 @@ export function resolveAttacks(
     if (d.behindShot < XG.oneOnOne * XG.shotSelectOneOnOne) {
       o.awayGoals += 1
       o.awayGoalCauses.push('BEHIND')
+      goalClaimed = true
     }
   }
 
@@ -119,9 +123,10 @@ export function resolveAttacks(
     o.homeAttempt += 1
     if (d.homeEnter < BASE.P_ENTER * c.openness) {
       o.homeShot += 1
-      if (d.homeShot < XG.boxCentre * c.entryXg * homeFactor) {
+      if (!goalClaimed && d.homeShot < XG.boxCentre * c.entryXg * homeFactor) {
         o.homeGoals += 1
         o.homeGoalCauses.push('BUILD_UP')
+        goalClaimed = true
       }
     }
   }
@@ -132,9 +137,10 @@ export function resolveAttacks(
     o.awayAttempt += 1
     if (d.awayEnter < BASE.P_ENTER_OPP) {
       o.awayShot += 1
-      if (d.awayShot < XG.boxCentre * c.oppShotXg) {
+      if (!goalClaimed && d.awayShot < XG.boxCentre * c.oppShotXg) {
         o.awayGoals += 1
         o.awayGoalCauses.push('OPEN_PLAY')
+        goalClaimed = true
       }
     }
   }
@@ -146,9 +152,10 @@ export function resolveAttacks(
   // 골문 앞에 남은 사람이 헤딩을 따낸다. 지시가 없으면 1.0이다
   if (d.setPiece < BASE.S0 * c.setPiece) {
     o.setPiece += 1
-    if (d.setPieceShot < XG.setPiece * c.oppShotXg) {
+    if (!goalClaimed && d.setPieceShot < XG.setPiece * c.oppShotXg) {
       o.awayGoals += 1
       o.awayGoalCauses.push('SET_PIECE')
+      goalClaimed = true
     }
   }
 
