@@ -32,11 +32,25 @@ const P: Problem = {
 }
 
 describe('명단', () => {
-  it('선발 11명 벤치 5명이다', () => {
+  it('선발 열한 명에 벤치를 더해 스물여섯 명이다', () => {
     expect(HOME_XI).toHaveLength(11)
-    expect(BENCH).toHaveLength(5)
-    expect(HOME_SQUAD).toHaveLength(16)
+    expect(HOME_SQUAD).toHaveLength(26)
+    expect(BENCH).toHaveLength(HOME_SQUAD.length - HOME_XI.length)
     expect(AWAY_XI).toHaveLength(11)
+  })
+
+  /**
+   * 골키퍼는 골키퍼와만 교체할 수 있다(`checkSub`). 벤치에 골키퍼가 없으면
+   * 그 규칙이 "골키퍼는 절대 못 바꾼다"가 되어, 다치면 손쓸 방법이 없다.
+   */
+  it('벤치에 바꿔 넣을 골키퍼가 있다', () => {
+    expect(BENCH.filter((player) => player.pos === 'GK').length).toBeGreaterThan(0)
+  })
+
+  it('한 포지션도 비지 않는다', () => {
+    for (const pos of ['GK', 'DF', 'MF', 'FW'] as const) {
+      expect(BENCH.filter((player) => player.pos === pos).length, pos).toBeGreaterThan(0)
+    }
   })
 
   it('아무도 이름을 갖지 않는다', () => {

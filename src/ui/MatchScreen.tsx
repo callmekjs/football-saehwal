@@ -45,6 +45,7 @@ import { opponentInfo } from '../analysis/opponents'
 import { clockRatio, clockTone, secondsLeft, urgencyOf } from './urgency'
 import { leverToast, presetToast, subToast, useToast, type ToastMessage } from './toast'
 import type {
+  MatchAbility,
   Decision,
   OpponentId,
   Level,
@@ -631,11 +632,17 @@ export function MatchScreen({
   problem,
   startHalf,
   opponent = 'USA',
+  starters,
+  roster,
   onExit,
   onRetry,
   onReplay,
 }: {
   problem: Problem
+  /** 감독이 고른 선발. 없으면 명단의 기본 선발 */
+  starters?: ReadonlySet<string>
+  /** 다시 뽑은 명단. 없으면 기본 능력 */
+  roster?: ReadonlyMap<string, MatchAbility>
   /**
    * 플레이어가 **어느 반부터** 시작할지 고른 값.
    *
@@ -693,7 +700,7 @@ export function MatchScreen({
     setPosition,
     startNextHalf,
     decisions,
-  } = useMatch(problem, opponent)
+  } = useMatch(problem, opponent, { starters, roster })
   /**
    * 사활 복기는 JSON의 기본값이 아니라 이 판에 실제로 뽑힌 시작 상태를 쓴다.
    *

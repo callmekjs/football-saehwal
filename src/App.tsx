@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import raw from './data/problems.json' with { type: 'json' }
 import { referenceNoActionRate } from './analysis/balanceBaseline'
 import {
@@ -19,10 +19,15 @@ import {
   type Half,
 } from './matchClock'
 import { createState } from './sim/engine'
+import { OUR_TEAM } from './sim/constants'
+import { HOME_SQUAD, rollRoster } from './sim/squad'
 import { toProblem } from './sim/problems'
-import { getPlayer } from './sim/squad'
 import type { OpponentId, Problem } from './sim/types'
 import { MatchScreen } from './ui/MatchScreen'
+import { TitleScreen, type HomeSection } from './ui/TitleScreen'
+import { clearHistory, readHistory, type MatchRecord } from './ui/matchHistory'
+import { SquadSection } from './ui/SquadSection'
+import { HistorySection } from './ui/HistorySection'
 
 /** 국면 카드와 프리뷰가 함께 쓰는 정보 */
 interface Entry {
@@ -44,12 +49,6 @@ function situationNote(problem: Problem): string {
   if (problem.unavailable.length > 0) return '우리 10명'
   if (problem.booked.length > 0) return `경고 ${problem.booked.length}명`
   return '전원 정상'
-}
-
-function staminaTone(stamina: number): 'safe' | 'warn' | 'danger' {
-  if (stamina < 45) return 'danger'
-  if (stamina < 60) return 'warn'
-  return 'safe'
 }
 
 function OpponentPicker({
@@ -198,88 +197,49 @@ function HalfPicker({
   )
 }
 
-/** 왼쪽 차례 안내가 가리키는 자리들 */
-const NAV_STEPS = [
-  { id: 'match-preview', n: '01', label: '킥오프' },
-  { id: 'opponents', n: '02', label: '상대 선택' },
-  { id: 'situations', n: '03', label: '국면 선택' },
-  { id: 'start-point', n: '04', label: '시작 지점' },
-] as const
+/** 왼쪽 차례 안내. 누르면 **화면이 바뀐다** */
+const NAV_STEPS: ReadonlyArray<{ id: HomeSection; n: string; label: string; hint: string }> = [
+  { id: 'squad', n: '01', label: '우리 팀', hint: '선수 스물여섯 명' },
+  { id: 'opponent', n: '02', label: '상대 선택', hint: '13개 팀' },
+  { id: 'situation', n: '03', label: '국면 선택', hint: '고르고 킥오프' },
+  { id: 'history', n: '04', label: '분석 · 기록', hint: '지난 판' },
+]
 
 /**
- * 킥오프 준비 차례.
+ * 왼쪽 차례 안내.
  *
- * **전에는 눌러도 아무 일이 없었다.** 그냥 `href="#id"` 였는데, 넓고 높은
- * 화면에서는 내용이 한 화면에 다 들어가 스크롤할 곳이 없다. 1600×1000 에서
- * 문서 높이가 정확히 1000px 이라 브라우저가 옮길 자리가 없었다. 1280×720
- * 처럼 스크롤이 생기는 크기에서만 동작했다.
+ * **누르면 화면이 통째로 바뀐다.** 전에는 같은 화면 안의 자리로 스크롤만
+ * 했고, 넓고 높은 화면에서는 내용이 한 화면에 다 들어가 옮길 자리조차
+ * 없어서 아무 일도 일어나지 않았다. 활성 표시도 첫 항목에 고정이었다.
  *
- * 활성 표시도 `01` 에 고정으로 박혀 있어 어디를 보고 있든 늘 켜져 있었다.
- *
- * 그래서 두 가지를 고친다. 스크롤이 가능하면 부드럽게 옮기고, **옮길 자리가
- * 없어도 그 자리를 잠깐 밝혀** 클릭이 언제나 눈에 보이게 한다. 지금 보고
- * 있는 자리는 화면에 실제로 들어온 것을 보고 정한다.
+ * 사용자가 정했다 — *"1번 누르면 그거에 맞는 페이지가 있어야 하는데 그냥
+ * 밑으로 내려간다."*
  */
-function KickoffNav() {
-  const [active, setActive] = useState<string>(NAV_STEPS[0].id)
-  const [flash, setFlash] = useState<string | null>(null)
-
-  useEffect(() => {
-    const sections = NAV_STEPS.map((step) => document.getElementById(step.id)).filter(
-      (el): el is HTMLElement => el !== null,
-    )
-    if (sections.length === 0) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const seen = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-        if (seen) setActive(seen.target.id)
-      },
-      { rootMargin: '-20% 0px -60% 0px', threshold: [0.1, 0.5, 1] },
-    )
-    for (const section of sections) observer.observe(section)
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (flash === null) return
-    const timer = window.setTimeout(() => setFlash(null), 1100)
-    return () => window.clearTimeout(timer)
-  }, [flash])
-
-  const go = (id: string) => {
-    const target = document.getElementById(id)
-    if (!target) return
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    target.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
-    setActive(id)
-    // 옮길 자리가 없어도 누른 것이 보여야 한다
-    setFlash(id)
-  }
-
+function KickoffNav({
+  value,
+  onPick,
+}: {
+  value: HomeSection
+  onPick: (section: HomeSection) => void
+}) {
   return (
     <nav className="kickoff-nav" aria-label="킥오프 준비 순서">
       <small>MANAGER</small>
       {NAV_STEPS.map((step) => (
-        <a
+        <button
+          type="button"
           key={step.id}
-          href={`#${step.id}`}
-          className={active === step.id ? 'active' : undefined}
-          aria-current={active === step.id ? 'true' : undefined}
-          onClick={(event) => {
-            event.preventDefault()
-            go(step.id)
-          }}
+          className={value === step.id ? 'active' : undefined}
+          aria-current={value === step.id ? 'page' : undefined}
+          onClick={() => onPick(step.id)}
         >
           <b>{step.n}</b>
-          {step.label}
-        </a>
+          <span>
+            {step.label}
+            <i>{step.hint}</i>
+          </span>
+        </button>
       ))}
-      <span className="kickoff-nav-muted">
-        <b>05</b>
-        종료 뒤 분석
-      </span>
 
       <div className="kickoff-nav-rules" id="rules">
         <small>SURVIVAL RULES</small>
@@ -291,23 +251,8 @@ function KickoffNav() {
           <i>복기</i>
         </div>
       </div>
-      <FlashStyle id={flash} />
     </nav>
   )
-}
-
-/** 누른 자리를 잠깐 밝힌다. 스크롤이 없어도 클릭이 보이게 하는 장치다 */
-function FlashStyle({ id }: { id: string | null }) {
-  useEffect(() => {
-    if (id === null) return
-    const target = document.getElementById(id)
-    if (!target) return
-    target.dataset.flash = 'on'
-    return () => {
-      delete target.dataset.flash
-    }
-  }, [id])
-  return null
 }
 
 const TICKER =
@@ -334,6 +279,23 @@ export function App() {
   const [attempt, setAttempt] = useState(0)
   const [replay, setReplay] = useState(0)
   const [opponent, setOpponent] = useState<OpponentId>('USA')
+  /**
+   * 첫 화면을 지났는가.
+   *
+   * 전에는 열자마자 상대와 국면을 고르라고 했다. 무엇을 하는 것인지 알기
+   * 전에 선택을 요구하는 화면이었다.
+   */
+  const [entered, setEntered] = useState(false)
+  const [section, setSection] = useState<HomeSection>('situation')
+  const [history, setHistory] = useState<MatchRecord[]>(() => readHistory())
+  /** 감독이 고른 선발. null 이면 명단의 기본 선발이다 */
+  const [starters, setStarters] = useState<ReadonlySet<string> | null>(null)
+  /** 명단 다시 뽑기 씨앗. 0 이면 손으로 적어둔 기본 명단이다 */
+  const [rosterSeed, setRosterSeed] = useState(0)
+  const roster = useMemo(
+    () => (rosterSeed === 0 ? undefined : rollRoster(rosterSeed)),
+    [rosterSeed],
+  )
 
   const selectedEntry = entries[selectedIndex]
   /**
@@ -351,19 +313,9 @@ export function App() {
     [attempt, selectedEntry],
   )
   const previewState = useMemo(
-    () => createState(previewProblem, opponent),
-    [opponent, previewProblem],
+    () => createState(previewProblem, opponent, starters ?? undefined, roster),
+    [opponent, previewProblem, roster, starters],
   )
-  const condition = useMemo(
-    () =>
-      previewState.players
-        .filter((state) => state.onPitch && !state.out)
-        .map((state) => ({ state, player: getPlayer(state.id) }))
-        .sort((a, b) => a.state.stamina - b.state.stamina)
-        .slice(0, 6),
-    [previewState],
-  )
-
   if (picked) {
     const problem = {
       ...picked.entry.problem,
@@ -375,9 +327,28 @@ export function App() {
         problem={problem}
         startHalf={picked.half}
         opponent={opponent}
+        starters={starters ?? undefined}
+        roster={roster}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
         onReplay={() => setReplay((n) => n + 1)}
+      />
+    )
+  }
+
+  if (!entered) {
+    return (
+      <TitleScreen
+        historyCount={history.length}
+        onStart={() => {
+          setSection('situation')
+          setEntered(true)
+        }}
+        onGo={(next: HomeSection) => {
+          // 첫 화면에서 고른 그 페이지로 바로 간다
+          setSection(next)
+          setEntered(true)
+        }}
       />
     )
   }
@@ -389,7 +360,14 @@ export function App() {
   return (
     <div className="kickoff-home">
       <header className="kickoff-header">
-        <h1 className="kickoff-wordmark">축구 사활</h1>
+        <button
+          type="button"
+          className="kickoff-wordmark as-button"
+          onClick={() => setEntered(false)}
+          title="첫 화면으로"
+        >
+          축구 사활
+        </button>
         <div className="kickoff-header-facts" aria-label="시뮬레이션 정보">
           <span>5개 국면</span>
           <span>13개 상대</span>
@@ -404,43 +382,60 @@ export function App() {
         </div>
       </header>
 
-      <div className="kickoff-layout">
-        <KickoffNav />
+      <div className="kickoff-layout" data-section={section}>
+        <KickoffNav value={section} onPick={setSection} />
 
-        <aside className="kickoff-sidebar">
-          <OpponentPicker value={opponent} onPick={setOpponent} />
-
-          <section className="kickoff-condition" aria-labelledby="condition-title">
-            <div className="kickoff-side-title">
-              <h2 id="condition-title">선수 컨디션</h2>
-              <small>다음 판 · 낮은 체력순</small>
-            </div>
-            <div className="kickoff-condition-list">
-              {condition.map(({ state, player }) => (
-                <span key={player.id} data-tone={staminaTone(state.stamina)}>
-                  <b>{player.num}</b>
-                  <small>{player.pos}</small>
-                  <progress
-                    max="100"
-                    value={state.stamina}
-                    aria-label={`${player.num}번 체력 ${Math.round(state.stamina)}`}
-                  />
-                  <strong>{Math.round(state.stamina)}</strong>
-                </span>
-              ))}
-            </div>
-          </section>
-
-          <section className="kickoff-house-rules">
-            <small>HOUSE RULES</small>
-            <p>
-              시계는 멈추지 않습니다. 교체 카드는 되돌릴 수 없습니다. 좋은 판단도
-              결과가 나쁠 수 있습니다.
-            </p>
-          </section>
-        </aside>
-
+        {/*
+          한 화면에 한 가지만 둔다.
+          사용자가 정했다 — *"1번 누르면 그거에 맞는 페이지가 있어야 하는데
+          그냥 밑으로 내려간다. 밑으로 내려가는 게 아니고 그거에 맞는
+          페이지가 있어야 해."* 전에는 네 자리가 모두 같은 화면 안에 있어서
+          차례 안내가 자리 이동에 지나지 않았다.
+        */}
         <main className="kickoff-main">
+          {section === 'squad' && (
+            <>
+              <SquadSection
+                state={previewState}
+                rosterSeed={rosterSeed}
+                onRefresh={() => setRosterSeed((n) => n + 1)}
+                lineup={{
+                  starters: new Set(
+                    previewState.players.filter((p) => p.onPitch && !p.out).map((p) => p.id),
+                  ),
+                  changed: starters !== null,
+                  onReset: () => setStarters(null),
+                  onSwap: (starterId, benchId) => {
+                    const current = new Set(
+                      starters ??
+                        HOME_SQUAD.filter((p) => !p.onBench).map((p) => p.id),
+                    )
+                    current.delete(starterId)
+                    current.add(benchId)
+                    setStarters(current)
+                  },
+                }}
+              />
+              <section className="kickoff-house-rules wide">
+                <small>HOUSE RULES</small>
+                <p>
+                  시계는 멈추지 않습니다. 교체 카드는 되돌릴 수 없습니다. 좋은
+                  판단도 결과가 나쁠 수 있습니다.
+                </p>
+              </section>
+            </>
+          )}
+
+          {section === 'opponent' && (
+            <OpponentPicker value={opponent} onPick={setOpponent} />
+          )}
+
+          {section === 'history' && (
+            <HistorySection records={history} onClear={() => setHistory(clearHistory())} />
+          )}
+
+          {section === 'situation' && (
+            <>
           <section
             id="match-preview"
             className="kickoff-preview"
@@ -458,8 +453,8 @@ export function App() {
             </span>
             <div className="kickoff-preview-grid">
               <div className="kickoff-crest home">
-                <b>우리</b>
-                <small>홈</small>
+                <b>{OUR_TEAM.name}</b>
+                <small>참고 순위 {OUR_TEAM.rank}위 · 홈</small>
               </div>
 
               <div className="kickoff-score" aria-live="polite" aria-atomic="true">
@@ -576,6 +571,8 @@ export function App() {
             {kickoffMinute(selectedHalf)}분에 재개해 {segmentEnd(selectedHalf)}분까지 진행합니다.
             추가시간은 +{addedTimeOf(selectedHalf)}분입니다.
           </p>
+            </>
+          )}
         </main>
       </div>
 

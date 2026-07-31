@@ -10,11 +10,29 @@
     "FW": { "speed": 75, "stamina0": 72, "finishing": 1.15 }
   },
 
+  "_attributeDefaults": "포지션별 기준값이다. 선수마다 적지 않은 능력치는 여기서 시작해 선수 고유의 고정 편차만큼 흩어진다(squad.ts 의 spreadAttribute). 난수를 쓰지 않으므로 같은 선수는 언제나 같은 값이고 밸런스에도 닿지 않는다.",
+
   "attributeDefaults": {
-    "GK": { "finish": 4, "pass": 9,  "dribble": 5,  "tackle": 5,  "header": 8,  "setPiece": 6,  "vision": 9,  "judgement": 12, "composure": 12, "workRate": 8,  "aggression": 7,  "pace": 11, "speed": 11, "endurance": 12, "strength": 13 },
-    "DF": { "finish": 6, "pass": 10, "dribble": 7,  "tackle": 14, "header": 14, "setPiece": 7,  "vision": 9,  "judgement": 13, "composure": 11, "workRate": 12, "aggression": 13, "pace": 14, "speed": 14, "endurance": 13, "strength": 14 },
-    "MF": { "finish": 10, "pass": 14, "dribble": 12, "tackle": 11, "header": 9,  "setPiece": 11, "vision": 13, "judgement": 12, "composure": 12, "workRate": 14, "aggression": 11, "pace": 14, "speed": 14, "endurance": 14, "strength": 10 },
-    "FW": { "finish": 14, "pass": 10, "dribble": 14, "tackle": 5,  "header": 11, "setPiece": 8,  "vision": 11, "judgement": 11, "composure": 13, "workRate": 10, "aggression": 10, "pace": 15, "speed": 15, "endurance": 11, "strength": 12 }
+    "GK": {
+      "technique": 8, "finish": 4, "dribble": 5, "marking": 6, "longThrow": 8, "longShot": 4, "corner": 4, "cross": 4, "tackle": 5, "pass": 9, "firstTouch": 9, "penalty": 5, "setPiece": 5, "header": 8,
+      "offTheBall": 5, "bravery": 14, "leadership": 12, "positioning": 15, "determination": 13, "vision": 9, "anticipation": 14, "aggression": 7, "concentration": 15, "flair": 6, "composure": 13, "teamwork": 12, "judgement": 13, "workRate": 8,
+      "balance": 12, "strength": 13, "agility": 14, "pace": 11, "jump": 14, "speed": 11, "endurance": 12, "naturalFitness": 13
+    },
+    "DF": {
+      "technique": 10, "finish": 6, "dribble": 7, "marking": 15, "longThrow": 11, "longShot": 6, "corner": 6, "cross": 9, "tackle": 14, "pass": 10, "firstTouch": 10, "penalty": 5, "setPiece": 7, "header": 14,
+      "offTheBall": 7, "bravery": 15, "leadership": 12, "positioning": 15, "determination": 14, "vision": 9, "anticipation": 13, "aggression": 13, "concentration": 13, "flair": 6, "composure": 11, "teamwork": 13, "judgement": 13, "workRate": 12,
+      "balance": 12, "strength": 14, "agility": 11, "pace": 14, "jump": 14, "speed": 14, "endurance": 13, "naturalFitness": 13
+    },
+    "MF": {
+      "technique": 13, "finish": 10, "dribble": 12, "marking": 10, "longThrow": 9, "longShot": 12, "corner": 11, "cross": 11, "tackle": 11, "pass": 14, "firstTouch": 13, "penalty": 10, "setPiece": 11, "header": 9,
+      "offTheBall": 12, "bravery": 11, "leadership": 11, "positioning": 11, "determination": 13, "vision": 13, "anticipation": 12, "aggression": 11, "concentration": 12, "flair": 12, "composure": 12, "teamwork": 14, "judgement": 12, "workRate": 14,
+      "balance": 12, "strength": 10, "agility": 13, "pace": 14, "jump": 9, "speed": 14, "endurance": 14, "naturalFitness": 13
+    },
+    "FW": {
+      "technique": 14, "finish": 14, "dribble": 14, "marking": 4, "longThrow": 7, "longShot": 12, "corner": 6, "cross": 9, "tackle": 5, "pass": 10, "firstTouch": 13, "penalty": 13, "setPiece": 8, "header": 11,
+      "offTheBall": 15, "bravery": 11, "leadership": 9, "positioning": 6, "determination": 13, "vision": 11, "anticipation": 14, "aggression": 10, "concentration": 11, "flair": 14, "composure": 13, "teamwork": 9, "judgement": 11, "workRate": 10,
+      "balance": 13, "strength": 12, "agility": 14, "pace": 15, "jump": 12, "speed": 15, "endurance": 11, "naturalFitness": 12
+    }
   },
 
   "home": [
@@ -100,6 +118,56 @@
       "num": 13, "pos": "FW", "speed": 83, "stamina0": 100, "finishing": 1.00,
       "_character": "순수한 속도. 상대가 지친 뒤 배후로 달리게 하는 카드다",
       "attributes": { "finish": 10, "pass": 8, "dribble": 13, "tackle": 4, "header": 7, "setPiece": 5, "vision": 9, "judgement": 10, "composure": 11, "workRate": 12, "aggression": 9, "pace": 17, "speed": 16, "endurance": 13, "strength": 9 }
+    },
+    {
+      "num": 12, "pos": "GK", "speed": 57, "stamina0": 100,
+      "_character": "백업 골키퍼. 선방이 안정적이고 공중볼을 잘 잡는다",
+      "attributes": { "finish": 3, "pass": 10, "dribble": 5, "tackle": 4, "header": 11, "setPiece": 4, "vision": 10, "judgement": 14, "composure": 14, "workRate": 7, "aggression": 8, "pace": 11, "speed": 12, "endurance": 13, "strength": 14 }
+    },
+    {
+      "num": 31, "pos": "GK", "speed": 53, "stamina0": 100,
+      "_character": "세 번째 골키퍼. 어리고 발이 느리지만 반사신경이 좋다",
+      "attributes": { "finish": 3, "pass": 8, "dribble": 5, "tackle": 4, "header": 9, "setPiece": 3, "vision": 8, "judgement": 11, "composure": 10, "workRate": 8, "aggression": 7, "pace": 10, "speed": 11, "endurance": 14, "strength": 11 }
+    },
+    {
+      "num": 14, "pos": "DF", "speed": 72, "stamina0": 100,
+      "_character": "왼쪽을 볼 수 있는 수비수. 크로스가 좋고 프리킥도 찬다",
+      "attributes": { "finish": 6, "pass": 13, "dribble": 10, "tackle": 13, "header": 11, "setPiece": 14, "vision": 12, "judgement": 12, "composure": 12, "workRate": 14, "aggression": 11, "pace": 14, "speed": 15, "endurance": 14, "strength": 11 }
+    },
+    {
+      "num": 16, "pos": "DF", "speed": 66, "stamina0": 100,
+      "_character": "공중볼에 강한 중앙 수비수. 세트피스 수비에서 값을 한다",
+      "attributes": { "finish": 6, "pass": 9, "dribble": 5, "tackle": 15, "header": 17, "setPiece": 5, "vision": 9, "judgement": 14, "composure": 12, "workRate": 11, "aggression": 15, "pace": 13, "speed": 14, "endurance": 12, "strength": 17 }
+    },
+    {
+      "num": 21, "pos": "DF", "speed": 78, "stamina0": 100,
+      "_character": "위아래를 오가는 윙백. 체력이 좋아 끝까지 뛴다",
+      "attributes": { "finish": 5, "pass": 12, "dribble": 12, "tackle": 12, "header": 9, "setPiece": 9, "vision": 11, "judgement": 11, "composure": 11, "workRate": 17, "aggression": 11, "pace": 16, "speed": 15, "endurance": 16, "strength": 10 }
+    },
+    {
+      "num": 24, "pos": "DF", "speed": 64, "stamina0": 100,
+      "_character": "느리지만 자리를 잘 잡는 수비수. 지킬 때 넣는 카드다",
+      "attributes": { "finish": 6, "pass": 11, "dribble": 6, "tackle": 16, "header": 14, "setPiece": 5, "vision": 10, "judgement": 16, "composure": 14, "workRate": 10, "aggression": 12, "pace": 13, "speed": 13, "endurance": 12, "strength": 15 }
+    },
+    {
+      "num": 18, "pos": "MF", "speed": 75, "stamina0": 100,
+      "_character": "달리는 중원. 전방 압박을 걸 때 앞에서 먼저 뛴다",
+      "attributes": { "finish": 10, "pass": 12, "dribble": 12, "tackle": 12, "header": 9, "setPiece": 8, "vision": 11, "judgement": 11, "composure": 11, "workRate": 18, "aggression": 14, "pace": 15, "speed": 15, "endurance": 17, "strength": 11 }
+    },
+    {
+      "num": 20, "pos": "MF", "speed": 68, "stamina0": 100,
+      "_character": "공을 지키는 중원. 앞서 있을 때 시간을 버는 카드다",
+      "attributes": { "finish": 9, "pass": 16, "dribble": 11, "tackle": 13, "header": 10, "setPiece": 10, "vision": 14, "judgement": 15, "composure": 16, "workRate": 12, "aggression": 10, "pace": 14, "speed": 13, "endurance": 13, "strength": 12 }
+    },
+    {
+      "num": 23, "pos": "MF", "speed": 72, "stamina0": 100, "finishing": 1.10,
+      "_character": "박스 안으로 파고드는 중원. 늦게 들어가 마무리한다",
+      "attributes": { "finish": 12, "pass": 13, "dribble": 14, "tackle": 8, "header": 12, "setPiece": 11, "vision": 13, "judgement": 12, "composure": 14, "workRate": 13, "aggression": 10, "pace": 14, "speed": 15, "endurance": 13, "strength": 11 }
+    },
+    {
+      "num": 25, "pos": "FW", "speed": 80, "stamina0": 100, "finishing": 1.15,
+      "_character": "측면을 도는 공격수. 지친 수비 뒤로 계속 달린다",
+      "attributes": { "finish": 13, "pass": 10, "dribble": 15, "tackle": 4, "header": 8, "setPiece": 7, "vision": 11, "judgement": 11, "composure": 12, "workRate": 12, "aggression": 9, "pace": 16, "speed": 16, "endurance": 14, "strength": 10 }
     }
   ],
 

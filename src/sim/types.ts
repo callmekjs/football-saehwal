@@ -64,8 +64,28 @@ export interface Player {
   stamina0: number
   /** 0.7~1.3. 슈팅 기대값에 곱해진다 */
   finishing: number
-  /** 1~20 능력치 열다섯 개. 전부 창작이다 */
+  /** 1~20 능력치 서른여섯 개. 전부 창작이다 */
   attributes: PlayerAttributes
+  /** 능력치가 아닌 신상. 화면에만 쓰인다 */
+  profile: PlayerProfile
+}
+
+/**
+ * 1~20 눈금이 아닌 신상.
+ *
+ * **확률에 닿지 않는다.** 화면이 선수를 구별해 기억하게 하는 값이며,
+ * 등번호와 함께 "그 큰 왼발 수비수"처럼 부를 수 있게 한다. 이름을 넣지
+ * 않기로 한 대신 이런 것들이 사람을 구별해 준다.
+ */
+export interface PlayerProfile {
+  /** 잘 쓰는 발 */
+  foot: '왼발' | '오른발' | '양발'
+  /** 신장(cm) */
+  height: number
+  /** 체중(kg) */
+  weight: number
+  /** 골키퍼 등급 1~20. 골키퍼가 아니면 낮다 */
+  goalkeeping: number
 }
 
 /**
@@ -83,24 +103,83 @@ export interface Player {
  * 두고 그 위에서 폭이 열린다.
  */
 export interface PlayerAttributes {
-  /** 기술 */
+  /** ── 기술적 능력 ── */
+  /** 개인기 */
+  technique: number
+  /** 골 결정력 — 엔진의 `finishing` 과 묶인다 */
   finish: number
-  pass: number
+  /** 드리블 */
   dribble: number
+  /** 일대일 마크 */
+  marking: number
+  /** 장거리 스로인 */
+  longThrow: number
+  /** 중거리 슛 */
+  longShot: number
+  /** 코너킥 */
+  corner: number
+  /** 크로스 */
+  cross: number
+  /** 태클 */
   tackle: number
-  header: number
+  /** 패스 */
+  pass: number
+  /** 퍼스트 터치 */
+  firstTouch: number
+  /** 페널티킥 */
+  penalty: number
+  /** 프리킥 */
   setPiece: number
-  /** 정신 */
+  /** 헤더 */
+  header: number
+
+  /** ── 정신적 능력 ── */
+  /** 공 없을 때 움직임 */
+  offTheBall: number
+  /** 대담성 */
+  bravery: number
+  /** 리더십 */
+  leadership: number
+  /** 수비 위치 */
+  positioning: number
+  /** 승부욕 */
+  determination: number
+  /** 시야 */
   vision: number
-  judgement: number
-  composure: number
-  workRate: number
+  /** 예측력 */
+  anticipation: number
+  /** 적극성 */
   aggression: number
-  /** 신체 */
-  pace: number
-  speed: number
-  endurance: number
+  /** 집중력 */
+  concentration: number
+  /** 천재성 */
+  flair: number
+  /** 침착성 */
+  composure: number
+  /** 팀워크 */
+  teamwork: number
+  /** 판단력 */
+  judgement: number
+  /** 활동량 */
+  workRate: number
+
+  /** ── 신체 ── */
+  /** 균형 감각 */
+  balance: number
+  /** 몸싸움 */
   strength: number
+  /** 민첩성 */
+  agility: number
+  /** 순간 속도 — 엔진의 `speed` 와 묶인다 */
+  pace: number
+  /** 점프 거리 */
+  jump: number
+  /** 주력 — 엔진의 `speed` 와 묶인다 */
+  speed: number
+  /** 지구력 */
+  endurance: number
+  /** 타고난 체력 */
+  naturalFitness: number
 }
 
 /** 경기 중 변하는 선수 상태 */

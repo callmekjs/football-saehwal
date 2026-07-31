@@ -135,6 +135,7 @@ export function PlayerDataCard({
         </strong>
         <div className="player-data-status">
           {isCaptain && <span data-captain="on">주장</span>}
+          {data.star && <span data-star="on">스타</span>}
           <span>{AVAILABILITY_LABEL[data.availability]}</span>
           {moved && <span>현재 {data.currentPosition}</span>}
           {data.booked && <span data-alert="on">경고</span>}
@@ -189,6 +190,13 @@ export function PlayerDataCard({
           </section>
         ))}
       </div>
+
+      <dl className="player-profile">
+        <div><dt>잘 쓰는 발</dt><dd>{data.profile.foot}</dd></div>
+        <div><dt>신장</dt><dd>{data.profile.height} cm</dd></div>
+        <div><dt>체중</dt><dd>{data.profile.weight} kg</dd></div>
+        <div><dt>골키퍼 등급</dt><dd>{data.profile.goalkeeping}</dd></div>
+      </dl>
 
       <p>
         능력치는 1~20이며 전부 창작입니다. <b>●</b> 표시가 이번 경기 계산에

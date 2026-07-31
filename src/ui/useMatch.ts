@@ -4,6 +4,7 @@ import { applySub, createState, tick, checkSub, checkOrder, checkPosition } from
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
 import type {
+  MatchAbility,
   Decision,
   OpponentId,
   Level,
@@ -129,8 +130,15 @@ export function changePosition(
  * 따라잡는다. 탭을 벗어났다 돌아왔을 때 수백 틱이 한 번에 밀려드는 것을
  * 막기 위해 한 프레임에 처리할 틱 수를 제한한다.
  */
-export function useMatch(problem: Problem, opponent: OpponentId = 'USA') {
-  const [state, setState] = useState<MatchState>(() => createState(problem, opponent))
+export function useMatch(
+  problem: Problem,
+  opponent: OpponentId = 'USA',
+  /** 감독이 고른 선발과 다시 뽑은 명단. 없으면 기본 선수단이다 */
+  squad?: { starters?: ReadonlySet<string>; roster?: ReadonlyMap<string, MatchAbility> },
+) {
+  const [state, setState] = useState<MatchState>(() =>
+    createState(problem, opponent, squad?.starters, squad?.roster),
+  )
   const [phase, setPhase] = useState<Phase>('READY')
 
   const rngRef = useRef<Rng>(createRng(problem.seed))

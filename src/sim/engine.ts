@@ -26,6 +26,7 @@ import { rollAway, awayRngFor, rollSetup } from './setup'
 import { EVENTS, FREE_POSITION, TOTAL_TICKS } from './constants'
 import type {
   Decision,
+  MatchAbility,
   OpponentId,
   MatchState,
   Mentality,
@@ -59,6 +60,10 @@ export const DEFAULT_OPPONENT: OpponentId = 'USA'
 export function createState(
   problem: Problem,
   opponent: OpponentId = DEFAULT_OPPONENT,
+  /** 감독이 고른 선발. 없으면 명단의 기본 선발이다 */
+  starters?: ReadonlySet<string>,
+  /** 다시 뽑은 명단. 없으면 기본 능력이다 */
+  roster?: ReadonlyMap<string, MatchAbility>,
 ): MatchState {
   /**
    * 시작 조건은 국면 시드에서 뽑는다.
@@ -66,7 +71,7 @@ export function createState(
    * 경기용 난수와 **분리된 스트림**을 쓰고 여기서 한 번만 소비한다.
    * 매 틱 18개를 뽑는 `drawTick()` 의 수열은 한 톨도 안 바뀐다.
    */
-  const rolled = rollSetup(problem, initialPlayers(problem))
+  const rolled = rollSetup(problem, initialPlayers(problem, starters, roster))
   const players = rolled.players
   /**
    * 이번 판에 만나는 상대. 대형·경고·부상·체력이 판마다 다르다.

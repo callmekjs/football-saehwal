@@ -1250,8 +1250,8 @@ button {
  */
 .player-attributes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
-  gap: 8px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px 16px;
   padding-top: 6px;
   border-top: 1px solid var(--border);
 }
@@ -1275,7 +1275,7 @@ button {
 .player-attributes dl > div {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   align-items: baseline;
   gap: 4px;
 }
@@ -5684,3 +5684,551 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .analysis-loader { animation: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   첫 화면 (타이틀)
+
+   배경은 전부 CSS 도형이다. 이 저장소는 이미지 파일을 하나도 두지
+   않기로 했고, 그건 저작권만이 아니라 실존 인물을 끌어들이지 않겠다는
+   결정이다. 외부 파일을 부르지 않으므로 오프라인에서도 그대로 뜬다.
+   ───────────────────────────────────────────────────────────── */
+.title-screen {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  align-items: center;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.title-stage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.title-sky {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 80% at 50% 0%, #16283a 0%, #0a121b 55%, #05090e 100%);
+}
+
+/* 조명탑 불빛 두 줄 */
+.title-glow {
+  position: absolute;
+  top: -18%;
+  width: 46%;
+  height: 96%;
+  filter: blur(48px);
+  opacity: 0.5;
+  background: radial-gradient(60% 50% at 50% 0%, rgba(120, 200, 255, 0.5), transparent 70%);
+}
+
+.title-glow.left { left: -6%; transform: rotate(-11deg); }
+.title-glow.right { right: -6%; transform: rotate(11deg); }
+
+/* 원근으로 누운 잔디 */
+.title-pitch {
+  position: absolute;
+  left: 50%;
+  bottom: -14%;
+  width: 150%;
+  height: 74%;
+  transform: translateX(-50%) perspective(760px) rotateX(63deg);
+  transform-origin: 50% 100%;
+  border-top: 2px solid rgba(120, 220, 170, 0.16);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(30, 78, 58, 0.55) 0 84px,
+      rgba(24, 66, 49, 0.55) 84px 168px
+    );
+}
+
+.title-pitch i {
+  position: absolute;
+  border: 2px solid rgba(190, 240, 214, 0.16);
+}
+
+.title-pitch .halfway { left: 0; right: 0; top: 50%; border-width: 2px 0 0; }
+.title-pitch .circle {
+  left: 50%; top: 50%;
+  width: 190px; height: 190px;
+  margin: -95px 0 0 -95px;
+  border-radius: 50%;
+}
+.title-pitch .box { left: 50%; width: 330px; height: 108px; margin-left: -165px; }
+.title-pitch .box.near { bottom: 0; border-bottom: 0; }
+.title-pitch .box.far { top: 0; border-top: 0; }
+
+.title-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(5, 9, 14, 0.96) 0%, rgba(5, 9, 14, 0.62) 42%, transparent 72%),
+    linear-gradient(0deg, rgba(5, 9, 14, 0.9) 0%, transparent 42%);
+}
+
+.title-panel {
+  position: relative;
+  width: min(460px, calc(100% - 48px));
+  margin: 0 0 0 clamp(24px, 7vw, 104px);
+  padding: 32px 0;
+  display: grid;
+  gap: 20px;
+}
+
+.title-kicker {
+  margin: 0 0 2px;
+  color: var(--accent);
+  font-family: var(--label);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.title-wordmark {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(46px, 8vw, 78px);
+  line-height: 0.94;
+  letter-spacing: -0.01em;
+  text-shadow: 0 6px 32px rgba(0, 0, 0, 0.6);
+}
+
+.title-tagline {
+  margin: 12px 0 0;
+  max-width: 40ch;
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.title-tagline b { color: var(--accent); font-weight: 600; }
+
+.title-menu { display: grid; gap: 8px; }
+
+.title-menu button {
+  min-height: 56px;
+  padding: 10px 16px;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(19, 29, 40, 0.82);
+  color: var(--text);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
+}
+
+.title-menu button b { font-size: 15px; font-weight: 600; }
+.title-menu button small { color: var(--dim-2); font-size: 11px; }
+
+.title-menu button:hover,
+.title-menu button:focus-visible {
+  border-color: var(--accent);
+  background: rgba(26, 39, 53, 0.94);
+  transform: translateX(2px);
+}
+
+/* 첫 줄만 크게. 처음 온 사람이 무엇을 눌러야 하는지 하나로 좁힌다 */
+.title-menu .title-main {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: var(--accent);
+  background: linear-gradient(100deg, rgba(100, 212, 155, 0.22), rgba(19, 29, 40, 0.86));
+}
+
+.title-menu .title-main b { font-size: 20px; }
+.title-menu .title-main small { color: var(--text-4); }
+.title-menu .title-main span { display: grid; gap: 2px; }
+.title-menu .title-main i { color: var(--accent); font-size: 20px; font-style: normal; }
+
+.title-facts {
+  margin: 0;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.title-facts div { display: grid; gap: 1px; }
+.title-facts dt { color: var(--dim-2); font-family: var(--label); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
+.title-facts dd { margin: 0; font-family: var(--num); font-size: 24px; line-height: 1; }
+
+.title-note {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--dim-3);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+/* 좁은 화면에서는 잔디를 낮추고 글을 위로 올린다 */
+@media (max-width: 720px) {
+  .title-screen { align-items: start; }
+  .title-panel { margin: 0 auto; padding: 28px 0 40px; }
+  .title-pitch { height: 52%; bottom: -22%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-menu button { transition: none; }
+  .title-menu button:hover { transform: none; }
+}
+
+/* 머리줄의 제목을 눌러 첫 화면으로 돌아간다 */
+.kickoff-wordmark.as-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.kickoff-wordmark.as-button:hover,
+.kickoff-wordmark.as-button:focus-visible {
+  color: var(--accent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   01 · 우리 팀
+   ───────────────────────────────────────────────────────────── */
+.squad-section { display: grid; gap: 14px; }
+
+.squad-summary {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.squad-summary > div {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.squad-summary dt {
+  color: var(--dim-2);
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.squad-summary dd {
+  margin: 2px 0 0;
+  font-family: var(--num);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.squad-summary dd[data-tone='warn'] { color: var(--warn); }
+.squad-summary dd[data-tone='danger'] { color: var(--away); }
+.squad-summary dd[data-tone='safe'] { color: var(--accent); }
+
+.squad-group h3 {
+  margin: 0 0 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--label);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
+
+.squad-group h3 small { color: var(--dim-2); font-size: 10px; }
+
+.squad-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+
+.squad-row {
+  display: grid;
+  grid-template-columns: 58px 132px 128px minmax(0, 1fr) minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.squad-row[data-out='on'] { opacity: 0.5; }
+
+.squad-row-id { display: flex; align-items: baseline; gap: 5px; }
+.squad-row-id b { font-family: var(--num); font-size: 20px; }
+.squad-row-id small { color: var(--dim-2); font-size: 10px; }
+
+.squad-row-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.squad-row-tags em {
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: var(--panel-2);
+  color: var(--dim-2);
+  font-size: 9px;
+  font-style: normal;
+}
+.squad-row-tags em[data-role='start'] { background: rgba(100, 212, 155, 0.16); color: var(--accent); }
+.squad-row-tags em[data-alert='on'] { background: rgba(255, 107, 97, 0.16); color: var(--away); }
+
+.squad-row-condition { display: flex; align-items: center; gap: 5px; }
+.squad-row-condition small { color: var(--dim-2); font-size: 9px; }
+.squad-row-condition i {
+  flex: 1;
+  height: 5px;
+  min-width: 32px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+  display: block;
+}
+.squad-row-condition i b { display: block; height: 100%; background: var(--accent); }
+.squad-row-condition i b[data-tone='warn'] { background: var(--warn); }
+.squad-row-condition i b[data-tone='danger'] { background: var(--away); }
+.squad-row-condition strong { font-family: var(--num); font-size: 14px; min-width: 22px; text-align: right; }
+
+.squad-row-key { display: flex; gap: 8px; flex-wrap: wrap; }
+.squad-row-key > span { display: flex; align-items: baseline; gap: 3px; }
+.squad-row-key small { color: var(--dim-2); font-size: 9px; }
+.squad-row-key b {
+  padding: 0 5px;
+  border-radius: 3px;
+  font-family: var(--num);
+  font-size: 12px;
+}
+.squad-row-key b[data-tone='low'] { background: rgba(148,163,184,.14); color: var(--text-4); }
+.squad-row-key b[data-tone='mid'] { background: rgba(56,189,248,.14); color: #7dd3fc; }
+.squad-row-key b[data-tone='high'] { background: rgba(34,197,94,.16); color: #86efac; }
+.squad-row-key b[data-tone='elite'] { background: rgba(250,204,21,.18); color: #fde047; }
+
+.squad-row-note {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dim-2);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-section-note { margin: 0; color: var(--dim-3); font-size: 10px; }
+
+/* 좁아지면 줄을 두 단으로 접는다 */
+@media (max-width: 1100px) {
+  .squad-row {
+    grid-template-columns: 58px minmax(0, 1fr) 64px;
+    row-gap: 6px;
+  }
+  .squad-row-key { grid-column: 1 / -1; }
+  .squad-row-note { grid-column: 1 / -1; white-space: normal; }
+}
+
+@media (max-width: 640px) {
+  .squad-row { grid-template-columns: 52px minmax(0, 1fr); }
+  .squad-row-condition { grid-column: 1 / -1; }
+}
+
+/* 차례 안내가 링크에서 버튼으로 바뀌었다. 누르면 페이지가 통째로 바뀐다 */
+.kickoff-nav button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-4);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kickoff-nav button b {
+  font-family: var(--num);
+  font-size: 15px;
+  color: var(--dim-2);
+}
+
+.kickoff-nav button span { display: grid; gap: 1px; min-width: 0; }
+.kickoff-nav button span i {
+  color: var(--dim-3);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.kickoff-nav button:hover,
+.kickoff-nav button:focus-visible {
+  border-color: var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.kickoff-nav button.active {
+  border-color: var(--accent);
+  background: rgba(100, 212, 155, 0.12);
+  color: var(--text);
+}
+
+.kickoff-nav button.active b { color: var(--accent); }
+
+/* 사이드바가 사라졌으므로 본문이 남은 폭을 다 쓴다 */
+.kickoff-layout { grid-template-columns: 212px minmax(0, 1fr); }
+
+.kickoff-house-rules.wide { max-width: none; }
+
+/* ── 04 · 기록 ── */
+.history-section { display: grid; gap: 14px; }
+
+.history-empty {
+  padding: 28px 20px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+}
+.history-empty strong { display: block; font-size: 16px; }
+.history-empty p { margin: 6px auto 0; max-width: 46ch; color: var(--dim-2); font-size: 12px; }
+
+.history-summary {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.history-summary > div {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.history-summary dt {
+  color: var(--dim-2);
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.history-summary dd { margin: 2px 0 0; font-family: var(--num); font-size: 22px; line-height: 1; }
+.history-summary dd[data-tone='safe'] { color: var(--accent); }
+
+.history-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+
+.history-list li {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 62px 54px 80px 72px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--panel);
+}
+.history-list li[data-passed='on'] { border-left-color: var(--accent); }
+.history-list li[data-passed='off'] { border-left-color: var(--away); }
+
+.history-when { color: var(--dim-2); font-size: 10px; }
+.history-what { display: grid; gap: 1px; min-width: 0; }
+.history-what b { font-size: 13px; }
+.history-what small { color: var(--dim-2); font-size: 10px; }
+.history-score { font-family: var(--num); font-size: 18px; text-align: center; }
+.history-score i { color: var(--dim-3); font-style: normal; margin: 0 2px; }
+.history-result { font-size: 12px; text-align: center; }
+.history-result[data-passed='on'] { color: var(--accent); }
+.history-result[data-passed='off'] { color: var(--away); }
+.history-decisions { color: var(--dim-2); font-size: 10px; }
+.history-delta { font-family: var(--num); font-size: 14px; text-align: right; }
+.history-delta[data-sign='up'] { color: var(--accent); }
+.history-delta[data-sign='down'] { color: var(--away); }
+
+.history-clear { justify-self: start; }
+.history-note { margin: 0; color: var(--dim-3); font-size: 10px; }
+
+@media (max-width: 900px) {
+  .kickoff-layout { grid-template-columns: minmax(0, 1fr); }
+  .history-list li { grid-template-columns: minmax(0, 1fr) 62px 54px; row-gap: 4px; }
+  .history-when { grid-column: 1 / -1; }
+  .history-decisions, .history-delta { grid-column: span 1; text-align: left; }
+}
+
+/* 명단 다시 뽑기 · 선발 지정 */
+.squad-refresh {
+  min-height: 44px;
+  padding: 6px 14px;
+  display: grid;
+  gap: 1px;
+  justify-items: start;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(100, 212, 155, 0.12);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.squad-refresh b { font-size: 13px; }
+.squad-refresh small { color: var(--dim-2); font-size: 10px; }
+.squad-refresh:hover { background: rgba(100, 212, 155, 0.2); }
+
+.squad-lineup-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--dim-2);
+  font-size: 11px;
+}
+
+.squad-row-pick {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text-4);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.squad-row-pick:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.squad-row-pick:disabled { opacity: 0.4; cursor: default; }
+
+.squad-row[data-picked='on'] { border-color: var(--accent); background: rgba(100, 212, 155, 0.1); }
+.squad-row[data-swappable='on'] { border-color: var(--warn); }
+.squad-row[data-swappable='on'] .squad-row-pick { border-color: var(--warn); color: var(--warn); }
+
+/* 스타 선수 */
+.squad-row-tags em[data-star='on'] {
+  background: rgba(250, 204, 21, 0.2);
+  color: #fde047;
+  font-weight: 600;
+}
+
+/* 선수 카드의 신상 (주발·신장·체중·골키퍼 등급) */
+.player-profile {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 4px 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.player-profile > div { display: grid; gap: 1px; }
+.player-profile dt { color: var(--dim-2); font-size: 8px; }
+.player-profile dd { margin: 0; font-family: var(--num); font-size: 12px; }
+.player-data-status span[data-star='on'] { background: rgba(250,204,21,.2); color: #fde047; }
