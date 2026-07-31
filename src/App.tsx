@@ -30,6 +30,7 @@ import type { Level, OpponentId, Position, Problem } from './sim/types'
 import { attributeLabel } from './ui/playerData'
 import { MatchScreen } from './ui/MatchScreen'
 import { TitleScreen, type HomeSection } from './ui/TitleScreen'
+import { regulationEnd } from './matchClock'
 import { clearHistory, readHistory, upsertRecord, type MatchRecord } from './ui/matchHistory'
 import { isSameMatch, toRecord } from './ui/recordMatch'
 import { SquadSection } from './ui/SquadSection'
@@ -691,6 +692,20 @@ export function App() {
     return (
       <TitleScreen
         historyCount={history.length}
+        preview={{
+          homeName: OUR_TEAM.name,
+          awayName: opponentInfo(opponent).name,
+          score: selectedEntry.problem.score,
+          kickoffMinute: kickoffMinute(selectedHalf),
+          endMinute: segmentEnd(selectedHalf),
+          regulationMinute: regulationEnd(selectedHalf),
+          halfLabel: halfLabel(selectedHalf),
+          problemTitle: selectedEntry.problem.title,
+          problemSummary: selectedEntry.summary,
+          goal: goalLabel(selectedEntry.problem),
+          subsLeft: selectedEntry.problem.subsLeft,
+          bookedCount: selectedEntry.problem.booked.length,
+        }}
         onStart={() => {
           // 선수부터 보고 고를 수 있게 우리 팀으로 들어간다.
           // 사용자가 정했다 — "바로 시작하면 1번으로 가서 선수들을 고를 수

@@ -2,8 +2,11 @@
  * 첫 화면.
  *
  * 사용자가 정했다 — *"이런 류의 메인페이지가 있어야 해. 우리는 바로 게임
- * 시작이잖아."* 전에는 열자마자 상대와 국면을 고르라고 했다. 무엇을 하는
- * 것인지 알기 전에 선택을 요구하는 화면이었다.
+ * 시작이잖아."* 전에는 열자마자 상대와 국면을 고르라고 했다.
+ *
+ * **오른쪽 카드는 지어낸 예시가 아니다.** 곧 시작할 그 판의 실제 스코어와
+ * 목표와 교체 카드 수를 읽는다. 첫 화면이 보여준 상황과 눌러서 들어간
+ * 상황이 다르면 그 화면은 소개가 아니라 광고지다.
  *
  * **사진과 로고는 쓰지 않는다.** 이 저장소는 선수 사진·엠블럼·유니폼
  * 이미지를 하나도 두지 않기로 했고, 그건 저작권만의 문제가 아니라 실존
@@ -13,13 +16,56 @@
 
 export type HomeSection = 'squad' | 'opponent' | 'situation' | 'history'
 
+/** 첫 화면 오른쪽 카드가 읽는 값. 전부 실제 국면에서 온다 */
+export interface TitlePreview {
+  homeName: string
+  awayName: string
+  score: readonly [number, number]
+  /** 재개하는 분. 후반이면 70 */
+  kickoffMinute: number
+  /** 그 반이 끝나는 분. 후반이면 92 */
+  endMinute: number
+  /** 정규 시간이 끝나는 분. 후반이면 90 */
+  regulationMinute: number
+  halfLabel: string
+  problemTitle: string
+  problemSummary: string
+  goal: string
+  subsLeft: number
+  bookedCount: number
+}
+
 export interface TitleScreenProps {
   onStart: () => void
   onGo: (section: HomeSection) => void
   historyCount: number
+  preview: TitlePreview
 }
 
-export function TitleScreen({ onStart, onGo, historyCount }: TitleScreenProps) {
+/** 한 판이 흘러가는 세 걸음 */
+const STEPS = [
+  {
+    n: '01',
+    title: '상황을 받는다',
+    body: '스코어·남은 시간·교체 카드·경고까지 정해진 채로 시작합니다. 처음부터 쌓아 올리는 경기가 아니라, 이미 기울어진 판을 받습니다.',
+  },
+  {
+    n: '02',
+    title: '75초 안에 개입한다',
+    body: '시계는 멈추지 않습니다. 고민하는 동안에도 상대는 공격하고 체력은 떨어집니다. 전술을 바꾸고 교체 카드를 쓰되, 되돌릴 수는 없습니다.',
+  },
+  {
+    n: '03',
+    title: '결과와 판단을 따로 받는다',
+    body: '축구는 확률 게임입니다. 옳게 판단하고도 무너질 수 있어서, 승패와 감독 평점을 따로 매깁니다. 무너졌지만 명장이 성립합니다.',
+  },
+] as const
+
+export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScreenProps) {
+  const added = preview.endMinute - preview.regulationMinute
+  // 재개하는 분이 그 반의 어디쯤인지. 진행 막대가 이 값을 쓴다
+  const elapsed = ((preview.kickoffMinute - (preview.regulationMinute - 45)) / 45) * 100
+
   return (
     <div className="title-screen">
       {/* 야간 경기장. 전부 CSS 도형이라 부르는 파일이 없다 */}
@@ -36,94 +82,114 @@ export function TitleScreen({ onStart, onGo, historyCount }: TitleScreenProps) {
         <i className="title-vignette" />
       </div>
 
-      {/*
-        오른쪽에 그리는 축구 그림.
-        사용자가 정했다 — *"공간들이 많이 남아 있으니 축구 관련된 그림 같은
-        거 넣어줘."*
-
-        **사진이 아니라 이 게임의 장면이다.** 골문 앞에 다섯 명이 벽을 세우고
-        공격수 셋이 파고드는, 이 시뮬레이션이 실제로 다루는 국면 하나를
-        도형으로 그렸다. 전부 CSS 이고 부르는 파일이 없다.
-      */}
-      <div className="title-art" aria-hidden>
-        <div className="title-art-goal">
-          <i className="post left" />
-          <i className="post right" />
-          <i className="bar" />
-          <i className="net" />
+      <header className="title-top">
+        <div className="title-brand">
+          <b>신의 한 수</b>
+          <i aria-hidden>:</i>
+          <span>축구 사활</span>
         </div>
-        <div className="title-art-box" />
-        <div className="title-art-arc" />
-
-        {/* 물러서서 벽을 세운 수비 다섯 */}
-        {[18, 32, 46, 60, 74].map((left) => (
-          <i key={`d${left}`} className="title-art-dot theirs" style={{ left: `${left}%` }} />
-        ))}
-        {/* 파고드는 공격 셋 */}
-        <i className="title-art-dot ours" style={{ left: '26%', top: '62%' }} />
-        <i className="title-art-dot ours" style={{ left: '50%', top: '70%' }} />
-        <i className="title-art-dot ours" style={{ left: '70%', top: '60%' }} />
-
-        {/* 공과 그 공이 갈 길 */}
-        <i className="title-art-ball" />
-        <svg className="title-art-run" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <path d="M50 70 C 50 52, 40 44, 30 36" />
-          <path d="M50 70 C 56 50, 66 42, 74 34" />
-        </svg>
-      </div>
-
-      <div className="title-panel">
-        <header>
-          <p className="title-kicker">축구 전술 사활</p>
-          <h1 className="title-wordmark">축구 사활</h1>
-          <p className="title-tagline">
-            바둑의 사활문제를 축구로 옮겼습니다. 무너지기 직전의 한 국면을 받아
-            <b>실시간 75초</b> 안에 타파합니다.
-          </p>
-        </header>
-
-        <nav className="title-menu" aria-label="시작 메뉴">
-          <button type="button" className="title-main" onClick={onStart}>
-            <span>
-              <b>바로 시작</b>
-              <small>선수단을 보고 선발을 고른 뒤 킥오프</small>
-            </span>
-            <i aria-hidden>▶</i>
-          </button>
-
-          {/*
-            메뉴는 둘뿐이다. 사용자가 정했다 — *"첫 화면은 바로 시작과 지난
-            기록만 넣어줘."* 우리 팀과 상대 보기는 시작한 뒤 왼쪽 차례
-            안내에서 언제든 갈 수 있으므로 여기서 한 번 더 물을 이유가 없다.
-          */}
-          <button type="button" onClick={() => onGo('history')}>
-            <b>지난 기록</b>
-            <small>
-              {historyCount > 0 ? `${historyCount}판의 결과와 판단` : '아직 기록이 없습니다'}
-            </small>
-          </button>
-        </nav>
-
-        <dl className="title-facts">
-          <div>
-            <dt>국면</dt>
-            <dd>5</dd>
-          </div>
-          <div>
-            <dt>상대</dt>
-            <dd>13</dd>
-          </div>
-          <div>
-            <dt>한 판</dt>
-            <dd>75초</dd>
-          </div>
-        </dl>
-
-        <p className="title-note">
-          시계는 멈추지 않고 교체 카드는 되돌릴 수 없습니다. 선수와 국면은 전부
-          창작이며 실존 인물의 이름을 쓰지 않습니다.
+        <p className="title-mode">
+          <i aria-hidden />
+          축구 사활문제 · 감독 모드
         </p>
-      </div>
+        <p className="title-facts">한 판 75초 · 국면 5종 · 상대 13팀</p>
+      </header>
+
+      <main className="title-body">
+        <section className="title-lead">
+          <p className="title-kicker">
+            {preview.halfLabel} {preview.kickoffMinute}분 · {preview.score[0]}-
+            {preview.score[1]} · {preview.goal}
+          </p>
+          <h1 className="title-headline">
+            한 장면에서
+            <b>승부가 갈린다</b>
+          </h1>
+          <p className="title-tagline">
+            바둑에 사활문제가 있다면, 축구에는 국면이 있습니다. 이미 벌어진 상황
+            하나를 받아 들고, 흐르는 경기 안에서 그것을 타파하는 시뮬레이션입니다.
+          </p>
+
+          <div className="title-actions">
+            <button type="button" className="title-play" onClick={onStart}>
+              <b>PLAY</b>
+              <small>선수단을 보고 국면을 고른 뒤 시작합니다</small>
+            </button>
+            <p className="title-fineprint">
+              설치 없이 브라우저에서 바로
+              <span>실존 구단·선수를 쓰지 않습니다</span>
+            </p>
+          </div>
+
+          <button type="button" className="title-history" onClick={() => onGo('history')}>
+            지난 기록
+            <i>
+              {historyCount > 0 ? `${historyCount}판의 결과와 판단` : '아직 기록이 없습니다'}
+            </i>
+          </button>
+        </section>
+
+        {/* 곧 시작할 그 판의 실제 값. 예시가 아니다 */}
+        <aside className="title-card" aria-label="곧 시작할 국면">
+          <header>
+            <span>주어지는 국면</span>
+            <em>
+              <i aria-hidden />
+              여기서 시작합니다
+            </em>
+          </header>
+
+          <div className="title-card-score">
+            <span className="crest home">{preview.homeName}</span>
+            <b>{preview.score[0]}</b>
+            <i>:</i>
+            <b>{preview.score[1]}</b>
+            <span className="crest away">{preview.awayName}</span>
+          </div>
+          <p className="title-card-sides">
+            <span>홈</span>
+            <span>원정</span>
+          </p>
+
+          <div className="title-card-clock">
+            <strong>{preview.kickoffMinute}:00</strong>
+            <i aria-hidden>
+              <u style={{ width: `${Math.max(4, Math.min(96, elapsed))}%` }} />
+            </i>
+            <small>
+              {preview.regulationMinute}′ +{added}
+            </small>
+          </div>
+
+          <dl className="title-card-facts">
+            <div>
+              <dt>상황</dt>
+              <dd>{preview.problemTitle}</dd>
+              <p>{preview.problemSummary}</p>
+            </div>
+            <div>
+              <dt>당신의 목표</dt>
+              <dd data-goal="on">{preview.goal}</dd>
+              <p>
+                교체 카드 {preview.subsLeft}장 ·{' '}
+                {preview.bookedCount > 0 ? `경고 ${preview.bookedCount}명` : '경고 없음'}
+              </p>
+            </div>
+          </dl>
+        </aside>
+      </main>
+
+      <section className="title-steps" aria-label="한 판의 흐름">
+        {STEPS.map((step) => (
+          <article key={step.n}>
+            <h2>
+              <b>{step.n}</b>
+              {step.title}
+            </h2>
+            <p>{step.body}</p>
+          </article>
+        ))}
+      </section>
     </div>
   )
 }
