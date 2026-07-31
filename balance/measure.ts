@@ -6,11 +6,19 @@
  */
 import raw from '../src/data/problems.json' with { type: 'json' }
 import { simulate } from '../src/sim/engine'
-import { OPPONENTS } from '../src/sim/constants'
+import { OPPONENTS, FREE_POSITION } from '../src/sim/constants'
 import { FORMATION_IDS, type FormationId } from '../src/sim/formations'
-import { getPlayer, initialPlayers } from '../src/sim/squad'
+import { abilityOf, effectivePos, initialPlayers } from '../src/sim/squad'
+import { rollSetup } from '../src/sim/setup'
 import { toProblem } from '../src/sim/problems'
-import type { Decision, OpponentId, Level, PlayerOrder, Problem } from '../src/sim/types'
+import type {
+  Decision,
+  OpponentId,
+  Level,
+  PlayerOrder,
+  PlayerState,
+  Problem,
+} from '../src/sim/types'
 
 /** 국면 파싱은 `src/sim/problems.ts` 한 자리에만 둔다 */
 export const problems = raw.map(toProblem)
@@ -62,17 +70,56 @@ const stderr = (p: number) => Math.sqrt((p * (1 - p)) / SEEDS)
 const NOOP_MAX = 0.5
 const GAP_MIN = 0.2
 
-function measure(base: Problem, decisions: Decision[], opponent: OpponentId) {
+/**
+ * 이 시드의 킥오프 직전 선수 상태.
+ *
+ * **지시를 걸 상대를 여기서 고른다.** 국면 JSON의 `booked`·`staminaOverrides`
+ * 를 보고 고르면 안 된다 — `rollSetup` 이 판마다 경고 보유자를 **다시 뽑고**
+ * (국면에 적힌 것에 더하는 것이 아니라 통째로 갈아치운다) 체력도 선수끼리
+ * 섞기 때문에, JSON을 보고 고른 대상은 실제 경기에서 경고도 없고 지치지도
+ * 않은 엉뚱한 선수가 된다.
+ *
+ * 읽기 전용이다. `rollSetup` 은 경기용 스트림과 분리된 시작 조건 스트림을
+ * 쓰므로 여기서 한 번 더 굴려도 경기의 매 틱 18슬롯은 한 톨도 안 바뀐다.
+ */
+function kickoffPlayers(base: Problem): PlayerState[] {
+  return rollSetup(base, initialPlayers(base)).players
+}
+
+function measure(
+  base: Problem,
+  decisions: Decision[],
+  opponent: OpponentId,
+  /** 시드마다 대상을 다시 고르는 개별 지시. 없으면 지시 없는 경기다 */
+  plan?: OrderPlan,
+) {
   let pass = 0
   let home = 0
   let away = 0
+  /** 대상을 실제로 찾은 판의 수. 0에 가까우면 그 지시는 측정되지 않은 것이다 */
+  let applied = 0
   for (let s = 0; s < SEEDS; s++) {
-    const r = simulate({ ...base, seed: base.seed + s }, decisions, opponent)
+    const p = { ...base, seed: base.seed + s }
+    let all = decisions
+    if (plan) {
+      const picks = plan.pick(kickoffPlayers(p))
+      if (picks.length > 0) applied++
+      all = [
+        ...decisions,
+        ...picks.map(([target, order]) => ({ tick: 0, type: 'ORDER' as const, target, order })),
+      ]
+    }
+    const r = simulate(p, all, opponent)
     if (r.passed) pass++
     home += r.final.score[0] - base.score[0]
     away += r.final.score[1] - base.score[1]
   }
-  return { rate: pass / SEEDS, home: home / SEEDS, away: away / SEEDS }
+  return {
+    rate: pass / SEEDS,
+    home: home / SEEDS,
+    away: away / SEEDS,
+    coverage: plan ? applied / SEEDS : 1,
+  }
 }
 
 const set = (line: Level, press: Level, width: Level): Decision[] => [
@@ -89,43 +136,130 @@ const set = (line: Level, press: Level, width: Level): Decision[] => [
  * 전량 교차(27 × 지시)를 돌리면 측정이 열 배로 늘어나는데, 지시가 결과를
  * 움직이는지만 알면 충분하다.
  *
- * 대상은 국면마다 다르게 고른다. 상수로 박으면(예: "4번 수비수") 포메이션이
- * 바뀌거나 그 선수가 없는 국면에서 지시가 조용히 사라진다.
+ * ★ **대상은 시드마다 다시 고른다.** 전에는 국면 JSON에서 한 번 고르고
+ * 1200판 내내 같은 등번호에 걸었는데, `rollSetup` 이 판마다 경고 보유자를
+ * 다시 뽑고 체력을 선수끼리 섞기 때문에 그 등번호는 대부분의 판에서
+ * **경고도 없고 지치지도 않은 선수**였다. 「물러서라 +0.0%p」·「아껴뛰어라
+ * +0.1%p」는 지시가 약해서가 아니라 **엉뚱한 사람에게 걸려서** 나온 값이다.
+ *
+ * ★ **이미 지시를 받은 선수는 고르지 않는다.** 국면이 앞 감독의 잘못 걸린
+ * 지시를 최대 두 명에게 물려주는데, 그 위에 덮어쓰면 「지시를 하나 더했다」가
+ * 아니라 「지시를 바꿨다」가 되어 측정이 두 효과의 합이 된다.
  */
-function orderPlans(base: Problem): Array<{ label: string; picks: Array<[string, PlayerOrder]> }> {
-  const onPitch = initialPlayers(base).filter((s) => s.onPitch && !s.out)
-  const defs = onPitch.filter((s) => getPlayer(s.id).pos === 'DF').map((s) => s.id)
-  const mids = onPitch.filter((s) => getPlayer(s.id).pos === 'MF').map((s) => s.id)
-  // 물러설 1순위는 경고를 안고 있는 선수다. 두 번째 경고가 곧 퇴장이다
-  const risky = onPitch.find((s) => s.booked)?.id ?? mids[0]
-  /**
-   * 아껴 뛸 1순위는 체력이 가장 낮은 선수다. 부상 임계(25)에 가장 가깝다.
-   *
-   * **물러설 선수와 겹치면 안 된다.** 한 사람에게 두 지시를 걸면 뒤엣것만
-   * 남아 조합 측정이 통째로 사라진다 — 실제로 세 국면 모두 경고 보유자가
-   * 곧 최저 체력자여서, 조합 행이 조용히 비어 있었다
-   */
-  const tired = [...onPitch]
-    .sort((a, b) => a.stamina - b.stamina)
-    .find((s) => s.id !== risky)?.id
-  const hold: Array<[string, PlayerOrder]> = defs.slice(0, 2).map((id) => [id, 'HOLD'])
-
-  const plans: Array<{ label: string; picks: Array<[string, PlayerOrder]> }> = [
-    { label: '지시 없음', picks: [] },
-    { label: '골문앞 1', picks: hold.slice(0, 1) },
-    { label: '골문앞 2', picks: hold },
-  ]
-  if (risky) plans.push({ label: '물러서라', picks: [[risky, 'BACK_OFF']] })
-  if (tired) plans.push({ label: '아껴뛰어라', picks: [[tired, 'CONSERVE']] })
-  if (risky && tired && risky !== tired) {
-    plans.push({ label: '물러서라+아껴뛰어라', picks: [[risky, 'BACK_OFF'], [tired, 'CONSERVE']] })
-    plans.push({
-      label: '골문앞1+물러서라+아껴뛰어라',
-      picks: [...hold.slice(0, 1), [risky, 'BACK_OFF'], [tired, 'CONSERVE']],
-    })
-  }
-  return plans
+type Pick = [string, PlayerOrder]
+interface OrderPlan {
+  label: string
+  pick: (players: PlayerState[]) => Pick[]
 }
+
+/** 지금 뛰고 있고 아직 아무 지시도 안 받은 선수 */
+const free = (players: PlayerState[]) =>
+  players.filter((s) => s.onPitch && !s.out && s.order === 'NONE')
+
+const byId = (a: PlayerState, b: PlayerState) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
+/** 지금 수비 줄에 서 있는 사람 수. 세 명 아래로 내려가는 이동은 막혀 있다 */
+const defenderCount = (players: PlayerState[]) =>
+  players.filter((s) => s.onPitch && !s.out && effectivePos(s) === 'DF').length
+
+const ORDER_PLANS: OrderPlan[] = [
+  { label: '지시 없음', pick: () => [] },
+  // 골문 앞은 수비수에게 건다. 지금 뒷줄에 서 있는 사람이면 된다
+  {
+    label: '골문앞 1',
+    pick: (ps) =>
+      free(ps)
+        .filter((s) => effectivePos(s) === 'DF')
+        .sort(byId)
+        .slice(0, 1)
+        .map((s) => [s.id, 'HOLD']),
+  },
+  {
+    label: '골문앞 2',
+    pick: (ps) =>
+      free(ps)
+        .filter((s) => effectivePos(s) === 'DF')
+        .sort(byId)
+        .slice(0, 2)
+        .map((s) => [s.id, 'HOLD']),
+  },
+  /**
+   * 내려서라 — **가장 빠른 미드필더**를 내린다.
+   *
+   * 배후 실점은 수비 자원 중 가장 느린 하나로 정해지므로, 느린 선수를
+   * 내리면 그 값이 내려가 오히려 손해다. 감독이 실제로 고를 사람으로 재야
+   * 지시의 값을 재는 것이지 실수의 값을 재는 것이 아니다.
+   */
+  {
+    label: '내려서라',
+    pick: (ps) => {
+      const mid = free(ps)
+        .filter((s) => effectivePos(s) === 'MF')
+        .sort((a, b) => abilityOf(b).speed - abilityOf(a).speed || byId(a, b))[0]
+      return mid ? [[mid.id, 'DROP_BACK']] : []
+    },
+  },
+  /**
+   * 올라가라 — **가장 느린 수비수**를 올린다.
+   *
+   * 같은 이유의 반대다. 뒷줄에서 가장 느린 사람을 빼면 남은 수비 자원의
+   * 최저 속도가 올라간다. 대신 세트피스에서 막을 몸이 하나 준다.
+   * 수비가 셋 아래로 내려가는 이동은 엔진이 막으므로 그 조건도 지킨다.
+   */
+  {
+    label: '올라가라',
+    pick: (ps) => {
+      if (defenderCount(ps) <= FREE_POSITION.rules.minDefenders) return []
+      const back = free(ps)
+        .filter((s) => effectivePos(s) === 'DF')
+        .sort((a, b) => abilityOf(a).speed - abilityOf(b).speed || byId(a, b))[0]
+      return back ? [[back.id, 'PUSH_UP']] : []
+    },
+  },
+  // 물러설 1순위는 경고를 안고 있는 선수다. 두 번째 경고가 곧 퇴장이다
+  {
+    label: '물러서라',
+    pick: (ps) => {
+      const risky = free(ps)
+        .filter((s) => s.booked)
+        .sort(byId)[0]
+      return risky ? [[risky.id, 'BACK_OFF']] : []
+    },
+  },
+  // 아껴 뛸 1순위는 체력이 가장 낮은 선수다. 부상 임계(25)에 가장 가깝다
+  {
+    label: '아껴뛰어라',
+    pick: (ps) => {
+      const tired = free(ps).sort((a, b) => a.stamina - b.stamina || byId(a, b))[0]
+      return tired ? [[tired.id, 'CONSERVE']] : []
+    },
+  },
+  /**
+   * 셋을 겹쳐 건다. 서로 다른 사람에게 걸어야 한다 — 한 사람에게 두 지시를
+   * 걸면 뒤엣것만 남아 조합이 조용히 하나짜리가 된다
+   */
+  {
+    label: '골문앞1+물러서라+아껴뛰어라',
+    pick: (ps) => {
+      const picks: Pick[] = []
+      const used = new Set<string>()
+      const take = (s: PlayerState | undefined, order: PlayerOrder) => {
+        if (!s || used.has(s.id)) return
+        used.add(s.id)
+        picks.push([s.id, order])
+      }
+      take(free(ps).filter((s) => effectivePos(s) === 'DF').sort(byId)[0], 'HOLD')
+      take(free(ps).filter((s) => s.booked && !used.has(s.id)).sort(byId)[0], 'BACK_OFF')
+      take(
+        free(ps)
+          .filter((s) => !used.has(s.id))
+          .sort((a, b) => a.stamina - b.stamina || byId(a, b))[0],
+        'CONSERVE',
+      )
+      return picks
+    },
+  },
+]
 
 /** 27조합을 전부 돌려 순위를 낸다. 정답 경로를 손으로 적지 않아도 된다 */
 function sweep(base: Problem, opponent: OpponentId) {
@@ -225,13 +359,9 @@ function runDifficulty(opponent: OpponentId): boolean {
      * 효과는 있으나 마나이므로, 그런 지시는 계수를 키우거나 버려야 한다
      */
     const lever = set(l, pr, w)
-    const orderRows = orderPlans(p).map((plan) => ({
+    const orderRows = ORDER_PLANS.map((plan) => ({
       label: plan.label,
-      rate: measure(
-        p,
-        [...lever, ...plan.picks.map(([target, order]) => ({ tick: 0, type: 'ORDER' as const, target, order }))],
-        opponent,
-      ).rate,
+      ...measure(p, lever, opponent, plan),
     }))
     const noOrders = orderRows[0].rate
     const floor = 2 * Math.sqrt(2) * stderr(noOrders)
@@ -245,6 +375,18 @@ function runDifficulty(opponent: OpponentId): boolean {
     console.log(
       `   지시 노이즈 바닥 ±${(floor * 100).toFixed(1)}%p — 바닥을 넘은 조합 ${moved.length}/${orderRows.length - 1}`,
     )
+    /**
+     * 대상을 못 찾은 판이 많으면 그 줄은 **효과가 없는 것이 아니라 재지
+     * 않은 것**이다. 경고 보유자가 없는 국면의 「물러서라」가 그렇다
+     */
+    const thin = orderRows.slice(1).filter((r) => r.coverage < 0.9)
+    if (thin.length > 0) {
+      console.log(
+        `   대상을 못 찾은 판이 섞인 줄: ${thin
+          .map((r) => `${r.label} ${pct(r.coverage)}만 걸림`)
+          .join('  ')}`,
+      )
+    }
     orderMoved.push({ title: p.title, moved: moved.length })
     console.log()
     formationWinners.push({ title: p.title, top: byFormation[0].id })

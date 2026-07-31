@@ -10,6 +10,7 @@ import { BENCH, effectivePos, getPlayer, meanStamina } from '../sim/squad'
 import { homeCaptainNumber } from '../captain'
 import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
+import type { FormationId } from '../sim/formations'
 import { AnalysisPanel } from './AnalysisPanel'
 import { PRESETS, presetOf } from '../analysis/presets'
 import { buildBriefing, type Briefing } from '../analysis/briefing'
@@ -755,13 +756,28 @@ export function MatchScreen({
    */
   const { toast, show } = useToast()
 
-  /** 레버 하나를 바꾸고 무엇을 바꿨는지 알린다 */
+  /**
+   * 레버 하나를 바꾸고 무엇을 바꿨는지 알린다.
+   *
+   * 지시가 거부되면 거부 사유를 대신 띄운다. 종료 휘슬이 이미 울린 뒤인데
+   * 화면만 뒤처져 있는 경우가 그렇다 — "압박 → 강"이라고 알려 놓고 아무
+   * 일도 일어나지 않는 것이 가장 나쁘다.
+   */
   const setLeverLoud = useCallback(
     (type: 'LINE' | 'PRESS' | 'WIDTH', value: Level) => {
-      setLever(type, value)
-      show(leverToast(type, value))
+      const reason = setLever(type, value)
+      show(reason ?? leverToast(type, value))
     },
     [setLever, show],
+  )
+
+  /** 포메이션은 평소에 조용하다. 막혔을 때만 이유를 말한다 */
+  const setFormationLoud = useCallback(
+    (value: FormationId) => {
+      const reason = setFormation(value)
+      if (reason) show(reason)
+    },
+    [setFormation, show],
   )
 
   /**
@@ -772,7 +788,12 @@ export function MatchScreen({
    */
   const applyPreset = useCallback(
     (name: string, v: readonly [Level, Level, Level]) => {
-      setLever('LINE', v[0])
+      // 하나가 막히면 셋 다 막힌 것이다. 첫 사유를 그대로 보여주고 멈춘다
+      const reason = setLever('LINE', v[0])
+      if (reason) {
+        show(reason)
+        return
+      }
       setLever('PRESS', v[1])
       setLever('WIDTH', v[2])
       show(presetToast(name))
@@ -1040,7 +1061,7 @@ export function MatchScreen({
               locked={phase === 'DONE'}
               onOrder={setOrder}
               onPosition={setPosition}
-              onFormation={setFormation}
+              onFormation={setFormationLoud}
             />
           </div>
           <div className="pane" data-pane="SQUAD">

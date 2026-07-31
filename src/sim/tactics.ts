@@ -34,9 +34,11 @@ export interface Coefficients {
    * 오픈플레이와 세트피스 양쪽에 걸린다. 처음에는 세트피스에만 걸었는데
    * 그 채널이 경기당 0.16골뿐이라 두 명을 세워도 실점이 0.03골 줄었다 —
    * 시드 1200개의 노이즈 바닥(±3.8%p)의 10분의 1도 안 되는 효과였다.
+   * 지금은 실점의 91%(오픈플레이 30% + 세트피스 61%)를 덮는 가장 굵은
+   * 채널이고, 그래서 「골문 앞」과 「내려서라」·「올라가라」가 여기를 쓴다.
    *
-   * 배후 침투(`behind`)는 건드리지 않는다. 그쪽은 "느린 수비수를
-   * 교체하라"가 이미 쓰고 있는 축이라 겹치면 둘 다 흐려진다.
+   * 배후 침투(`behind`)는 줄을 실제로 옮기는 지시(`DROP_BACK`·`PUSH_UP`)만
+   * 건드린다. 골문 앞에 남는 것과 등 뒤 공간은 다른 이야기다.
    */
   oppShotXg: number
   /** 상대 오픈플레이 빈도 */
@@ -114,10 +116,10 @@ export function resolveCoefficients(
  * 레버가 정한 계수 위에 얹는다. **순수 함수다** — 인자만 읽고 아무것도
  * 바꾸지 않으며, 시계도 난수도 브라우저도 모른다.
  *
- * ★ **`drawTick()` 은 한 줄도 건드리지 않는다.** 지시가 바꾸는 것은
- * 이미 뽑아둔 난수와 비교되는 **계수**뿐이고(`HOLD`·`CONSERVE`),
- * `BACK_OFF` 는 계수조차 없이 **후보 집합의 원소 수**만 바꾼다. 난수
- * 소비 개수와 순서는 지시가 몇 개 걸리든 언제나 똑같다.
+ * ★ **`drawTick()` 은 한 줄도 건드리지 않는다.** 지시가 바꾸는 것은 이미
+ * 뽑아둔 난수와 **비교되는 계수**뿐이다. `BACK_OFF` 는 그 위에 `events.ts`
+ * 의 후보 집합에서도 빠지지만 그것 역시 이미 뽑아둔 `foulTarget` 을 나누는
+ * 분모만 바꾼다. 난수 소비 개수와 순서는 지시가 몇 개 걸리든 언제나 같다.
  *
  * ★ **지시가 하나도 없으면 항등이다.** 아래 반복문이 한 번도 돌지 않아
  * 들어온 계수가 비트 단위로 그대로 나간다. 이 성질이 깨지면 저장된 모든
@@ -127,36 +129,69 @@ export function resolveCoefficients(
  * 5-4-1·3-4-3에서 지시가 없는데도 값이 움직인다.
  */
 export function applyOrders(c: Coefficients, players: PlayerState[]): Coefficients {
+  let behind = c.behind
+  let setPiece = c.setPiece
   let oppShotXg = c.oppShotXg
-  let widthK = c.widthK
   let oppOpen = c.oppOpen
+  let foul = c.foul
+  let widthK = c.widthK
+  let openness = c.openness
 
   for (const s of players) {
     if (!s.onPitch || s.out) continue
     if (s.order === 'HOLD') {
-      // 골문 앞에 남으면 내준 세트피스에서 덜 먹는다.
+      // 골문 앞에 남으면 내준 슛에서 덜 먹는다.
       // 대신 그만큼 공격에 나갈 몸이 준다
       oppShotXg *= ORDERS.holdOppShotXg
       widthK *= ORDERS.holdWidthK
     } else if (s.order === 'CONSERVE') {
-      // 아껴 뛰면 체력이 남지만(그건 engine 쪽 소모 계수다) 그 선수가
-      // 맡던 공간이 그만큼 헐거워진다
+      /**
+       * 아껴 뛰면 체력이 남고(그건 engine 쪽 소모 계수다) 마지막에 박스
+       * 안까지 들어갈 다리가 남는다. 대신 그 선수가 맡던 공간이 헐거워진다.
+       *
+       * 이득만 **지친 정도에 비례**한다. 싱싱한 선수를 아껴봐야 아낄 것이
+       * 없으므로, 체력이 가득이면 이득이 0이고 대가만 남는다.
+       */
+      const spent = 1 - Math.max(0, Math.min(100, s.stamina)) / 100
+      openness *= 1 + ORDERS.conserveOpenness * spent
       oppOpen *= ORDERS.conserveOppOpen
+    } else if (s.order === 'BACK_OFF') {
+      /**
+       * 물러서면 그 자리가 열리고 높은 자리에서 뺏어 나가는 일이 준다 —
+       * 이 두 대가는 **경고가 있든 없든 언제나** 치른다.
+       *
+       * 이득은 **경고를 안고 있을 때만** 난다. 언제나 골문 쪽에 서 있으니
+       * 등 뒤로 넘어가는 공을 덜 내주고, 몸을 던지지 않으니 위험한 자리에서
+       * 프리킥도 덜 내준다. 경고가 없는 선수를 물러서게 하면 대가만 남는다.
+       *
+       * 반칙·퇴장 **후보 집합**에서 빠지는 장치는 `events.ts` 에 그대로
+       * 있다. 하나는 사람을 지키고 여기 것은 골문을 지킨다.
+       */
+      oppOpen *= ORDERS.backOffOppOpen
+      widthK *= ORDERS.backOffWidthK
+      if (s.booked) {
+        behind *= ORDERS.backOffBehind
+        setPiece *= ORDERS.backOffSetPiece
+        foul *= ORDERS.backOffFoul
+      }
     } else if (s.order === 'DROP_BACK') {
-      // 뒤로 내리면 세트피스에서 막을 몸이 하나 늘고, 앞으로 나갈 몸이 하나 준다.
-      // 배후 쪽 이득은 squad.ts 의 실제 포지션 계산에서 따로 난다
+      // 뒤로 내리면 막을 몸이 하나 늘어 상대가 오는 횟수와 넣는 확률이
+      // 함께 준다. 대신 앞으로 나갈 몸이 하나 준다.
+      // 가장 느린 수비수가 누구인지는 squad.ts 가 따로 다시 센다
       oppShotXg *= ORDERS.dropBackOppShotXg
+      oppOpen *= ORDERS.dropBackOppOpen
+      behind *= ORDERS.dropBackBehind
       widthK *= ORDERS.dropBackWidthK
     } else if (s.order === 'PUSH_UP') {
-      // 올려보내면 앞에 사람이 하나 늘고, 세트피스에서 막을 몸이 하나 준다.
-      // 대가가 없으면 가장 느린 수비수를 올리는 것이 공짜 이득이 된다
+      // 올려보내면 앞에 사람이 하나 늘고, 등 뒤와 세트피스에서 막을 몸이
+      // 하나 준다. 대가가 없으면 가장 느린 수비수를 올리는 것이 공짜가 된다
       widthK *= ORDERS.pushUpWidthK
       oppShotXg *= ORDERS.pushUpOppShotXg
+      behind *= ORDERS.pushUpBehind
     }
-    // BACK_OFF 는 계수를 만지지 않는다. events.ts 의 후보 집합에서 빠진다
   }
 
-  return { ...c, oppShotXg, widthK, oppOpen }
+  return { ...c, behind, setPiece, oppShotXg, oppOpen, foul, widthK, openness }
 }
 
 /**

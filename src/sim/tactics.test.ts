@@ -106,6 +106,7 @@ describe('개별 지시 — applyOrders', () => {
     order: PlayerOrder,
     onPitch = true,
     position: PlayerPosition | null = null,
+    extra: Partial<PlayerState> = {},
   ): PlayerState => ({
     id,
     onPitch,
@@ -114,6 +115,7 @@ describe('개별 지시 — applyOrders', () => {
     out: false,
     order,
     position,
+    ...extra,
   })
   const base = () => resolveCoefficients(t(1, 1, 1), 'BALANCED', false)
 
@@ -157,15 +159,90 @@ describe('개별 지시 — applyOrders', () => {
     expect(drainFactorOf('NONE')).toBe(1)
   })
 
-  it('물러서라는 계수를 하나도 안 건드린다', () => {
+  it('아껴 뛰기의 이득은 지친 선수일수록 크고 싱싱하면 없다', () => {
     /**
-     * 셋이 **서로 다른 종류의 통로**를 쓴다는 것이 이 설계의 핵심이다.
-     * 물러서라는 숫자가 아니라 **후보 집합**으로 작동한다 —
-     * `events.ts` 의 반칙 후보와 퇴장 위험 집합에서 빠진다.
-     * 여기에 계수가 생기면 셋이 같은 종류가 되어 설계가 무너진다
+     * 사용자가 정한 성격이 "지친 선수일수록 이롭다"이다. 상수 하나를
+     * 곱하면 싱싱한 선수에게 걸어도 똑같이 이로워 그 성격이 사라진다.
+     * 체력 만땅이면 이득이 0이고 대가만 남아야 한다
      */
     const c = base()
-    expect(applyOrders(c, [p('MF06', 'BACK_OFF')])).toEqual(c)
+    const fresh = applyOrders(c, [p('MF06', 'CONSERVE', true, null, { stamina: 100 })])
+    const spent = applyOrders(c, [p('MF06', 'CONSERVE', true, null, { stamina: 30 })])
+    expect(fresh.openness).toBe(c.openness)
+    expect(spent.openness).toBeGreaterThan(fresh.openness)
+    // 대가는 지친 정도와 무관하게 언제나 같다
+    expect(spent.oppOpen).toBe(fresh.oppOpen)
+  })
+
+  it('물러서라는 경고를 안고 있을 때만 이득이 있고 대가는 언제나 있다', () => {
+    /**
+     * 전에는 계수가 하나도 없이 `events.ts` 의 반칙·퇴장 후보 집합에서만
+     * 빠졌다. 실측으로 그 장치는 퇴장을 41.0%에서 17.9%까지 줄이면서도
+     * 통과율을 +0.1%p 밖에 못 움직였다 — 이 엔진에서 한 명을 잃는 값이
+     * 거의 없기 때문이다. 그래서 반칙이 실제로 주는 것(위험한 자리의
+     * 프리킥)을 값으로 삼았다.
+     *
+     * **경고가 없으면 이득이 없어야 한다.** 그래야 아무에게나 걸어두는
+     * 것이 손해가 되어, 앞 감독이 물려준 「물러서라」가 감독이 풀어야 할
+     * 잘못된 지시로 남는다
+     */
+    const c = base()
+    const calm = applyOrders(c, [p('MF06', 'BACK_OFF')])
+    expect(calm.setPiece).toBe(c.setPiece)
+    expect(calm.behind).toBe(c.behind)
+    expect(calm.foul).toBe(c.foul)
+    // 대가는 경고와 무관하게 언제나 치른다
+    expect(calm.oppOpen).toBeGreaterThan(c.oppOpen)
+    expect(calm.widthK).toBeLessThan(c.widthK)
+
+    const booked = applyOrders(c, [p('MF06', 'BACK_OFF', true, null, { booked: true })])
+    expect(booked.setPiece).toBeLessThan(c.setPiece)
+    expect(booked.behind).toBeLessThan(c.behind)
+    expect(booked.foul).toBeLessThan(c.foul)
+    expect(booked.oppOpen).toBe(calm.oppOpen)
+    expect(booked.widthK).toBe(calm.widthK)
+  })
+
+  it('내려서라와 올라가라는 서로 반대 방향의 거래다', () => {
+    // 하나가 실점을 줄이고 공격을 깎으면 다른 하나는 반대여야 한다.
+    // 같은 방향이면 둘 중 하나는 고를 이유가 없는 장식이다
+    const c = base()
+    const down = applyOrders(c, [p('MF06', 'DROP_BACK')])
+    const up = applyOrders(c, [p('DF04', 'PUSH_UP')])
+
+    expect(down.oppShotXg).toBeLessThan(c.oppShotXg)
+    expect(down.behind).toBeLessThan(c.behind)
+    expect(down.oppOpen).toBeLessThan(c.oppOpen)
+    expect(down.widthK).toBeLessThan(c.widthK)
+
+    expect(up.oppShotXg).toBeGreaterThan(c.oppShotXg)
+    expect(up.behind).toBeGreaterThan(c.behind)
+    expect(up.widthK).toBeGreaterThan(c.widthK)
+  })
+
+  it('이득만 커지지 않는다 — 지시마다 대가가 함께 걸린다', () => {
+    /**
+     * 이 저장소가 폭 레버에서 한 번 겪은 실패다. 이득만 있는 조작은
+     * 전 국면에서 켜두는 것이 정답이 되어 "판마다 다른 판단"을 무너뜨린다.
+     * 숫자를 박지 않고 **모든 지시에 반대 방향 항이 하나라도 있는지**만 본다
+     */
+    const c = base()
+    const worse = (after: ReturnType<typeof applyOrders>) =>
+      after.oppShotXg > c.oppShotXg ||
+      after.oppOpen > c.oppOpen ||
+      after.behind > c.behind ||
+      after.setPiece > c.setPiece ||
+      after.widthK < c.widthK ||
+      after.openness < c.openness
+
+    for (const order of ['HOLD', 'CONSERVE', 'DROP_BACK', 'PUSH_UP'] as const) {
+      expect(worse(applyOrders(c, [p('MF06', order)])), order).toBe(true)
+    }
+    // 물러서라는 경고를 안고 있어야 이득이 나므로 그 상태에서 본다
+    expect(
+      worse(applyOrders(c, [p('MF06', 'BACK_OFF', true, null, { booked: true })])),
+      'BACK_OFF',
+    ).toBe(true)
   })
 })
 

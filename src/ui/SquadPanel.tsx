@@ -72,9 +72,12 @@ export const ORDER_LABELS: Record<Exclude<PlayerOrder, 'NONE'>, { name: string; 
   HOLD: { name: '골문 앞', hint: '공이 반대편에 있어도 골문 앞을 지킵니다' },
   BACK_OFF: {
     name: '물러서라',
-    hint: '달려들지 않고 자리를 지킵니다. 두 번째 경고를 피하는 데 도움이 됩니다',
+    hint: '달려들지 않습니다. 경고를 안고 있는 선수에게만 이롭습니다',
   },
-  CONSERVE: { name: '아껴 뛰어라', hint: '전력 질주를 줄여 체력을 아낍니다' },
+  CONSERVE: {
+    name: '아껴 뛰어라',
+    hint: '전력 질주를 줄입니다. 이미 지친 선수일수록 효과가 큽니다',
+  },
 }
 
 /** 지시가 걸린 선수 카드에 붙는 짧은 꼬리표 */
