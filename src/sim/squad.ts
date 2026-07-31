@@ -21,7 +21,7 @@ type RawEntry = {
 
 const DEFAULTS = raw.positionDefaults
 /** 능력치를 적지 않은 선수가 물려받는 포지션 평균 */
-const ATTRIBUTE_DEFAULTS = raw.attributeDefaults
+export const ATTRIBUTE_DEFAULTS = raw.attributeDefaults
 
 function isPosition(v: string): v is Position {
   return v === 'GK' || v === 'DF' || v === 'MF' || v === 'FW'
@@ -39,7 +39,7 @@ function toAttribute(value: number): number {
  * 결정성 규칙을 깨지 않고, 매 틱 18슬롯이나 시작 조건 스트림도 건드리지
  * 않는다. 모듈을 읽을 때 한 번 계산되고 끝난다.
  */
-function fixedNoise(text: string): number {
+export function fixedNoise(text: string): number {
   let hash = 2166136261
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i)

@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #0c121a;
   --panel: #131d28;
   --panel-2: #1a2735;
@@ -4145,7 +4145,8 @@ button {
   min-height: 392px;
   padding: 35px 42px 0;
   display: grid;
-  grid-template-columns: 1fr minmax(280px, auto) 1fr;
+  /* 양옆이 정확히 같은 폭이어야 두 팀의 설정이 나란히 읽힌다 */
+  grid-template-columns: minmax(0, 1fr) minmax(280px, auto) minmax(0, 1fr);
   align-items: center;
 }
 
@@ -5936,11 +5937,23 @@ button {
 .squad-summary dd[data-tone='danger'] { color: var(--away); }
 .squad-summary dd[data-tone='safe'] { color: var(--accent); }
 
-.squad-group h3 {
-  margin: 0 0 6px;
+/* 선발 | 교체 후보 두 열. 넓은 화면의 가로를 실제로 쓴다 */
+.squad-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.squad-col { min-width: 0; display: grid; gap: 8px; align-content: start; }
+
+.squad-col > h3 {
+  margin: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
   font-family: var(--label);
   font-size: 13px;
   font-weight: 600;
@@ -5948,93 +5961,239 @@ button {
   color: var(--text-3);
 }
 
-.squad-group h3 small { color: var(--dim-2); font-size: 10px; }
+.squad-col[data-side='start'] > h3 { color: var(--accent); border-bottom-color: rgba(100, 212, 155, 0.4); }
+.squad-col > h3 small { color: var(--dim-2); font-size: 10px; }
+
+.squad-bench-group { display: grid; gap: 4px; }
+.squad-bench-group h4 {
+  margin: 4px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--dim-2);
+}
+.squad-bench-group h4 small { color: var(--dim-3); font-size: 9px; }
 
 .squad-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 
-.squad-row {
+.squad-pick {
   display: grid;
-  grid-template-columns: 58px 132px 128px minmax(0, 1fr) minmax(0, 1fr) 64px;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 3px;
   border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--border);
   border-radius: 8px;
   background: var(--panel);
+  transition: border-color 0.14s, background 0.14s, opacity 0.14s;
 }
 
-.squad-row[data-out='on'] { opacity: 0.5; }
+/* 카드 전체가 표적이다. 44px 아래로 내려가지 않는다 */
+.squad-pick-main {
+  min-height: 44px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 88px) 96px minmax(0, 1fr) 60px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+}
 
-.squad-row-id { display: flex; align-items: baseline; gap: 5px; }
-.squad-row-id b { font-family: var(--num); font-size: 20px; }
-.squad-row-id small { color: var(--dim-2); font-size: 10px; }
+.squad-pick-main:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
+.squad-pick-main:disabled { cursor: default; }
+.squad-pick-main:active:not(:disabled) { cursor: grabbing; }
 
-.squad-row-tags { display: flex; flex-wrap: wrap; gap: 3px; }
-.squad-row-tags em {
+.squad-pick-id { display: flex; align-items: baseline; gap: 5px; }
+.squad-pick-id b { font-family: var(--num); font-size: 19px; }
+.squad-pick-id small { color: var(--dim-2); font-size: 10px; }
+
+.squad-pick-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.squad-pick-tags em {
   padding: 1px 6px;
   border-radius: 20px;
   background: var(--panel-2);
   color: var(--dim-2);
   font-size: 9px;
   font-style: normal;
+  white-space: nowrap;
 }
-.squad-row-tags em[data-role='start'] { background: rgba(100, 212, 155, 0.16); color: var(--accent); }
-.squad-row-tags em[data-alert='on'] { background: rgba(255, 107, 97, 0.16); color: var(--away); }
+.squad-pick-tags em[data-alert='on'] { background: rgba(255, 107, 97, 0.16); color: var(--away); }
 
-.squad-row-condition { display: flex; align-items: center; gap: 5px; }
-.squad-row-condition small { color: var(--dim-2); font-size: 9px; }
-.squad-row-condition i {
+/* 스타는 능력치가 1.5~2배인 드문 선수다. 눈에 띄어야 한다 */
+.squad-pick-tags em[data-star='on'] {
+  background: rgba(250, 204, 21, 0.22);
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  color: #fde047;
+  font-weight: 700;
+}
+.squad-pick[data-star='on'] { border-left-color: #facc15; }
+.squad-pick[data-star='on'] .squad-pick-id b { color: #fde047; }
+
+.squad-pick-cond { display: flex; align-items: center; gap: 6px; }
+.squad-pick-cond i {
   flex: 1;
   height: 5px;
-  min-width: 32px;
+  min-width: 30px;
   border-radius: 3px;
   background: var(--panel-2);
   overflow: hidden;
   display: block;
 }
-.squad-row-condition i b { display: block; height: 100%; background: var(--accent); }
-.squad-row-condition i b[data-tone='warn'] { background: var(--warn); }
-.squad-row-condition i b[data-tone='danger'] { background: var(--away); }
-.squad-row-condition strong { font-family: var(--num); font-size: 14px; min-width: 22px; text-align: right; }
+.squad-pick-cond i b { display: block; height: 100%; background: var(--accent); }
+.squad-pick-cond i b[data-tone='warn'] { background: var(--warn); }
+.squad-pick-cond i b[data-tone='danger'] { background: var(--away); }
+.squad-pick-cond strong { font-family: var(--num); font-size: 14px; min-width: 22px; text-align: right; }
 
-.squad-row-key { display: flex; gap: 8px; flex-wrap: wrap; }
-.squad-row-key > span { display: flex; align-items: baseline; gap: 3px; }
-.squad-row-key small { color: var(--dim-2); font-size: 9px; }
-.squad-row-key b {
+.squad-pick-attrs { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.squad-pick-attrs > span { display: flex; align-items: baseline; gap: 3px; }
+.squad-pick-attrs small { color: var(--dim-2); font-size: 9px; white-space: nowrap; }
+.squad-pick-attrs b,
+.squad-pick-detail li b {
   padding: 0 5px;
   border-radius: 3px;
   font-family: var(--num);
   font-size: 12px;
 }
-.squad-row-key b[data-tone='low'] { background: rgba(148,163,184,.14); color: var(--text-4); }
-.squad-row-key b[data-tone='mid'] { background: rgba(56,189,248,.14); color: #7dd3fc; }
-.squad-row-key b[data-tone='high'] { background: rgba(34,197,94,.16); color: #86efac; }
-.squad-row-key b[data-tone='elite'] { background: rgba(250,204,21,.18); color: #fde047; }
+.squad-pick-attrs b[data-tone='low'],
+.squad-pick-detail li b[data-tone='low'] { background: rgba(148,163,184,.14); color: var(--text-4); }
+.squad-pick-attrs b[data-tone='mid'],
+.squad-pick-detail li b[data-tone='mid'] { background: rgba(56,189,248,.14); color: #7dd3fc; }
+.squad-pick-attrs b[data-tone='high'],
+.squad-pick-detail li b[data-tone='high'] { background: rgba(34,197,94,.16); color: #86efac; }
+.squad-pick-attrs b[data-tone='elite'],
+.squad-pick-detail li b[data-tone='elite'] { background: rgba(250,204,21,.18); color: #fde047; }
 
-.squad-row-note {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--dim-2);
+/* 경기 계산에 실제로 들어가는 칸에만 점이 붙는다 */
+.squad-pick-attrs > span[data-used='on'] small::after,
+.squad-pick-detail li[data-used='on'] small::after,
+.squad-section-note b[data-legend='used']::after {
+  content: '●';
+  margin-left: 3px;
+  color: var(--accent);
+  font-size: 7px;
+  vertical-align: middle;
+}
+.squad-section-note b[data-legend='used'] { color: var(--text-4); font-weight: 600; }
+
+.squad-pick-cue {
   font-size: 10px;
-  text-overflow: ellipsis;
+  text-align: right;
+  color: var(--dim-3);
   white-space: nowrap;
 }
 
-.squad-section-note { margin: 0; color: var(--dim-3); font-size: 10px; }
+/* 눈에 보이는 상태 하나에 글자 하나 */
+.squad-pick[data-state='PICKED'] {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  background: rgba(100, 212, 155, 0.12);
+}
+.squad-pick[data-state='PICKED'] .squad-pick-cue { color: var(--accent); font-weight: 600; }
 
-/* 좁아지면 줄을 두 단으로 접는다 */
-@media (max-width: 1100px) {
-  .squad-row {
-    grid-template-columns: 58px minmax(0, 1fr) 64px;
-    row-gap: 6px;
+.squad-pick[data-state='TARGET'] {
+  border-color: var(--warn);
+  border-left-color: var(--warn);
+  background: rgba(245, 197, 66, 0.08);
+}
+.squad-pick[data-state='TARGET'] .squad-pick-cue { color: var(--warn); font-weight: 600; }
+.squad-pick[data-over='on'] { border-color: var(--accent); background: rgba(100, 212, 155, 0.18); }
+
+.squad-pick[data-state='MUTED'] { opacity: 0.34; }
+.squad-pick[data-state='OUT'] { opacity: 0.42; }
+.squad-pick[data-state='OUT'] .squad-pick-cue { color: var(--away); }
+
+.squad-pick-more {
+  align-self: stretch;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--dim-3);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.squad-pick-more:hover,
+.squad-pick-more:focus-visible { border-color: var(--border); color: var(--text-4); }
+.squad-pick-more[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+
+.squad-pick-detail {
+  grid-column: 1 / -1;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+.squad-pick-strength { margin: 0; color: var(--dim-2); font-size: 11px; }
+
+.squad-pick-profile {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 4px 10px;
+}
+.squad-pick-profile dt { color: var(--dim-3); font-size: 9px; letter-spacing: 0.1em; }
+.squad-pick-profile dd { margin: 0; font-family: var(--num); font-size: 13px; }
+
+.squad-pick-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.squad-pick-groups h5 {
+  margin: 0 0 4px;
+  color: var(--dim-2);
+  font-family: var(--label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+.squad-pick-groups ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.squad-pick-groups li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.squad-pick-groups li small { color: var(--dim-2); font-size: 10px; }
+
+.squad-section-note { margin: 0; color: var(--dim-3); font-size: 10px; line-height: 1.6; }
+
+/*
+ * 좁아지면 카드 속을 **정확히 두 줄로** 접는다.
+ *
+ * 컨디션과 능력치를 각각 제 줄에 두면 세 줄이 되어 카드가 44px에서
+ * 76px로 자란다. 1280×720 실측으로 그것만으로 세로 스크롤이 1239px까지
+ * 늘었다. 위는 신원, 아래는 상태 — 두 줄이면 충분하다.
+ */
+@media (max-width: 1360px) {
+  .squad-pick-main {
+    grid-template-columns: 96px minmax(0, 1fr) 58px;
+    row-gap: 2px;
+    padding-block: 5px;
   }
-  .squad-row-key { grid-column: 1 / -1; }
-  .squad-row-note { grid-column: 1 / -1; white-space: normal; }
+  .squad-pick-cond { grid-row: 2; grid-column: 1; }
+  .squad-pick-attrs { grid-row: 2; grid-column: 2 / -1; }
+  .squad-pick-cue { grid-row: 1; grid-column: 3; }
 }
 
-@media (max-width: 640px) {
-  .squad-row { grid-template-columns: 52px minmax(0, 1fr); }
-  .squad-row-condition { grid-column: 1 / -1; }
+@media (max-width: 1000px) {
+  .squad-columns { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* 차례 안내가 링크에서 버튼으로 바뀌었다. 누르면 페이지가 통째로 바뀐다 */
@@ -6155,6 +6314,118 @@ button {
 .history-clear { justify-self: start; }
 .history-note { margin: 0; color: var(--dim-3); font-size: 10px; }
 
+/*
+ * 기록이 없는 것은 고장이 아니라 처음 여는 사람의 정상 상태다. 사과문
+ * 한 줄로 748px을 비워두지 않고, 무엇이 쌓이는지 미리 읽게 한다.
+ */
+.history-blank {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
+}
+
+.history-blank .history-empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+}
+
+.history-go {
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(100, 212, 155, 0.14);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.history-go:hover { background: rgba(100, 212, 155, 0.24); }
+
+.history-schema {
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.history-schema h3 {
+  margin: 0 0 10px;
+  font-family: var(--label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--dim-2);
+}
+.history-schema dl { margin: 0; display: grid; gap: 7px; }
+.history-schema dl > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+}
+.history-schema dt { color: var(--text-4); font-size: 12px; }
+.history-schema dd { margin: 0; color: var(--dim-2); font-size: 11px; line-height: 1.5; }
+
+/* 다섯 국면은 기록이 없어도 있다. 아직 안 해본 것도 도전 목록이다 */
+.history-board { display: grid; gap: 6px; }
+.history-board h3 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: var(--label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--dim-2);
+}
+.history-board h3 small { color: var(--dim-3); font-size: 9px; letter-spacing: 0; }
+.history-board ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.history-board li {
+  display: grid;
+  grid-template-columns: minmax(0, 190px) minmax(0, 1fr) 122px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--line-3);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.history-board li[data-tried='on'] { border-left-color: var(--accent); }
+
+.history-board-name { display: grid; gap: 1px; min-width: 0; }
+.history-board-name b { font-size: 13px; }
+.history-board-name small { color: var(--dim-3); font-size: 9.5px; }
+
+.history-board-bars { display: grid; gap: 3px; min-width: 0; }
+.history-board-bars i {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.history-board-bars u { display: block; height: 100%; border-radius: 3px; }
+.history-board-bars i[data-kind='base'] u { background: var(--dim-4, #64748b); }
+.history-board-bars i[data-kind='mine'] u { background: var(--accent); }
+
+.history-board-num { display: grid; gap: 1px; justify-items: end; }
+.history-board-num small { color: var(--dim-3); font-size: 9.5px; }
+.history-board-num b { font-family: var(--num); font-size: 12px; color: var(--accent); }
+.history-board-num b[data-none='on'] { color: var(--dim-3); font-family: inherit; font-size: 11px; }
+
+@media (max-width: 900px) {
+  .history-blank { grid-template-columns: minmax(0, 1fr); }
+  .history-board li { grid-template-columns: minmax(0, 1fr) 110px; }
+  .history-board-bars { grid-column: 1 / -1; }
+}
+
 @media (max-width: 900px) {
   .kickoff-layout { grid-template-columns: minmax(0, 1fr); }
   .history-list li { grid-template-columns: minmax(0, 1fr) 62px 54px; row-gap: 4px; }
@@ -6180,43 +6451,430 @@ button {
 .squad-refresh small { color: var(--dim-2); font-size: 10px; }
 .squad-refresh:hover { background: rgba(100, 212, 155, 0.2); }
 
+.squad-head { position: relative; }
+.squad-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.squad-reset {
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text-4);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.squad-reset:hover { border-color: var(--accent); color: var(--text); }
+
 .squad-lineup-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  min-height: 44px;
   padding: 7px 12px;
   border: 1px dashed var(--border);
   border-radius: 8px;
   color: var(--dim-2);
   font-size: 11px;
 }
+.squad-lineup-bar .chip { min-height: 32px; }
 
-.squad-row-pick {
-  min-height: 30px;
-  padding: 4px 8px;
+.squad-summary > div[data-star='on'] { border-color: rgba(250, 204, 21, 0.5); }
+.squad-summary dd[data-tone='star'] { color: #fde047; }
+
+/* ─────────────────────────────────────────────────────────────
+   02 · 상대 선택 — 팀 목록 | 고른 팀의 자료
+   ───────────────────────────────────────────────────────────── */
+/*
+ * 이 구역은 이제 머리줄과 두 열짜리 본문 둘뿐이다. 좁은 폭에서 상대
+ * 목록을 세 칸으로 펴던 옛 규칙이 남아 있으면 머리줄이 본문 옆에 선다.
+ */
+.kickoff-opponents { grid-template-columns: minmax(0, 1fr); }
+
+.opp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.opp-list { min-width: 0; display: grid; gap: 12px; align-content: start; }
+
+/* 팀 버튼 안의 세기 막대. 눌러 보지 않아도 열세 팀이 비교된다 */
+.kickoff-team-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 1px;
+}
+.kickoff-team-bar > i {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.kickoff-team-bar > i b { display: block; height: 100%; background: var(--accent); }
+.kickoff-team-bar[data-strong='on'] > i b { background: var(--away); }
+.kickoff-team-bar > u {
+  flex: 0 0 auto;
+  font-family: var(--num);
+  font-size: 9px;
+  text-decoration: none;
+  color: var(--dim-2);
+}
+.kickoff-team-bar[data-strong='on'] > u { color: var(--away); }
+.kickoff-team { min-height: 66px; }
+
+.opp-dossier {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-left: 3px solid var(--away);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.opp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.opp-head-name { display: grid; gap: 2px; }
+.opp-head-name b { font-family: var(--label); font-size: 22px; letter-spacing: 0.02em; }
+.opp-head-name i { color: var(--dim-2); font-size: 11px; font-style: normal; }
+.opp-head em {
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: rgba(255, 107, 97, 0.14);
+  color: var(--away);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.opp-note { margin: 0; color: var(--dim-2); font-size: 12px; line-height: 1.6; }
+
+/* 평균 능력치 — 우리와 나란히 놓아야 세다는 말이 읽힌다 */
+.opp-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
   background: var(--panel-2);
-  color: var(--text-4);
-  font: inherit;
-  font-size: 10px;
-  cursor: pointer;
+}
+.opp-compare > div { min-width: 0; display: grid; gap: 3px; }
+.opp-compare small { color: var(--dim-2); font-size: 10px; }
+.opp-compare > div > b { font-family: var(--num); font-size: 20px; line-height: 1; }
+.opp-compare > div > b[data-strong='on'] { color: var(--away); }
+.opp-compare i { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); }
+.opp-compare u { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.opp-compare u[data-side='away'] { background: var(--away); }
+.opp-compare strong {
+  font-family: var(--num);
+  font-size: 15px;
+  color: var(--accent);
   white-space: nowrap;
 }
-.squad-row-pick:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
-.squad-row-pick:disabled { opacity: 0.4; cursor: default; }
+.opp-compare strong[data-strong='on'] { color: var(--away); }
 
-.squad-row[data-picked='on'] { border-color: var(--accent); background: rgba(100, 212, 155, 0.1); }
-.squad-row[data-swappable='on'] { border-color: var(--warn); }
-.squad-row[data-swappable='on'] .squad-row-pick { border-color: var(--warn); color: var(--warn); }
-
-/* 스타 선수 */
-.squad-row-tags em[data-star='on'] {
-  background: rgba(250, 204, 21, 0.2);
-  color: #fde047;
+.opp-meters, .opp-key, .opp-shape { display: grid; gap: 6px; }
+.opp-meters h3, .opp-key h3, .opp-shape h3 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--label);
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--dim-2);
+}
+.opp-key h3 small, .opp-shape h3 small { color: var(--dim-3); font-size: 9px; letter-spacing: 0; }
+
+.opp-meter {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 8px;
+}
+.opp-meter > small { color: var(--dim-2); font-size: 10.5px; }
+.opp-meter > i {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+}
+/* 기준 눈금. 여기가 「보통」이다 */
+.opp-meter > i u {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 10px;
+  background: var(--dim-3);
+}
+.opp-meter > i b {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.opp-meter[data-side='up'] > i b { background: var(--away); }
+.opp-meter > b {
+  font-family: var(--num);
+  font-size: 12px;
+  text-align: right;
+  color: var(--dim-2);
+}
+.opp-meter[data-side='up'] > b { color: var(--away); }
+
+.opp-key ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.opp-key li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.opp-key li > b { font-family: var(--num); font-size: 18px; color: var(--away); }
+.opp-key li span { display: grid; gap: 1px; min-width: 0; }
+.opp-key li small { color: var(--dim-3); font-size: 9px; letter-spacing: 0.1em; }
+.opp-key li i { font-size: 12px; font-style: normal; }
+.opp-key li em {
+  font-family: var(--num);
+  font-size: 11px;
+  font-style: normal;
+  color: var(--dim-2);
+  white-space: nowrap;
+}
+
+/* 상대 배치도 — 등번호는 자리를 가리킨다 */
+.opp-board {
+  position: relative;
+  width: 100%;
+  /* 자료 전체가 한 화면에 들어와야 한다. 배치도는 읽히는 최소치까지만 */
+  max-width: 400px;
+  aspect-ratio: 65 / 50;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.022) 0 26px,
+      rgba(255, 255, 255, 0.05) 26px 52px
+    ),
+    #12241b;
+  overflow: hidden;
+}
+.opp-board-box {
+  position: absolute;
+  right: 0;
+  top: 22%;
+  width: 17%;
+  height: 56%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 0;
+}
+.opp-board-arc {
+  position: absolute;
+  right: 0;
+  top: 38%;
+  width: 6%;
+  height: 24%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 0;
+}
+.opp-board-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 24px;
+  height: 24px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--away) 72%, #10161c);
+  color: #fff;
+  font-family: var(--num);
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+}
+.opp-board-dot[data-pos='GK'] { background: #d8a33a; color: #201503; }
+.opp-board-dot em {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 13px;
+  height: 13px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: #10161c;
+  font-family: var(--label);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.opp-foot { margin: 0; color: var(--dim-3); font-size: 10px; line-height: 1.6; }
+
+@media (max-width: 1100px) {
+  .opp-layout { grid-template-columns: minmax(0, 1fr); }
+  .opp-meter { grid-template-columns: 104px minmax(0, 1fr) 44px; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   03 · 국면 선택 — 프리뷰 양옆의 물려받은 설정
+   ───────────────────────────────────────────────────────────── */
+.kickoff-setup {
+  width: 100%;
+  max-width: 250px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(5, 9, 14, 0.62);
+}
+
+.kickoff-setup h3 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--label);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--dim-2);
+}
+.kickoff-setup h3 em {
+  font-family: var(--num);
+  font-size: 13px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
+.kickoff-setup .opp-board { max-width: none; aspect-ratio: 78 / 60; }
+
+.kickoff-setup-hint {
+  margin: 0;
+  color: var(--dim-2);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.kickoff-setup-chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+.kickoff-setup-chips li {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.kickoff-setup-chips small { color: var(--dim-3); font-size: 8.5px; }
+.kickoff-setup-chips b { font-size: 10.5px; }
+.kickoff-setup-chips b[data-strong='on'] { color: var(--away); }
+
+.kickoff-setup-state {
+  margin: 0;
+  color: var(--dim-3);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+/* 우리 배치도는 왼쪽 골문을 지킨다 */
+.opp-board[data-side='home'] .opp-board-box { right: auto; left: 0; border-right: 1px solid rgba(255,255,255,.18); border-left: 0; }
+.opp-board[data-side='home'] .opp-board-arc { right: auto; left: 0; border-right: 1px solid rgba(255,255,255,.18); border-left: 0; }
+.opp-board-dot[data-side='home'] { background: color-mix(in srgb, var(--accent) 72%, #10161c); color: #04150e; }
+.opp-board-dot[data-side='home'][data-pos='GK'] { background: #d8a33a; color: #201503; }
+/* 우리 대형에는 등번호가 없다. 자리만 보이면 되므로 점을 줄인다 */
+.opp-board-dot:empty { min-width: 13px; height: 13px; border-radius: 50%; padding: 0; }
+
+/* 국면 카드 다섯 장이 숫자만 다른 같은 카드로 보이지 않게 */
+.kickoff-situation-setup {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.kickoff-situation-setup i {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: var(--num);
+  font-size: 11px;
+  font-style: normal;
+}
+.kickoff-situation-setup u {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dim-3);
+  font-size: 9px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kickoff-survival-bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.kickoff-survival-bar b { display: block; height: 100%; background: var(--warn); }
+
+.kickoff-situation[data-goal='equalize'] .kickoff-survival-bar b { background: var(--away); }
+.kickoff-situation[data-goal='survive'] { border-top: 2px solid rgba(100, 212, 155, 0.5); }
+.kickoff-situation[data-goal='equalize'] { border-top: 2px solid rgba(255, 107, 97, 0.5); }
+
+@media (max-width: 1240px) {
+  .kickoff-setup { max-width: 210px; }
+}
+
+/* 좁아지면 프리뷰 양옆의 설정을 접는다. 스코어가 먼저다 */
+@media (max-width: 1000px) {
+  .kickoff-setup { display: none; }
 }
 
 /* 선수 카드의 신상 (주발·신장·체중·골키퍼 등급) */

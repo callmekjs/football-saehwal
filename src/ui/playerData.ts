@@ -140,6 +140,77 @@ export function playerDataOf(state: PlayerState): PlayerData {
   }
 }
 
+/**
+ * 능력치 한 칸의 한국어 이름.
+ *
+ * `ATTRIBUTE_LAYOUT` 이 이름표의 단일 원본이므로 여기서 되짚어 읽는다.
+ * 분석 계층(`opponentSquad`)은 값만 정하고 이름은 화면이 붙인다.
+ */
+const ATTRIBUTE_LABEL = new Map<keyof PlayerAttributes, string>(
+  ATTRIBUTE_LAYOUT.flatMap((group) => group.rows.map((row) => [row.key, row.label] as const)),
+)
+
+export function attributeLabel(key: keyof PlayerAttributes): string {
+  return ATTRIBUTE_LABEL.get(key) ?? key
+}
+
+/**
+ * 목록 줄에 요약해 세우는 세 칸.
+ *
+ * 사용자가 정했다 — *"포지션이 4개가 있는데 스펙은 다 같네? 포지션에 맞게
+ * 스펙을 맞춰야지."*
+ *
+ * 전에는 네 포지션이 모두 `골 결정력 · 순간 속도 · 주력` 같은 세 칸을
+ * 보여줬다. 능력치 자체는 포지션대로 갈려 있는데 **하필 그 셋이 자리를
+ * 구분하지 못했다.** 기본 명단 실측으로 순간 속도가 수비 14.3 · 중원
+ * 14.4 였고 주력도 14.3 · 14.2 라, 줄만 보면 수비수와 미드필더가 같은
+ * 선수로 보였다.
+ *
+ * 그래서 **그 자리를 실제로 설명하는 값**으로 바꿨다. 아래 셋은 전부
+ * 기본 명단에서 그 포지션이 다른 세 포지션보다 높은 값이다.
+ *
+ * ```
+ *           GK     DF     MF     FW
+ * 예측력    16.0   13.6   12.3   13.0
+ * 수비위치  15.7   15.1   10.4    5.8
+ * 집중력    14.7   13.8   12.4   10.4
+ * 마크       6.7   14.6   10.3    4.8
+ * 태클       4.0   14.2   10.8    4.2
+ * 헤더       9.7   13.0    9.9   11.0
+ * 패스      10.3   11.2   14.0    9.2
+ * 시야      10.0   10.3   13.1   10.4
+ * 활동량     7.3   13.3   13.8   10.4
+ * 결정력     3.3    5.7   10.4   13.4
+ * 공없을때   6.3    6.7   12.4   15.4
+ * 순간속도  10.7   14.3   14.4   15.6
+ * ```
+ *
+ * **`ATTRIBUTE_LAYOUT` 은 건드리지 않는다.** 카드를 펼쳤을 때 보이는
+ * 서른여섯 개의 목록과 순서는 사용자가 화면을 주고 맞춘 것이다. 여기서
+ * 고르는 것은 줄에 요약해 세울 몇 칸뿐이다.
+ */
+const SUMMARY_KEYS: Record<Position, ReadonlyArray<keyof PlayerAttributes>> = {
+  GK: ['anticipation', 'positioning', 'concentration'],
+  DF: ['marking', 'tackle', 'header'],
+  MF: ['pass', 'vision', 'workRate'],
+  FW: ['finish', 'offTheBall', 'pace'],
+}
+
+/**
+ * 이 선수의 줄에 세울 세 칸. **등록 포지션**으로 고른다.
+ *
+ * 지시로 자리를 옮긴 선수도 능력치는 그대로이므로, 현재 역할이 아니라
+ * 등록 포지션이 그 사람을 설명한다.
+ */
+export function summaryRowsOf(data: PlayerData): AttributeRow[] {
+  const all = new Map(
+    data.attributeGroups.flatMap((group) => group.rows).map((row) => [row.key, row]),
+  )
+  return SUMMARY_KEYS[data.basePosition]
+    .map((key) => all.get(key))
+    .filter((row): row is AttributeRow => row !== undefined)
+}
+
 /** 1~20을 색 단계로. 축구 게임의 관례를 따른다 */
 export function attributeTone(value: number): 'low' | 'mid' | 'high' | 'elite' {
   if (value >= 16) return 'elite'

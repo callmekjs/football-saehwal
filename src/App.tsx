@@ -18,16 +18,41 @@ import {
   segmentEnd,
   type Half,
 } from './matchClock'
+import { opponentSquad } from './analysis/opponentSquad'
+import { awayCaptainNumber } from './captain'
+import { awaySlots, type AwayFormationId } from './sim/awayShape'
 import { createState } from './sim/engine'
+import { FORMATIONS } from './sim/formations'
 import { OUR_TEAM } from './sim/constants'
 import { HOME_SQUAD, rollRoster } from './sim/squad'
 import { toProblem } from './sim/problems'
-import type { OpponentId, Problem } from './sim/types'
+import type { Level, OpponentId, Position, Problem } from './sim/types'
+import { attributeLabel } from './ui/playerData'
 import { MatchScreen } from './ui/MatchScreen'
 import { TitleScreen, type HomeSection } from './ui/TitleScreen'
 import { clearHistory, readHistory, type MatchRecord } from './ui/matchHistory'
 import { SquadSection } from './ui/SquadSection'
 import { HistorySection } from './ui/HistorySection'
+
+const POSITION_LABEL: Record<Position, string> = {
+  GK: '골키퍼',
+  DF: '수비',
+  MF: '중원',
+  FW: '공격',
+}
+
+/**
+ * 전술 세 레버의 이름표.
+ *
+ * `AnalysisPanel` · `oneMove` 와 **글자 하나까지 같아야 한다.** 킥오프
+ * 화면이 `압박 약`이라고 적어놓고 종료 화면이 다른 말을 쓰면 같은 값이
+ * 두 이름을 갖는다.
+ */
+const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
+  line: { 0: '낮음', 1: '보통', 2: '높음' },
+  press: { 0: '약', 1: '중', 2: '강' },
+  width: { 0: '좁게', 1: '보통', 2: '넓게' },
+}
 
 /** 국면 카드와 프리뷰가 함께 쓰는 정보 */
 interface Entry {
@@ -40,7 +65,7 @@ interface PickedMatch {
   half: Half
 }
 
-function goalLabel(problem: Problem): string {
+function goalLabel(problem: Problem): '리드 지키기' | '동점 이상' {
   return problem.objective.type === 'SURVIVE' ? '리드 지키기' : '동점 이상'
 }
 
@@ -51,6 +76,125 @@ function situationNote(problem: Problem): string {
   return '전원 정상'
 }
 
+/**
+ * 기준선을 낀 막대 하나.
+ *
+ * 값 하나만 숫자로 적으면 그것이 센 것인지 약한 것인지 알 수 없다. 기준
+ * 눈금을 함께 그려서 **어느 쪽으로 얼마나 치우쳤는지**를 보이게 한다.
+ */
+function Meter({
+  label,
+  value,
+  min,
+  max,
+  base,
+  read,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  /** 기준 눈금. 여기가 「보통」이다 */
+  base: number
+  /** 사람이 읽는 값 */
+  read: string
+}) {
+  const at = (v: number) => ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * 100
+  const from = Math.min(at(base), at(value))
+  const to = Math.max(at(base), at(value))
+  return (
+    <div className="opp-meter" data-side={value >= base ? 'up' : 'down'}>
+      <small>{label}</small>
+      <i aria-hidden>
+        <u style={{ left: `${at(base)}%` }} />
+        <b style={{ left: `${from}%`, width: `${Math.max(1.5, to - from)}%` }} />
+      </i>
+      <b>{read}</b>
+    </div>
+  )
+}
+
+interface BoardDot {
+  pos: Position
+  /** 피치 가로 좌표(m). 우리 골문이 0, 상대 골문이 105 */
+  x: number
+  /** 피치 세로 좌표(m). 0~68 */
+  y: number
+  num?: number
+  captain?: boolean
+}
+
+/**
+ * 대형 하나를 작은 배치도로.
+ *
+ * 우리 대형은 왼쪽 골문을, 상대 대형은 오른쪽 골문을 지키므로 각자 자기
+ * 진영만 잘라서 크게 보여준다. 실제 좌표를 그대로 읽으므로 대형 표를
+ * 고치면 이 그림도 따라온다.
+ */
+function ShapeBoard({
+  dots,
+  side,
+  label,
+}: {
+  dots: readonly BoardDot[]
+  side: 'home' | 'away'
+  label: string
+}) {
+  const place = (x: number) =>
+    side === 'home' ? (x / 78) * 100 : ((x - 40) / 65) * 100
+  return (
+    <div className="opp-board" data-side={side} aria-label={label}>
+      <i className="opp-board-box" aria-hidden />
+      <i className="opp-board-arc" aria-hidden />
+      {dots.map((dot, index) => (
+        <span
+          key={dot.num ?? index}
+          className="opp-board-dot"
+          data-pos={dot.pos}
+          data-side={side}
+          style={{ left: `${place(dot.x)}%`, top: `${(dot.y / 68) * 100}%` }}
+        >
+          {dot.num ?? ''}
+          {dot.captain && <em aria-label="주장">C</em>}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** 상대 대형을 등번호가 있는 작은 배치도로 */
+function AwayShapeBoard({
+  formation,
+  count = 11,
+}: {
+  formation: AwayFormationId
+  count?: number
+}) {
+  const captain = awayCaptainNumber(formation, count)
+  const dots = awaySlots(formation, count).map(([pos, x, y, num]) => ({
+    pos,
+    x,
+    y,
+    num,
+    captain: num === captain,
+  }))
+  return <ShapeBoard dots={dots} side="away" label={`상대 ${formation} 대형`} />
+}
+
+/**
+ * 02 · 상대 선택.
+ *
+ * 사용자가 정했다 — *"13개 팀들의 특징, 주요 선수, 스탯과 상태"*.
+ *
+ * 전에는 팀 버튼 열세 개와 고른 팀의 한 줄 설명·평균 능력치가 전부였다.
+ * 1600×1000 실측으로 내용이 507px뿐이라 **화면 아래 433px이 통째로
+ * 비었다.**
+ *
+ * 여기서 숫자를 새로 지어내지 않는다. `opponentSquad()` 가 이미 세기
+ * 계수에서 명단을 유도해 두었는데 **아무 화면도 그것을 쓰지 않고 있었다.**
+ * 그것과 `AWAY_SHAPES` 의 실제 대형을 읽어 그린다. 계수를 튜닝하면 이
+ * 화면이 저절로 따라온다.
+ */
 function OpponentPicker({
   value,
   onPick,
@@ -59,60 +203,183 @@ function OpponentPicker({
   onPick: (value: OpponentId) => void
 }) {
   const selected = opponentInfo(value)
+  const squad = opponentSquad(value)
+  const ratio = opponentAbilityRatio(value)
 
   return (
     <section id="opponents" className="kickoff-opponents" aria-labelledby="opponent-title">
-      <div className="kickoff-section-label">
-        <i aria-hidden>1</i>
-        <div>
-          <small>오늘의 상대</small>
-          <h2 id="opponent-title">13개 팀 중 선택</h2>
+      <div className="kickoff-section-head">
+        <div className="kickoff-section-label">
+          <i aria-hidden>02</i>
+          <div>
+            <small>오늘의 상대</small>
+            <h2 id="opponent-title">13개 팀 중 선택</h2>
+          </div>
         </div>
+        <p>고른 팀이 어떤 축구를 하는지가 오른쪽에 함께 바뀝니다.</p>
       </div>
 
-      {teamsByTier().map(({ tier, teams }) => (
-        <fieldset className="kickoff-team-tier" key={tier}>
-          <legend>{TIER_LABEL[tier]}</legend>
-          <div className="kickoff-team-grid">
-            {teams.map((team) => {
-              const active = value === team.id
-              return (
-                <button
-                  type="button"
-                  key={team.id}
-                  className="kickoff-team"
-                  aria-pressed={active}
-                  data-selected={active ? 'true' : 'false'}
-                  onClick={() => onPick(team.id)}
-                >
-                  <span>
-                    <b>{team.name}</b>
-                    <i>{team.rank}위</i>
-                  </span>
-                  <em>{team.tag}</em>
-                </button>
-              )
-            })}
-          </div>
-        </fieldset>
-      ))}
+      <div className="opp-layout">
+        <div className="opp-list">
+          {teamsByTier().map(({ tier, teams }) => (
+            <fieldset className="kickoff-team-tier" key={tier}>
+              <legend>{TIER_LABEL[tier]}</legend>
+              <div className="kickoff-team-grid">
+                {teams.map((team) => {
+                  const active = value === team.id
+                  const teamRatio = opponentAbilityRatio(team.id)
+                  return (
+                    <button
+                      type="button"
+                      key={team.id}
+                      className="kickoff-team"
+                      aria-pressed={active}
+                      data-selected={active ? 'true' : 'false'}
+                      onClick={() => onPick(team.id)}
+                    >
+                      <span>
+                        <b>{team.name}</b>
+                        <i>{team.rank}위</i>
+                      </span>
+                      <em>{team.tag}</em>
+                      {/*
+                        열세 팀을 하나씩 눌러 보지 않아도 세기가 비교되게
+                        한다. 막대는 우리 평균을 기준으로 한 배수다.
+                      */}
+                      <span
+                        className="kickoff-team-bar"
+                        data-strong={teamRatio >= 1 ? 'on' : undefined}
+                      >
+                        <i aria-hidden>
+                          <b style={{ width: `${Math.min(100, (teamRatio / 1.6) * 100)}%` }} />
+                        </i>
+                        <u>{teamRatio.toFixed(2)}배</u>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
 
-      <div className="kickoff-opponent-note" aria-live="polite">
-        <span>
-          <b>{selected.name}</b>
-          <i>참고 순위 {selected.rank}위</i>
-        </span>
-        <p>{selected.note}</p>
-        {/*
-          평균 능력치는 세기 계수에서 유도한다. 따로 적어두면 계수를 손볼
-          때마다 화면과 실제가 갈린다.
-        */}
-        <em className="kickoff-opponent-ability">
-          평균 능력치 <b>{opponentAbilityAverage(value).toFixed(1)}</b>
-          <i>
-            우리 {OUR_ABILITY_AVERAGE.toFixed(1)} · {opponentAbilityRatio(value).toFixed(2)}배
-          </i>
-        </em>
+        <div className="opp-dossier" aria-live="polite">
+          <header className="opp-head">
+            <span className="opp-head-name">
+              <b>{selected.name}</b>
+              <i>참고 순위 {selected.rank}위 · {TIER_LABEL[selected.tier]}</i>
+            </span>
+            <em>{selected.tag}</em>
+          </header>
+
+          <p className="opp-note">{selected.note}</p>
+
+          {/*
+            평균 능력치는 세기 계수에서 유도한다. 따로 적어두면 계수를 손볼
+            때마다 화면과 실제가 갈린다.
+          */}
+          <div className="opp-compare">
+            <div>
+              <small>우리</small>
+              <b>{OUR_ABILITY_AVERAGE.toFixed(1)}</b>
+              <i aria-hidden>
+                <u style={{ width: `${(OUR_ABILITY_AVERAGE / 20) * 100}%` }} data-side="home" />
+              </i>
+            </div>
+            <div>
+              <small>{selected.name}</small>
+              <b data-strong={ratio >= 1 ? 'on' : undefined}>
+                {opponentAbilityAverage(value).toFixed(1)}
+              </b>
+              <i aria-hidden>
+                <u
+                  style={{ width: `${(opponentAbilityAverage(value) / 20) * 100}%` }}
+                  data-side="away"
+                />
+              </i>
+            </div>
+            <strong data-strong={ratio >= 1 ? 'on' : undefined}>{ratio.toFixed(2)}배</strong>
+          </div>
+
+          <div className="opp-meters">
+            <h3>이 팀이 위협하는 방식</h3>
+            <Meter
+              label="등 뒤로 넘기기"
+              value={selected.shape.behind}
+              min={0.6}
+              max={1.5}
+              base={1}
+              read={`${selected.shape.behind.toFixed(2)}배`}
+            />
+            <Meter
+              label="짧게 엮어 들어오기"
+              value={selected.shape.open}
+              min={0.6}
+              max={1.5}
+              base={1}
+              read={`${selected.shape.open.toFixed(2)}배`}
+            />
+            <Meter
+              label="기회를 골로 만들기"
+              value={selected.shape.finish}
+              min={0.6}
+              max={1.5}
+              base={1}
+              read={`${selected.shape.finish.toFixed(2)}배`}
+            />
+            <Meter
+              label="공격 세기"
+              value={selected.atk}
+              min={-1}
+              max={1}
+              base={0}
+              read={selected.atk === 0 ? '기준' : `${selected.atk > 0 ? '+' : ''}${selected.atk}`}
+            />
+            <Meter
+              label="수비 세기"
+              value={selected.def}
+              min={-1}
+              max={1}
+              base={0}
+              read={selected.def === 0 ? '기준' : `${selected.def > 0 ? '+' : ''}${selected.def}`}
+            />
+          </div>
+
+          <div className="opp-key">
+            <h3>
+              주요 선수
+              <small>자기 자리 평균보다 가장 많이 튀는 세 명</small>
+            </h3>
+            <ul>
+              {squad.keyPlayers.map((player) => (
+                <li key={player.num}>
+                  <b>{player.num}</b>
+                  <span>
+                    <small>{POSITION_LABEL[player.pos]}</small>
+                    <i>
+                      {attributeLabel(player.best.key)} {player.best.value}
+                    </i>
+                  </span>
+                  <em>평균 {player.rating.toFixed(1)}</em>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="opp-shape">
+            <h3>
+              즐겨 서는 대형
+              <small>{squad.formation}</small>
+            </h3>
+            <AwayShapeBoard formation={squad.formation} />
+          </div>
+
+          <p className="opp-foot">
+            상대는 선수 한 명씩이 아니라 팀 계수 하나로 계산됩니다. 위 능력치와
+            명단은 그 계수에서 되짚어 만든 값이며, 경기 결과에는 들어가지
+            않습니다. 대형은 경기 중 점수와 성향에 따라 바뀝니다.
+          </p>
+        </div>
       </div>
     </section>
   )
@@ -139,6 +406,7 @@ function SituationCard({
       className="kickoff-situation"
       aria-pressed={selected}
       data-selected={selected ? 'true' : 'false'}
+      data-goal={survive ? 'survive' : 'equalize'}
       onClick={onPick}
     >
       <span className="kickoff-situation-top">
@@ -154,10 +422,25 @@ function SituationCard({
       <span className="kickoff-situation-meta">
         교체 {problem.subsLeft}장 · {situationNote(problem)}
       </span>
+      {/*
+        다섯 장이 숫자만 다른 같은 카드로 보였다. 물려받은 대형과 통과율
+        막대를 넣어 **모양이 다르게** 만든다. 둘 다 실제 값이다.
+      */}
+      <span className="kickoff-situation-setup">
+        <i>{problem.initialFormation}</i>
+        <u>
+          라인 {LEVEL_LABEL.line[problem.initialTactics.line]} · 압박{' '}
+          {LEVEL_LABEL.press[problem.initialTactics.press]} · 폭{' '}
+          {LEVEL_LABEL.width[problem.initialTactics.width]}
+        </u>
+      </span>
       <span className="kickoff-survival">
         <small>미국 기준 · 아무것도 안 하면</small>
         <b>{(noActionRate * 100).toFixed(1)}%</b>
         <em>만 버팁니다</em>
+        <i className="kickoff-survival-bar" aria-hidden>
+          <b style={{ width: `${Math.max(3, noActionRate * 100)}%` }} />
+        </i>
       </span>
       <span className="kickoff-selected-mark" aria-hidden>
         ✓ 선택
@@ -400,9 +683,6 @@ export function App() {
                 rosterSeed={rosterSeed}
                 onRefresh={() => setRosterSeed((n) => n + 1)}
                 lineup={{
-                  starters: new Set(
-                    previewState.players.filter((p) => p.onPitch && !p.out).map((p) => p.id),
-                  ),
                   changed: starters !== null,
                   onReset: () => setStarters(null),
                   onSwap: (starterId, benchId) => {
@@ -431,7 +711,17 @@ export function App() {
           )}
 
           {section === 'history' && (
-            <HistorySection records={history} onClear={() => setHistory(clearHistory())} />
+            <HistorySection
+              records={history}
+              problems={entries.map((item) => ({
+                id: item.problem.id,
+                title: item.problem.title,
+                noActionRate: referenceNoActionRate(item.problem.id),
+                goal: goalLabel(item.problem),
+              }))}
+              onClear={() => setHistory(clearHistory())}
+              onGoSituation={() => setSection('situation')}
+            />
           )}
 
           {section === 'situation' && (
@@ -452,9 +742,46 @@ export function App() {
               국면 재현 — 이 장면부터 시작합니다
             </span>
             <div className="kickoff-preview-grid">
+              {/*
+                양옆 490px이 팀 이름 한 줄만 담고 비어 있었다. 지금 이
+                국면이 다른 국면과 무엇이 다른지는 **물려받은 설정**에
+                들어 있는데 그것이 어디에도 안 보였다. 여기에 놓는다.
+              */}
               <div className="kickoff-crest home">
                 <b>{OUR_TEAM.name}</b>
                 <small>참고 순위 {OUR_TEAM.rank}위 · 홈</small>
+                <div className="kickoff-setup">
+                  <h3>
+                    물려받은 대형
+                    <em>{selectedProblem.initialFormation}</em>
+                  </h3>
+                  <ShapeBoard
+                    dots={FORMATIONS[selectedProblem.initialFormation].slots}
+                    side="home"
+                    label={`우리 ${selectedProblem.initialFormation} 대형`}
+                  />
+                  <p className="kickoff-setup-hint">
+                    {FORMATIONS[selectedProblem.initialFormation].hint}
+                  </p>
+                  <ul className="kickoff-setup-chips">
+                    <li>
+                      <small>라인</small>
+                      <b>{LEVEL_LABEL.line[selectedProblem.initialTactics.line]}</b>
+                    </li>
+                    <li>
+                      <small>압박</small>
+                      <b>{LEVEL_LABEL.press[selectedProblem.initialTactics.press]}</b>
+                    </li>
+                    <li>
+                      <small>폭</small>
+                      <b>{LEVEL_LABEL.width[selectedProblem.initialTactics.width]}</b>
+                    </li>
+                  </ul>
+                  <p className="kickoff-setup-state">
+                    {11 - selectedProblem.unavailable.length}명 · 경고{' '}
+                    {selectedProblem.booked.length}명 · 교체 {selectedProblem.subsLeft}장
+                  </p>
+                </div>
               </div>
 
               <div className="kickoff-score" aria-live="polite" aria-atomic="true">
@@ -473,6 +800,32 @@ export function App() {
               <div className="kickoff-crest away">
                 <b>{selectedOpponent.name}</b>
                 <small>참고 순위 {selectedOpponent.rank}위 · 원정</small>
+                <div className="kickoff-setup">
+                  <h3>
+                    즐겨 서는 대형
+                    <em>{opponentSquad(opponent).formation}</em>
+                  </h3>
+                  <AwayShapeBoard
+                    formation={opponentSquad(opponent).formation}
+                    count={selectedProblem.awayCount}
+                  />
+                  <p className="kickoff-setup-hint">{selectedOpponent.tag}</p>
+                  <ul className="kickoff-setup-chips">
+                    <li>
+                      <small>평균 능력치</small>
+                      <b>{opponentAbilityAverage(opponent).toFixed(1)}</b>
+                    </li>
+                    <li>
+                      <small>우리 대비</small>
+                      <b data-strong={opponentAbilityRatio(opponent) >= 1 ? 'on' : undefined}>
+                        {opponentAbilityRatio(opponent).toFixed(2)}배
+                      </b>
+                    </li>
+                  </ul>
+                  <p className="kickoff-setup-state">
+                    {selectedProblem.awayCount}명 · 참고 순위 {selectedOpponent.rank}위
+                  </p>
+                </div>
               </div>
             </div>
           </section>

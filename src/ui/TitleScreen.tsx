@@ -57,7 +57,7 @@ export function TitleScreen({ onStart, onGo, historyCount }: TitleScreenProps) {
 
           <button type="button" onClick={() => onGo('squad')}>
             <b>우리 팀</b>
-            <small>선수 열여섯 명의 능력치와 오늘 컨디션</small>
+            <small>선수 스물여섯 명의 능력치와 오늘 컨디션</small>
           </button>
 
           <button type="button" onClick={() => onGo('opponent')}>
