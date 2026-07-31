@@ -129,13 +129,13 @@ describe('개별 지시 — applyOrders', () => {
      */
     const c = base()
     const after = applyOrders(c, [p('DF04', 'NONE'), p('MF06', 'NONE'), p('FW09', 'NONE')])
-    expect(after).toEqual(c)
+    expect(after).toBe(c)
   })
 
   it('피치 밖 선수의 지시는 계수에 닿지 않는다', () => {
     // 벤치에 앉은 선수가 골문 앞을 지킬 수는 없다
     const c = base()
-    expect(applyOrders(c, [p('DF04', 'HOLD', false)])).toEqual(c)
+    expect(applyOrders(c, [p('DF04', 'HOLD', false)])).toBe(c)
   })
 
   it('골문 앞은 상대 마무리를 깎고 우리 공격을 줄인다', () => {

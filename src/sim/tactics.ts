@@ -129,6 +129,14 @@ export function resolveCoefficients(
  * 5-4-1·3-4-3에서 지시가 없는데도 값이 움직인다.
  */
 export function applyOrders(c: Coefficients, players: PlayerState[]): Coefficients {
+  /**
+   * 지시가 하나도 없으면 새 객체조차 만들지 않는다.
+   *
+   * `NONE` 만 있거나 벤치·이탈 선수에게만 지시가 걸린 기존 경기는 이
+   * 기능이 생기기 전과 같은 객체를 그대로 이어 써야 한다.
+   */
+  if (!players.some((s) => s.onPitch && !s.out && s.order !== 'NONE')) return c
+
   let behind = c.behind
   let setPiece = c.setPiece
   let oppShotXg = c.oppShotXg
