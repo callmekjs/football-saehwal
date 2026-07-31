@@ -168,7 +168,7 @@ export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScree
               <p>{preview.problemSummary}</p>
             </div>
             <div>
-              <dt>당신의 목표</dt>
+              <dt>목표</dt>
               <dd data-goal="on">{preview.goal}</dd>
               <p>
                 교체 카드 {preview.subsLeft}장 ·{' '}
