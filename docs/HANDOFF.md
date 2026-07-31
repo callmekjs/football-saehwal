@@ -9,7 +9,7 @@
 cd C:\football_hackerton
 git pull --ff-only
 git status          # 남의 미완성 작업이 있으면 건드리지 말고 사용자에게 알린다
-npm test            # 664개 통과
+npm test            # 666개 통과
 npx tsc --noEmit    # 0
 ```
 
@@ -25,7 +25,7 @@ npx tsc --noEmit    # 0
 | 영역 | 점수 | 근거 |
 |---|---:|---|
 | A 실제 실행 | 23/30 | 전반→하프타임→후반→결과 완주. 선발 초기화 결함으로 감점 |
-| B 기계 검사 | 15/15 | 44파일·664/664, 타입 0, 생산 빌드 통과 |
+| B 기계 검사 | 15/15 | 44파일·666/666, 타입 0, 생산 빌드 통과 |
 | C 핵심 불변식 | 15/15 | `drawTick()` 18개, 순수 시뮬레이션, 라인·폭 대가 유지 |
 | D 첫인상 | 29/30 | 데스크톱·375px·결과 분석이 좋고 첫 행동 촉구만 약함 |
 | E 문서·이력 | 4/10 | 여러 문서의 607개·옛 기준선과 `f31f7f8` 설명 불일치 |
@@ -34,7 +34,7 @@ npx tsc --noEmit    # 0
 평가 때 직접 확인한 값:
 
 ```text
-npm test          44파일 · 664/664
+npm test          44파일 · 666/666
 npx tsc --noEmit  오류 0
 npm run build     성공 · 97모듈
 npm run sim       전 국면 합격 · 376.4초
@@ -60,19 +60,34 @@ npm run sim       전 국면 합격 · 376.4초
 `createState(problem, opponent)`만 호출해 **고른 선발과 다시 뽑은 능력을
 기본 명단으로 덮어썼다.**
 
-Codex의 game-agent가 최소 수정을 만들다가 사용자가 턴을 중단해 멈췄다.
-따라서 지금 작업 트리는 깨끗하지 않다.
+**이 결함은 커밋 `2f19784` 에서 닫혔다.** 아래는 원인 기록으로 남긴다.
 
 ```text
  M src/ui/useMatch.ts
  M src/ui/useMatch.test.ts
 ```
 
-두 파일은 **미커밋·미검증**이다. `git stash`·`git checkout`·`git reset`으로
-없애지 마라. 현재 diff는 첫 상태와 `reset()`이 모두
-`createFreshMatchState(problem, opponent, squad)`를 쓰게 하고, GK12·DF15가
-급수 타임과 첫 틱에 남는 회귀검사를 추가한다. Claude가 먼저 diff를 검토하고
-이 수정을 완성해야 한다.
+고친 방법은 첫 상태와 `reset()` 이 모두
+`createFreshMatchState(problem, opponent, squad)` 를 쓰게 한 것이다. 같은
+상태를 만드는 길이 둘이면 언젠가 갈린다.
+
+**의존성에 객체를 그대로 넣지 않았다.** 호출부가 `{ starters, roster }` 를
+매 렌더 새로 만들기 때문에 그 객체를 `useCallback` 의존성에 넣으면 `reset`
+이 매 렌더 새로 생기고 `useEffect` 가 따라 실행되어 **경기 도중 판이 처음으로
+되감긴다.** 안의 두 값만 꺼내 의존성으로 삼았다.
+
+대조군 검사를 붙였다 — 아무것도 안 고른 판이 1번·5번으로 서는 것까지
+확인해야 선택이 원인임이 선다.
+
+**실측**
+
+```text
+로컬   급수 타임 · 71:43   12·2·3·4·15·6·7·8·10·9·11
+배포본 급수 타임 · 82:05   같음 · 점수 1–0 · 콘솔 오류 0
+```
+
+훅이 그 함수를 실제로 쓰는지는 단위 검사로 증명할 수 없다(이 저장소에
+렌더러가 없다). 그래서 화면으로 확인했다.
 
 권장 확인 순서:
 
@@ -145,7 +160,7 @@ DAKER 커뮤니티 글(2026-07-31 작성)은 일정을 **7월 6일 10:00 ~ 7월 
 ## 1. 지금 상태
 
 ```bash
-npm test          # 664개
+npm test          # 666개
 npx tsc --noEmit  # 0
 npm run build
 npm run sim       # 기준팀(미국). 다섯 국면 전 국면 합격
@@ -204,7 +219,7 @@ docs/agents/uxui-agent.md 와 AGENTS.md 를 끝까지 읽고 시작해라.
 지킬 것: `src/sim/` 을 고치지 마라(값을 읽기만 한다). 난수를 추가로
 소비하지 마라. 375px 가로 넘침 0, 조작 요소 최소 44px.
 
-끝내기 전: npm test(664개 이상) · npx tsc --noEmit(0) · npm run build.
+끝내기 전: npm test(666개 이상) · npx tsc --noEmit(0) · npm run build.
 `npm run sim` 은 필요 없다 — 확률에 안 닿았으면.
 브라우저에서 실제로 끌어놓아 보고, 나온 숫자가 계수와 맞는지 확인해라.
 ```
