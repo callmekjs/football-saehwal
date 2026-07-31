@@ -145,6 +145,15 @@ const FOUL_ZONE = 38
 const MISS_CUT_GAP = 3.4
 
 /**
+ * 패스 길목이 열려 있는 값의 무게와 상한.
+ *
+ * 상한을 두는 이유는 8미터 넘게 비어 있는 길목끼리는 더 비교할 것이
+ * 없기 때문이다. 그 위로도 값을 주면 아무도 없는 뒤쪽 백패스가 늘 이긴다.
+ */
+const PASS_LANE_CAP = 8
+const PASS_LANE_WEIGHT = 4
+
+/**
  * 흘린 공이 뺏는 선수에게 **닿기 전에 멈추는** 거리(미터).
  *
  * 전에는 상대 발밑을 직접 겨눠(중앙값 1.1m) "건네준 패스"로 보였다.
@@ -360,6 +369,56 @@ const GOAL_EXTRA = 4
  * 않는다.
  */
 const OUTBOUND_GUARD = 0.5
+
+/**
+ * 시뮬이 적어놓은 득점 경로.
+ *
+ * `src/sim/attack.ts` 가 이미 참이 된 채널의 이름만 기록해 `state.log` 에
+ * 실어 보낸다. 화면은 그것을 **읽기만** 한다 — 여기서 결과가 바뀌는 일은
+ * 없다.
+ */
+export type GoalCause = 'BUILD_UP' | 'BEHIND' | 'OPEN_PLAY' | 'SET_PIECE' | 'PENALTY'
+
+/**
+ * 배후 침투 장면의 수명(초).
+ *
+ * `GOAL_RUNWAY` 안에서만 산다. 유예가 끝나기 전에 이 장면을 접어야 예약된
+ * 골이 평범한 경로로라도 반드시 화면에 나온다 — **시뮬이 골이라고 했는데
+ * 화면이 안 보여주는 것이 이 파일의 가장 큰 고장이다.**
+ */
+const BEHIND_RUN_MAX = 9
+/**
+ * 침투하는 선수가 스루패스를 기다리는 자리 — 오프사이드 라인보다 이만큼
+ * **뒤**(자기 진영 쪽)다.
+ *
+ * 어깨를 걸고 선다는 것이 이 값이다. 라인을 넘어서 기다리면 그건 침투가
+ * 아니라 오프사이드다.
+ */
+const BEHIND_ONSIDE = 1.5
+/**
+ * 스루패스가 떨어지는 곳 — 뚫린 라인보다 이만큼 골대 쪽이다.
+ *
+ * 짧으면 수비수 발에 걸리고, 길면 골키퍼가 먼저 줍는다. 실제 축구의
+ * 스루패스가 라인과 골키퍼 사이 이 폭의 공간을 노린다.
+ */
+const BEHIND_GAP = 13
+/**
+ * 뚫린 나머지 수비수가 침투한 선수보다 뒤에 남는 최소 거리(m).
+ *
+ * 배후 침투는 **라인이 통째로 넘어간** 장면이다. 그 순간 커버하러 붙는
+ * 사람은 하나고, 나머지는 뒤에서 따라온다. 이게 없으면 다른 수비수가
+ * 침투 선수를 앞질러, 시뮬이 지목한 "가장 느린 수비수 때문에 뚫렸다"와
+ * 화면이 정반대로 말한다.
+ */
+const BEHIND_TRAIL = 8
+/**
+ * 뚫리는 수비수가 침투한 선수 **뒤**를 겨누는 거리(m).
+ *
+ * 쫓는 사람은 앞지르려고 뛰는 것이 아니라 등을 따라간다. `separate` 가
+ * 모든 선수에게 강제하는 개인 공간과 같은 폭이라, 이보다 좁게 잡으면
+ * 둘이 매 프레임 서로 밀어내며 떤다.
+ */
+const BEHIND_CHASE_LAG = 1.4
 
 /**
  * 태클이 성립하는 거리.
@@ -853,6 +912,29 @@ function topSpeedOf(pos: Position, speed: number): number {
   return TOP_SPEED[pos] * factor
 }
 
+/**
+ * 시뮬이 배후 실점의 원인으로 지목하는 선수의 화면 id.
+ *
+ * `src/sim/squad.ts` 의 `minDefenderSpeed` 와 **같은 선수를 고른다.** 그
+ * 함수가 고른 속도 하나가 배후 실점 확률을 정하므로, 화면이 다른 사람을
+ * 뒤처지게 그리면 계산과 장면이 서로 다른 말을 한다. 같은 조건(피치 위 ·
+ * 지시를 얹은 자리가 수비 · 골키퍼 제외)으로 뽑아야 한다.
+ */
+function slowestDefenderId(state: MatchState): string | null {
+  let best: (typeof state.players)[number] | null = null
+  for (const s of state.players) {
+    if (!s.onPitch || s.out) continue
+    if (effectivePos(s) !== 'DF') continue
+    if (!best || abilityOf(s).speed < abilityOf(best).speed) best = s
+  }
+  if (!best) return null
+  try {
+    return `H${getPlayer(best.id).num}`
+  } catch {
+    return null
+  }
+}
+
 export class VisualMatch {
   players: VPlayer[] = []
   ball: VBall
@@ -981,6 +1063,16 @@ export class VisualMatch {
   private pending: Array<{
     side: 'HOME' | 'AWAY'
     willScore: boolean
+    /**
+     * 시뮬이 적어놓은 이 골의 경로.
+     *
+     * 전에는 화면이 점수 차이만 보고 "아무 공격"을 만들었다. 그래서 배후
+     * 침투로 먹힌 골이든 세트피스로 먹힌 골이든 장면이 똑같았다 — 실측으로
+     * 배후 실점에서 시뮬이 지목한 가장 느린 수비수가 실제 최근접 수비수인
+     * 장면이 47골 중 10골(21.3%)이었다. 계산이 A 때문에 졌다고 말하는데
+     * 화면은 B를 그리고 있었다.
+     */
+    cause: GoalCause | null
     life: number
     /**
      * 유예가 끝났을 때 전개가 진행 중이면 빌려 쓸 수 있는 여유(초).
@@ -1037,6 +1129,43 @@ export class VisualMatch {
   awayCards = 0
   /** 재개 직후 이 시간 동안은 반칙을 불지 않는다(초). `FOUL_MUTE` 참조 */
   private foulMute = 0
+  /**
+   * 시뮬 기록을 어디까지 읽어 득점 경로를 모았는지.
+   *
+   * 반칙·이탈과 커서를 따로 쓴다. 저 둘은 세리머니 중에 흘려보내야 하지만
+   * 득점 경로는 **절대 흘리면 안 된다** — 세리머니 도중에 난 골의 원인을
+   * 버리면 그 골만 장면이 엉뚱해진다.
+   */
+  private causeLogLen = 0
+  /** 아직 장면으로 못 옮긴 실점 경로. 시뮬이 적은 순서 그대로다 */
+  private awayCauses: GoalCause[] = []
+  /** 아직 장면으로 못 옮긴 득점 경로 */
+  private homeCauses: GoalCause[] = []
+  /** 지금 피치 위 우리 수비수 중 가장 느린 선수. 배후 장면이 이 선수를 쓴다 */
+  private slowDefId: string | null = null
+  /**
+   * 만드는 중인 배후 침투 장면.
+   *
+   * 시뮬의 배후 실점은 "가장 느린 수비수 뒤로 뚫렸다"는 뜻이다. 그 문장이
+   * 화면에서 보이려면 세 가지가 동시에 있어야 한다 — 최종 수비 라인을 넘어
+   * 골키퍼와 마주하는 선수, 그를 따라가다 뒤처지는 **그 수비수**, 그리고
+   * 라인에 걸려 뒤에 남은 나머지 수비수들.
+   *
+   * **이 장면은 결과를 바꾸지 않는다.** 골은 시뮬이 이미 정했고 여기서는
+   * 그 골이 어떻게 들어갔는지만 그린다.
+   */
+  private behindRun: {
+    /** 배후로 침투하는 상대 선수 */
+    runnerId: string
+    /** 뚫리는 사람 — 시뮬이 지목한 가장 느린 우리 수비수 */
+    chaserId: string
+    /** 스루패스를 찌른 순간의 우리 오프사이드 라인 */
+    lineX: number
+    /** 아직 공이 배후로 넘어가지 않았다 */
+    armed: boolean
+    /** 남은 수명(초). 0이 되면 평범한 골 경로로 돌아간다 */
+    life: number
+  } | null = null
 
   constructor(state: MatchState, seed: number) {
     this.rng = createRng((seed ^ 0x5bf03635) >>> 0)
@@ -1329,6 +1458,8 @@ export class VisualMatch {
    */
   sync(state: MatchState) {
     this.simTick = state.tick
+    // 점수가 움직이기 전에 원인부터 읽어둔다. 아래 득점 처리가 이 줄을 쓴다
+    this.readGoalCauses(state)
     /**
      * 종료 휘슬 — 점수판을 시뮬에 맞춘다.
      *
@@ -1353,6 +1484,11 @@ export class VisualMatch {
       // 이미 점수와 함성을 맞췄으므로 밀린 득점 슛이 다시 실행되면 안 된다
       this.pending = this.pending.filter((shot) => !shot.willScore)
       this.lastScore = [...state.score] as [number, number]
+      // 장면이 영영 안 나올 골의 원인은 버린다. 남겨두면 다음 골이 남의
+      // 원인을 물려받아 엉뚱한 장면이 된다
+      this.awayCauses = []
+      this.homeCauses = []
+      this.behindRun = null
     }
 
     // 대형을 다시 짜기 전에 읽어야 한다. 다시 짜고 나면 빠진 선수가
@@ -1364,6 +1500,9 @@ export class VisualMatch {
     if (state.formation !== this.lastFormation || this.lineupOf(state).join(',') !== this.lastLineup) {
       this.rebuild(state)
     }
+
+    // 배후 실점의 주인. 교체·퇴장·지시로 판마다, 경기 도중에도 바뀐다
+    this.slowDefId = slowestDefenderId(state)
 
     const onPitch = state.players.filter((s) => s.onPitch && !s.out)
     const slots = slotsForPlayers(
@@ -1468,8 +1607,8 @@ export class VisualMatch {
        * 골이 둘 이상 들어올 수 있다. 합계가 늘었다는 사실을 한 장면으로
        * 뭉개면 뒤 골의 함성과 점수 장면이 사라진다.
        */
-      for (let i = 0; i < scored; i++) this.queueShot('HOME', true)
-      for (let i = 0; i < conceded; i++) this.queueShot('AWAY', true)
+      for (let i = 0; i < scored; i++) this.queueShot('HOME', true, this.homeCauses.shift() ?? null)
+      for (let i = 0; i < conceded; i++) this.queueShot('AWAY', true, this.awayCauses.shift() ?? null)
       // 여기서 돌아가지 않는다. 시뮬이 골이라고 했다는 것은 시뮬에서 그
       // 팀이 공을 가졌다는 뜻이다. 화면의 공이 아직 반대편에 있으면 아래
       // 점유 전환으로 넘겨줘야 그 팀이 골대로 밀고 갈 수 있다
@@ -1497,6 +1636,39 @@ export class VisualMatch {
       this.lastOwner = state.ball.owner
       if (!scoring) this.takeOver(state.ball.owner)
     }
+  }
+
+  /**
+   * 시뮬이 적어놓은 득점 경로를 순서대로 모아둔다.
+   *
+   * 전에는 화면이 **점수 차이만** 봤다. 그래서 `CONCEDE` 에 실려 오는
+   * 원인을 한 번도 읽지 않았고, 배후 침투로 먹힌 골과 세트피스로 먹힌 골이
+   * 화면에서 똑같은 "아무 공격"이 됐다.
+   *
+   * 점수와 따로 읽는 이유는 둘의 시점이 다르기 때문이다. 세리머니 중에 난
+   * 골은 점수 처리가 다음 프레임으로 밀리는데, 기록은 그때 이미 흘러가
+   * 있다. 커서를 따로 두고 큐에 쌓아야 원인이 골과 함께 밀린다.
+   *
+   * 페널티는 `CONCEDE` 가 아니라 `PENALTY` 사건으로 온다(`engine.ts` 가
+   * 점수만 올리고 실점 기록을 남기지 않는다). 그것까지 세지 않으면 원인
+   * 줄이 골보다 짧아져 뒤엣것들이 한 칸씩 밀린다.
+   */
+  private readGoalCauses(state: MatchState) {
+    for (let i = this.causeLogLen; i < state.log.length; i++) {
+      const e = state.log[i]
+      if (e.kind === 'PENALTY' && e.detail === 'PENALTY_SCORED') {
+        this.awayCauses.push('PENALTY')
+        continue
+      }
+      if (!e.detail) continue
+      // 한 틱에 두 채널이 동시에 뚫리면 `+` 로 이어 붙어 온다
+      if (e.kind === 'GOAL') {
+        for (const c of e.detail.split('+')) this.homeCauses.push(c as GoalCause)
+      } else if (e.kind === 'CONCEDE') {
+        for (const c of e.detail.split('+')) this.awayCauses.push(c as GoalCause)
+      }
+    }
+    this.causeLogLen = state.log.length
   }
 
   /**
@@ -1749,7 +1921,7 @@ export class VisualMatch {
    * 날아가 갑자기 슛이 되는 장면은 축구가 아니다. 그 팀이 공을 잡을 때까지
    * 기다렸다 쏜다.
    */
-  private queueShot(side: 'HOME' | 'AWAY', willScore: boolean) {
+  private queueShot(side: 'HOME' | 'AWAY', willScore: boolean, cause: GoalCause | null = null) {
     if (willScore) {
       // 빗나갈 슛을 골보다 먼저 처리할 이유가 없다. 점수판은 이미 올라갔다
       this.pending = this.pending.filter((q) => q.willScore)
@@ -1776,7 +1948,7 @@ export class VisualMatch {
     if (willScore && this.restart) this.restart.wait = Math.min(this.restart.wait, 0.2)
     const left = (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
     const life = willScore ? clamp(Math.min(GOAL_RUNWAY, left), 0, GOAL_RUNWAY) : 1.8
-    this.pending.push({ side, willScore, life, extra: willScore ? GOAL_EXTRA : 0 })
+    this.pending.push({ side, willScore, cause, life, extra: willScore ? GOAL_EXTRA : 0 })
     const holder = this.byId(this.ball.holder)
     if (
       this.ball.mode === 'HELD' &&
@@ -1796,6 +1968,95 @@ export class VisualMatch {
    */
   private readyToScore(side: 'HOME' | 'AWAY', willScore: boolean) {
     return !willScore || this.attackTime[side] >= BUILDUP
+  }
+
+  /**
+   * 배후 침투 장면을 만들지 정하고, 만드는 중이면 시간을 흘린다.
+   *
+   * 예약된 골의 원인이 `BEHIND` 일 때만 산다. 원인이 다르거나, 배역을 맡은
+   * 두 선수가 교체·퇴장으로 사라졌거나, 시간이 다 되면 스스로 접는다.
+   * **접히면 평범한 골 경로로 돌아간다** — 장면을 까다롭게 만든 대가로
+   * 골이 통째로 사라지는 일이 없어야 한다.
+   */
+  private updateBehindRun(dt: number) {
+    const q = this.pending[0]
+    const want = !!q && q.willScore && q.side === 'AWAY' && q.cause === 'BEHIND'
+    if (!want) {
+      this.behindRun = null
+      return
+    }
+    if (this.behindRun) {
+      this.behindRun.life -= dt
+      const runner = this.byId(this.behindRun.runnerId)
+      const chaser = this.byId(this.behindRun.chaserId)
+      if (this.behindRun.life > 0 && runner && chaser) return
+      this.behindRun = null
+      return
+    }
+    /**
+     * 뚫리는 사람은 시뮬이 지목한 그 선수다. 침투하는 선수는 **그 수비수의
+     * 어깨에 가장 가까운 상대 공격 자원**이 맡는다. 그래야 뚫린 자리가
+     * 화면에서 그 수비수의 자리로 보인다.
+     */
+    const chaser = this.byId(this.slowDefId)
+    if (!chaser || chaser.pos === 'GK') return
+    let runner: VPlayer | undefined
+    let bd = Infinity
+    for (const p of this.players) {
+      if (p.side !== 'AWAY' || p.pos === 'GK' || p.pos === 'DF') continue
+      const d = dist(p, chaser)
+      if (d < bd) {
+        bd = d
+        runner = p
+      }
+    }
+    if (!runner) return
+    this.behindRun = {
+      runnerId: runner.id,
+      chaserId: chaser.id,
+      lineX: this.offsideLine('HOME'),
+      armed: true,
+      life: BEHIND_RUN_MAX,
+    }
+  }
+
+  /**
+   * 배후 장면을 만드는 중이면 **침투한 선수만** 이 골을 마무리한다.
+   *
+   * 다른 선수가 먼저 때려버리면 애써 만든 장면이 평범한 슛이 된다. 장면이
+   * 접히면(`updateBehindRun`) 곧바로 풀리므로 골이 막히지는 않는다.
+   */
+  private behindBlocks(holder: VPlayer): boolean {
+    const run = this.behindRun
+    return !!run && holder.id !== run.runnerId
+  }
+
+  /**
+   * 뚫린 라인 뒤 공간으로 찔러 넣는다.
+   *
+   * 차는 **그 순간** 받는 선수는 아직 라인 앞(`BEHIND_ONSIDE`)에 있으므로
+   * 오프사이드가 아니다. 규칙 11조가 보는 시점이 킥 순간이라 그렇다 —
+   * 공보다 먼저 뛰어나가는 것이 침투고, 서 있다 받는 것이 오프사이드다.
+   *
+   * **연출 난수를 뽑지 않는다.** 도착 지점은 라인과 골대 사이에서 좌표로
+   * 결정된다. 여기서 난수를 쓰면 같은 시드의 화면이 통째로 달라진다.
+   */
+  private throughBall(holder: VPlayer, runner: VPlayer): boolean {
+    const run = this.behindRun
+    if (!run) return false
+    const d = dist(holder, runner)
+    // 발로 닿는 거리여야 한다. 너무 가까우면 패스가 아니고 너무 멀면 걷어내기다
+    if (d < 6 || d > 42) return false
+    const lineX = this.offsideLine('HOME')
+    // 라인과 골대 사이. 골키퍼가 먼저 줍지 않을 만큼만 남긴다
+    const tx = clamp(Math.min(lineX, runner.x) - BEHIND_GAP, 8, PITCH_W - 8)
+    const ty = clamp(runner.y + (GOAL_MID - runner.y) * 0.25, 5, PITCH_H - 5)
+    const flight = Math.hypot(tx - holder.x, ty - holder.y)
+    const speed = passSpeed(flight)
+    run.armed = false
+    run.lineX = lineX
+    this.kickBall(holder, tx, ty, speed, this.loftFor(flight, speed), 'PASS', runner.id, 'PASS')
+    return true
   }
 
   /**
@@ -1879,6 +2140,7 @@ export class VisualMatch {
     if (
       this.ball.mode === 'HELD' &&
       holder &&
+      !this.behindBlocks(holder) &&
       this.readyToScore(q.side, q.willScore) &&
       this.canShoot(holder, q.side, this.pendingRange(q.willScore))
     ) {
@@ -1919,12 +2181,23 @@ export class VisualMatch {
      */
     let shooter: VPlayer | undefined
     let bd = Infinity
-    for (const p of this.players) {
-      if (!this.canShoot(p, q.side, LONG_SHOT_MAX)) continue
-      const d = dist(p, this.ball)
-      if (d < bd) {
-        bd = d
-        shooter = p
+    /**
+     * 배후 장면을 만들던 중이었으면 **침투한 선수가 마무리한다.**
+     *
+     * 여기까지 왔다는 것은 스루패스가 제때 안 갔다는 뜻이지만, 그렇다고
+     * 아무나 쏘게 두면 시뮬이 지목한 원인과 화면이 또 어긋난다.
+     */
+    const late = this.behindRun ? this.byId(this.behindRun.runnerId) : undefined
+    if (late && this.canShoot(late, q.side, LONG_SHOT_MAX)) {
+      shooter = late
+    } else {
+      for (const p of this.players) {
+        if (!this.canShoot(p, q.side, LONG_SHOT_MAX)) continue
+        const d = dist(p, this.ball)
+        if (d < bd) {
+          bd = d
+          shooter = p
+        }
       }
     }
     if (!shooter) {
@@ -2061,6 +2334,8 @@ export class VisualMatch {
     }
     // 킥오프가 아웃 재개보다 우선한다
     this.restart = null
+    // 중앙에서 다시 시작하는 공에는 만들던 배후 장면이 남아 있을 수 없다
+    this.behindRun = null
 
     const taker = this.nearestOf(side, { x: PITCH_W / 2, y: PITCH_H / 2 })
     if (taker) {
@@ -2876,7 +3151,35 @@ export class VisualMatch {
     return best
   }
 
-  /** 패스 받을 사람을 고른다. 앞쪽이고 마크가 헐거운 동료 */
+  /**
+   * 이 패스의 길목이 얼마나 열려 있는가 — 두 선수를 잇는 선에서 가장
+   * 가까운 상대까지의 **수직 거리**(m).
+   *
+   * 전에는 받는 선수 주위만 봤다(`marker`). 그래서 상대 수비수가 선 위에
+   * 서 있어도 받는 선수만 비어 있으면 좋은 패스로 쳤고, 그 공은 그대로
+   * 발에 걸렸다 — 실측으로 **조준이 붙은 패스의 32.0%가 상대에게 갔다.**
+   * 실제 선수는 받는 사람만 보지 않고 그 사이에 누가 서 있는지를 본다.
+   *
+   * 선분 밖(뒤나 너머)의 상대는 길목이 아니므로 세지 않는다.
+   */
+  private laneClearance(from: VPlayer, to: VPlayer): number {
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const len2 = dx * dx + dy * dy
+    if (len2 < 1) return Infinity
+    let min = Infinity
+    for (const o of this.players) {
+      if (o.side === from.side || o.pos === 'GK') continue
+      const t = ((o.x - from.x) * dx + (o.y - from.y) * dy) / len2
+      // 차는 선수 발밑에 붙은 상대는 압박이지 길목이 아니다. 그건 `oppNear` 가 본다
+      if (t <= 0.08 || t >= 1) continue
+      const d = Math.hypot(o.x - (from.x + dx * t), o.y - (from.y + dy * t))
+      if (d < min) min = d
+    }
+    return min
+  }
+
+  /** 패스 받을 사람을 고른다. 앞쪽이고 마크가 헐거우며 길목이 열린 동료 */
   private choosePass(holder: VPlayer): VPlayer | null {
     const dir = holder.side === 'HOME' ? 1 : -1
     let best: VPlayer | null = null
@@ -2910,8 +3213,23 @@ export class VisualMatch {
        */
       const swing = Math.min(Math.abs(p.y - holder.y), 26) * 0.32
       const wide = Math.max(0, Math.abs(p.y - PITCH_H / 2) - 12) * 0.28
+      /**
+       * **길목이 열려 있는가.**
+       *
+       * 받는 선수가 비어 있어도 그 사이에 상대가 서 있으면 그 패스는
+       * 끊긴다. 이 항이 없을 때 조준이 붙은 패스의 32.0%가 상대에게
+       * 갔다(실측 24하프·541패스). 앞으로 가는 값과 맞설 만큼 무겁게
+       * 두어야 "무리한 전진 패스" 자체가 줄어든다.
+       */
+      const lane = Math.min(this.laneClearance(holder, p), PASS_LANE_CAP) * PASS_LANE_WEIGHT
       const score =
-        forward * 0.9 + Math.min(marker, 18) * 1.4 - d * 0.25 + swing + wide + this.rng.next() * 6
+        forward * 0.9 +
+        Math.min(marker, 18) * 1.4 -
+        d * 0.25 +
+        swing +
+        wide +
+        lane +
+        this.rng.next() * 6
       if (score > bestScore) {
         bestScore = score
         best = p
@@ -2942,9 +3260,17 @@ export class VisualMatch {
     let ty = clamp(to.y + to.vy * lead, 2, PITCH_H - 2)
     const d = Math.hypot(tx - holder.x, ty - holder.y)
 
-    // 패스는 100% 붙지 않는다. 가까우면 거의 붙고 멀수록 성공률이
-    // 떨어지며, 발밑에 상대가 붙은 채로 차면 더 나빠진다.
-    // 8미터 0.97 → 20미터 0.83 → 35미터 0.65
+    /**
+     * 패스는 100% 붙지 않는다. 가까우면 거의 붙고 멀수록 조준이 흔들리며,
+     * 발밑에 상대가 붙은 채로 차면 더 나빠진다.
+     * 8미터 0.97 → 20미터 0.83 → 35미터 0.65
+     *
+     * **이 곡선을 올려서 성공률을 올릴 수는 없다.** 재봤다 — 기울기를
+     * 0.012에서 0.008로 낮추자 조준이 붙는 비율은 80.6%에서 84.1%로
+     * 올랐는데 끝까지 붙은 패스는 72.6%에서 72.1%로 오히려 내려갔다.
+     * 조준이 정확해질수록 공이 리시버를 마크하던 수비수 쪽으로 정확히
+     * 가기 때문이다. 남은 손실은 조준이 아니라 **인터셉트**에 있다.
+     */
     const oppNear = this.players.reduce((m, o) => {
       if (o.side === holder.side || o.pos === 'GK') return m
       return Math.min(m, dist(o, holder))
@@ -3079,6 +3405,20 @@ export class VisualMatch {
       return
     }
 
+    /**
+     * 배후 침투 — 라인 뒤로 찔러준다.
+     *
+     * 시뮬이 "가장 느린 수비수 뒤로 뚫려서 먹었다"고 판정한 골이다. 그
+     * 장면은 스루패스 하나로 시작한다. 여기서 평범한 패스 판단으로
+     * 내려가면 공이 옆으로 돌고, 예약이 만료돼 공이 골대 앞으로
+     * 순간이동한다.
+     */
+    const run = this.behindRun
+    if (run && run.armed && holder.side === 'AWAY' && holder.id !== run.runnerId) {
+      const runner = this.byId(run.runnerId)
+      if (runner && this.throughBall(holder, runner)) return
+    }
+
     // 시뮬이 예약해둔 슛이 이 팀 것이면 그것부터 처리한다
     const q = this.pending[0]
     if (q && q.side === holder.side) {
@@ -3091,7 +3431,7 @@ export class VisualMatch {
        * 내려가 상대 진영에서 공을 돌린다. 그동안 전개 시간이 쌓인다
        */
       if (this.canShoot(holder, undefined, this.pendingRange(q.willScore))) {
-        if (this.readyToScore(q.side, q.willScore)) {
+        if (this.readyToScore(q.side, q.willScore) && !this.behindBlocks(holder)) {
           this.pending.shift()
           this.shoot(holder, q.willScore)
           return
@@ -3272,6 +3612,10 @@ export class VisualMatch {
      */
     const locked = new Set<string>()
 
+    /** 만드는 중인 배후 침투 장면. 배역 둘과 뒤에 남는 라인을 정한다 */
+    const behind = this.behindRun
+    const runner = behind ? this.byId(behind.runnerId) : undefined
+
     for (const p of this.players) {
       if (p.pos === 'GK') {
         // 골키퍼가 공을 잡았으면 그 자리에서 찬다. 여기서 골라인으로
@@ -3371,6 +3715,42 @@ export class VisualMatch {
           p.effort = boxed >= 2 ? 'JOG' : 'RUN'
         }
         continue
+      }
+
+      /**
+       * 배후 침투 장면의 두 배역.
+       *
+       * 뚫리는 수비수는 침투한 선수를 따라붙지만 **발이 느려 뒤처진다** —
+       * 위치를 손으로 옮기지 않고 목표만 준다. 따라잡히든 벌어지든 그 차이는
+       * 물리(`movePlayer`)가 정한다.
+       */
+      if (behind && runner) {
+        if (p.id === behind.chaserId) {
+          // 앞지르지 않는다. 뒤에서 어깨를 쫓는 그림이라야 "뚫렸다"로 보인다
+          p.tx = clamp(runner.x + BEHIND_CHASE_LAG, 3, PITCH_W - 3)
+          p.ty = clamp(runner.y, 3, PITCH_H - 3)
+          p.effort = 'SPRINT'
+          locked.add(p.id)
+          continue
+        }
+        if (p.id === behind.runnerId) {
+          if (behind.armed) {
+            // 아직 공이 안 왔다. 오프사이드 라인에 어깨를 걸고 기다린다.
+            // 여기서 라인을 넘어 서 있으면 그건 침투가 아니라 오프사이드다
+            const chaser = this.byId(behind.chaserId)
+            p.tx = clamp(this.offsideLine('HOME') + BEHIND_ONSIDE, 6, PITCH_W - 6)
+            p.ty = clamp(chaser ? chaser.y : p.homeY, 6, PITCH_H - 6)
+            p.effort = 'RUN'
+          } else {
+            // 공은 이미 배후에 있다. 흘러가는 공을 잡으러, 없으면 골문으로
+            const loose = this.ball.mode !== 'HELD'
+            p.tx = clamp(loose ? lead.x : GOAL_LINE_AWAY + 10, 3, PITCH_W - 3)
+            p.ty = clamp(loose ? lead.y : GOAL_MID, 3, PITCH_H - 3)
+            p.effort = 'SPRINT'
+          }
+          locked.add(p.id)
+          continue
+        }
       }
 
       if (attacking) {
@@ -3547,6 +3927,20 @@ export class VisualMatch {
         const far = own === GOAL_LINE_AWAY ? HOLD_RANGE : PITCH_W - HOLD_RANGE
         p.tx = own === GOAL_LINE_AWAY ? Math.min(p.tx, far) : Math.max(p.tx, far)
       }
+
+      /**
+       * 배후로 넘어간 순간 나머지 수비수는 **뒤에 남는다.**
+       *
+       * 라인이 통째로 넘어간 장면이라 그렇다. 커버하러 붙는 사람은 하나고
+       * 나머지는 따라 내려온다 — 여기가 없으면 다른 수비수가 침투 선수를
+       * 앞질러 최근접이 되고, 시뮬이 지목한 원인과 화면이 정반대로 말한다.
+       *
+       * 목표에 바닥을 깔 뿐 위치를 옮기지 않는다. 그래서 이미 골문 쪽에
+       * 있던 선수를 밖으로 밀어내지 않는다.
+       */
+      if (behind && runner && p.side === 'HOME' && p.pos === 'DF' && p.id !== behind.chaserId) {
+        p.tx = Math.max(p.tx, Math.min(runner.x + BEHIND_TRAIL, PITCH_W - 3))
+      }
     }
 
     /**
@@ -3590,6 +3984,14 @@ export class VisualMatch {
    * 유지하고, 공 주인이 바뀔 때 새로 짠다.
    */
   private chasersOf(side: 'HOME' | 'AWAY', level: 0 | 1 | 2): string[] {
+    /**
+     * 배후로 뚫린 순간 쫓아가는 사람은 **한 명**이다.
+     *
+     * 라인이 넘어갔는데 세 명이 한꺼번에 공으로 달려들면 그건 배후 침투가
+     * 아니라 그냥 압박이다. 그 한 명이 시뮬이 지목한 가장 느린 수비수다.
+     */
+    const behind = this.behindRun
+    if (behind && side === 'HOME') return [behind.chaserId]
     if (this.clock - this.chaseAt[side] > 0.7) {
       this.chaseIds[side] = this.players
         // 골문 앞을 지키라고 했거나 물러서라고 한 선수는 공에 달려들지
@@ -3950,6 +4352,8 @@ export class VisualMatch {
       return
     }
 
+    // 데드볼·세리머니 중에는 시간이 흐르지 않는다. 예약 골의 시계와 같다
+    this.updateBehindRun(step)
     this.setTargets(state)
 
     // 목표를 부드럽게 따라간다. 역할이 바뀌어 목표가 반대편으로 튀어도

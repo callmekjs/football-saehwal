@@ -11,7 +11,7 @@ import {
 } from './visual'
 import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
-import { getPlayer } from '../sim/squad'
+import { abilityOf, effectivePos, getPlayer } from '../sim/squad'
 import { EVENTS, TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, PlayerOrder, Problem } from '../sim/types'
 
@@ -2411,5 +2411,169 @@ describe('부심 깃발이 경기장 안에 그려진다', () => {
   it('들면 내렸을 때보다 확실히 길다', () => {
     // 길이 차이가 작으면 들었는지 내렸는지 화면에서 구분이 안 된다
     expect(FLAG_REACH.up).toBeGreaterThan(FLAG_REACH.down * 1.5)
+  })
+})
+
+/**
+ * 배후 실점은 **가장 느린 수비수 뒤로 뚫린 장면**으로 나온다.
+ *
+ * 시뮬은 배후 실점을 `minDefenderSpeed` 하나로 정한다 — "우리 수비수 중
+ * 가장 느린 선수 때문에 뚫렸다"가 그 골의 뜻이다. 전에는 화면이 그 뜻을
+ * 한 번도 읽지 않았다. 점수 차이만 보고 "아무 공격"을 만들었고, 실측으로
+ * 그 선수가 실제 최근접 수비수인 장면은 47골 중 10골(21.3%)뿐이었다.
+ *
+ * **숫자를 박지 않는다.** 배후 실점과 그 밖의 실점을 같은 판에서 나란히
+ * 재서 방향과 비율로만 본다. 밸런스를 조정해 실점 구성이 바뀌어도 이
+ * 검사는 살아 있어야 한다.
+ */
+describe('배후 실점 장면이 계산상 원인과 맞는다', () => {
+  const HIGH_LINE: Problem = {
+    id: 'p01',
+    title: '길이 막혔다',
+    order: 2,
+    score: [0, 1],
+    // 라인을 올려야 배후 침투 표본이 모인다. 낮은 라인에서는 판당 0.02골이다
+    initialTactics: { line: 2, press: 1, width: 0 },
+    initialFormation: '5-4-1',
+    objective: { type: 'EQUALIZE', bonusOnWin: true },
+    seed: 33104,
+    subsLeft: 3,
+    staminaOverrides: { DF04: 66, MF06: 55, FW09: 61, MF08: 63 },
+    booked: [],
+    unavailable: [],
+    awayCount: 11,
+  }
+
+  interface Scene {
+    behind: boolean
+    /** 시뮬이 지목한 가장 느린 수비수가 슈터와 가장 가까운 수비수였는가 */
+    slowIsNearest: boolean
+    /** 슈터가 수비 평균선보다 골대 쪽까지 들어갔는가 */
+    pastLine: boolean
+    /** 슈터와 가장 느린 수비수의 거리(m) */
+    dSlow: number
+  }
+
+  /** 지금 피치 위 가장 느린 수비수들의 화면 id (동률 전부) */
+  const slowestIds = (s: MatchState) => {
+    const defs = s.players.filter((q) => q.onPitch && !q.out && effectivePos(q) === 'DF')
+    if (!defs.length) return new Set<string>()
+    const min = Math.min(...defs.map((q) => abilityOf(q).speed))
+    return new Set(
+      defs.filter((q) => abilityOf(q).speed === min).map((q) => `H${getPlayer(q.id).num}`),
+    )
+  }
+
+  const scenes: Scene[] = []
+  for (let n = 0; n < 180; n++) {
+    const seed = HIGH_LINE.seed + n * 17
+    const rng = createRng(seed)
+    let s = createState({ ...HIGH_LINE, seed })
+    const vm = new VisualMatch(s, seed)
+    /** 시뮬이 적은 실점 경로. 화면의 득점 슛과 순서대로 짝짓는다 */
+    const causes: string[] = []
+    let logLen = 0
+    let wasShot = false
+    /**
+     * 짝짓기는 **점수판**으로 한다.
+     *
+     * 슛으로 센 순번을 쓰면, 화면이 슛을 못 만들고 골망 장면으로 때운
+     * 골에서 순번이 한 칸 밀려 그 뒤 전부가 남의 원인을 물려받는다.
+     * 점수판은 슛이든 골망이든 골 하나에 정확히 한 번 오른다.
+     */
+    // 국면은 0-1 처럼 이미 점수가 있는 상태로 시작한다. 원인 줄은 이 경기
+    // 안에서 난 실점만 세므로 세는 자리를 따로 둔다
+    let shown = vm.displayScore[1]
+    let conceded = 0
+    let scene: Omit<Scene, 'behind'> | null = null
+
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      s = tick(s, rng)
+      for (let k = logLen; k < s.log.length; k++) {
+        const e = s.log[k]
+        if (e.kind === 'PENALTY' && e.detail === 'PENALTY_SCORED') causes.push('PENALTY')
+        if (e.kind === 'CONCEDE' && e.detail) causes.push(...e.detail.split('+'))
+      }
+      logLen = s.log.length
+      const slow = slowestIds(s)
+      vm.sync(s)
+      for (let f = 0; f < 6; f++) {
+        vm.advance(s, 1 / 60)
+        const b = vm.ball
+        const scoring = b.mode === 'SHOT' && b.willScore
+        // 상대의 득점 슛이 **출발하는 그 프레임**에 잰다
+        if (scoring && !wasShot && b.kickerId?.[0] === 'A') {
+          const shooter = vm.players.find((q) => q.id === b.kickerId)
+          const defs = vm.players.filter((q) => q.side === 'HOME' && q.pos === 'DF')
+          if (shooter && defs.length) {
+            const gap = (q: { x: number; y: number }) =>
+              Math.hypot(q.x - shooter.x, q.y - shooter.y)
+            let near = defs[0]
+            for (const q of defs) if (gap(q) < gap(near)) near = q
+            const mine = defs.filter((q) => slow.has(q.id))
+            scene = {
+              slowIsNearest: slow.has(near.id),
+              // 상대는 x=0 을 공격한다. 작을수록 우리 골대에 가깝다
+              pastLine: shooter.x < defs.reduce((a, q) => a + q.x, 0) / defs.length,
+              dSlow: mine.length ? Math.min(...mine.map(gap)) : NaN,
+            }
+          }
+        }
+        wasShot = scoring
+
+        // 점수판이 올랐다 — 방금 잰 슛이 이 골이다
+        while (shown < vm.displayScore[1]) {
+          const k = conceded
+          shown += 1
+          conceded += 1
+          if (scene) scenes.push({ behind: causes[k] === 'BEHIND', ...scene })
+          scene = null
+        }
+      }
+    }
+  }
+
+  const behind = scenes.filter((x) => x.behind && Number.isFinite(x.dSlow))
+  const other = scenes.filter((x) => !x.behind && Number.isFinite(x.dSlow))
+  const ratio = (arr: Scene[], f: (x: Scene) => boolean) =>
+    arr.filter(f).length / Math.max(arr.length, 1)
+  /**
+   * 거리는 **중앙값**으로 본다.
+   *
+   * 배후 실점은 판당 0.05골이라 이 표본이 열 개 안팎이다. 장면이 만들어지지
+   * 못한 한 골(교체로 배역이 사라졌거나 유예가 끝난 경우)이 25미터를 찍으면
+   * 평균이 통째로 끌려간다. 평균으로 쓰면 이 검사는 통과와 실패를 오간다.
+   */
+  const mid = (arr: Scene[]) => {
+    const v = arr.map((x) => x.dSlow).sort((a, b) => a - b)
+    return v.length ? v[Math.floor(v.length / 2)] : NaN
+  }
+
+  it('표본이 충분하다', () => {
+    expect(behind.length, `배후 실점 ${behind.length}골`).toBeGreaterThan(3)
+    expect(other.length).toBeGreaterThan(10)
+  })
+
+  it('배후 실점의 슈터 옆에 있는 수비수가 곧 시뮬이 지목한 그 선수다', () => {
+    const r = ratio(behind, (x) => x.slowIsNearest)
+    expect(
+      r,
+      `배후 ${(r * 100).toFixed(0)}% · 그 밖 ${(ratio(other, (x) => x.slowIsNearest) * 100).toFixed(0)}%`,
+    ).toBeGreaterThan(0.7)
+    // 그 밖의 실점에서는 그럴 이유가 없다. 우연히 같아지면 원인을 안 읽는 것이다
+    expect(r).toBeGreaterThan(ratio(other, (x) => x.slowIsNearest) * 1.5)
+  })
+
+  it('배후 실점의 슈터는 수비선을 넘어 들어가 있다', () => {
+    const r = ratio(behind, (x) => x.pastLine)
+    expect(r, `배후 ${(r * 100).toFixed(0)}%`).toBeGreaterThan(0.8)
+    expect(r).toBeGreaterThan(ratio(other, (x) => x.pastLine))
+  })
+
+  it('배후 실점에서 그 수비수는 다른 실점보다 훨씬 가까이 있다', () => {
+    expect(
+      mid(behind),
+      `배후 ${mid(behind).toFixed(1)}m · 그 밖 ${mid(other).toFixed(1)}m · 표본 ${behind.length}골`,
+    ).toBeLessThan(mid(other) * 0.7)
   })
 })
