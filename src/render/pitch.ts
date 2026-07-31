@@ -695,7 +695,12 @@ export function drawPitch(
   }
 
   const homeCaptain = homeCaptainNumber(state.players)
-  const awayCaptain = awayCaptainNumber(state.away.formation, state.awayCount)
+  // 주장은 팀마다 다르다. 오늘 만난 상대를 넘겨 리더십으로 고르게 한다
+  const awayCaptain = awayCaptainNumber(
+    state.away.formation,
+    state.awayCount,
+    state.opponentTeam,
+  )
   for (const p of vm.players) {
     const captain = p.num === (p.side === 'HOME' ? homeCaptain : awayCaptain)
     drawPlayer(ctx, p, b.holder === p.id, captain, r, X, Y)

@@ -150,7 +150,7 @@ describe('양 팀 주장이 경기장에서 보인다', () => {
     const expected = [
       { num: homeCaptainNumber(state.players), style: COLORS.homeText },
       {
-        num: awayCaptainNumber(state.away.formation, state.awayCount),
+        num: awayCaptainNumber(state.away.formation, state.awayCount, state.opponentTeam),
         style: COLORS.awayText,
       },
     ]
