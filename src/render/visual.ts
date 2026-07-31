@@ -310,6 +310,8 @@ const REACH_HEIGHT = 1.9
 const SHOT_SPEED = 30
 /** 공을 발밑에 두는 거리 */
 const CONTROL_DIST = 1.3
+/** 공을 차는 순간 선수 중심과 공 사이에 허용할 수 있는 최대 거리 */
+export const SHOT_CONTACT_DIST = CONTROL_DIST + 1
 /**
  * 슛을 고려하는 거리.
  *
@@ -2228,9 +2230,14 @@ export class VisualMatch {
     const far = shooter
       ? Math.hypot(this.goalX(q.side) - shooter.x, GOAL_MID - shooter.y)
       : Infinity
+    const ballGap = shooter ? dist(shooter, this.ball) : Infinity
     if (shooter && far <= LONG_SHOT_MAX) {
-      this.giveTo(shooter)
-      this.shoot(shooter, true)
+      if (ballGap <= SHOT_CONTACT_DIST) {
+        this.giveTo(shooter)
+        this.shoot(shooter, true)
+      } else {
+        this.netGoal(q.side, this.scoringGoalY())
+      }
       return
     }
     /**
@@ -2247,7 +2254,7 @@ export class VisualMatch {
   }
 
   /** 슛 없이 골망 장면으로 넘어간다 */
-  private netGoal(side: 'HOME' | 'AWAY') {
+  private netGoal(side: 'HOME' | 'AWAY', targetY?: number) {
     const b = this.ball
     const gx = this.goalX(side)
     b.mode = 'LOOSE'
@@ -2256,7 +2263,7 @@ export class VisualMatch {
     b.willScore = false
     this.stopBall()
     b.x = gx === GOAL_LINE_HOME ? PITCH_W + 0.8 : -0.8
-    b.y = GOAL_MID + (this.rng.next() - 0.5) * 4
+    b.y = targetY ?? GOAL_MID + (this.rng.next() - 0.5) * 4
     b.lastTouch = side
     this.flash('GOAL', b.x, b.y)
     this.beginCelebration(side, b.x, b.y)
@@ -3136,6 +3143,15 @@ export class VisualMatch {
     this.ball.fromX = shooter.x
     this.ball.fromY = shooter.y
     this.flash('SHOT', shooter.x, shooter.y)
+  }
+
+  /** 득점 슛과 같은 네 난수 슬롯으로 골망 안의 도착점을 만든다. */
+  private scoringGoalY() {
+    const corner = this.rng.next() < 0.65 ? 1 : 0
+    const sign = this.rng.next() < 0.5 ? -1 : 1
+    const placement = this.rng.next()
+    this.rng.next() // 원래 득점 슛의 높이 슬롯. 골망 컷에서도 순서를 보존한다.
+    return GOAL_MID + sign * (corner ? 2.2 + placement * 1.2 : placement * 1.6)
   }
 
   /** 상대 골대에 가장 가까운 동료. 길게 보낼 때 쓴다 */

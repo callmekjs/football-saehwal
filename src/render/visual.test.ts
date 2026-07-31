@@ -7,6 +7,7 @@ import {
   GOAL_MID,
   flagTipY,
   FLAG_REACH,
+  SHOT_CONTACT_DIST,
   offsidePosition,
 } from './visual'
 import { createState, tick, checkSub } from '../sim/engine'
@@ -14,6 +15,7 @@ import { createRng } from '../sim/rng'
 import { abilityOf, effectivePos, getPlayer } from '../sim/squad'
 import { EVENTS, TOTAL_TICKS } from '../sim/constants'
 import type { MatchState, PlayerOrder, Problem } from '../sim/types'
+import problems from '../data/problems.json'
 
 const P: Problem = {
   id: 'p02',
@@ -29,6 +31,11 @@ const P: Problem = {
   booked: [],
   unavailable: [],
   awayCount: 11,
+}
+
+const P03_83918 = {
+  ...(problems.find((problem) => problem.id === 'p03') as unknown as Problem),
+  seed: 83918,
 }
 
 /** 경기를 관전하며 매 프레임을 기록한다. 화면과 같은 60fps로 돈다 */
@@ -1326,13 +1333,15 @@ describe('골은 갑자기 터지지 않는다', () => {
      * 있다가 갑자기 골이 되는 것으로 보인다.
      *
      * 실측으로 골 넷 중 셋(64%)이 그렇게 처리되고 있었다. 화면이 골을
-     * 예약해두고 공격을 만든 뒤에 보여주게 되면서 백 판 기준 97%가 됐다
+     * 예약해두고 공격을 만든 뒤에 보여주게 되면서 대부분 슛 장면이 됐다.
+     * 다만 공에서 먼 선수를 억지로 슈터로 붙이는 대신 골망 장면으로
+     * 넘어가는 경우는 허용한다. 그 한 장면 때문에 공이 순간이동하면 안 된다
      */
     const shown = buildable.filter((g) => g.withShot).length
     expect(
       shown / buildable.length,
       `골 ${buildable.length}회 중 슛으로 들어간 것 ${shown}회`,
-    ).toBeGreaterThan(0.9)
+    ).toBeGreaterThan(0.88)
   })
 
   it('골은 상대 진영에서, 골대 사정거리 안에서 들어간다', () => {
@@ -2575,5 +2584,55 @@ describe('배후 실점 장면이 계산상 원인과 맞는다', () => {
       mid(behind),
       `배후 ${mid(behind).toFixed(1)}m · 그 밖 ${mid(other).toFixed(1)}m · 표본 ${behind.length}골`,
     ).toBeLessThan(mid(other) * 0.7)
+  })
+})
+
+describe('예약 득점은 공 없는 슈터에게 순간이동하지 않는다', () => {
+  it('p03/83918의 살아 있는 공 전환·골 장면·종료 점수가 모두 이어진다', () => {
+    const rng = createRng(P03_83918.seed)
+    let state = createState(P03_83918)
+    const vm = new VisualMatch(state, P03_83918.seed)
+    let simulatedGoals = 0
+    let queuedGoals = 0
+    let goalScenes = 0
+    const nonContactJumps: number[] = []
+
+    for (let tickIndex = 0; tickIndex < TOTAL_TICKS; tickIndex++) {
+      const priorScore = state.score[0] + state.score[1]
+      state = tick(state, rng)
+      const goals = state.score[0] + state.score[1] - priorScore
+      simulatedGoals += goals
+      // 골 전개 유예(11초)를 온전히 쓸 수 있는 예약만 장면 표본으로 센다.
+      if (tickIndex < TOTAL_TICKS - 110) queuedGoals += goals
+      vm.sync(state)
+
+      for (let frame = 0; frame < 6; frame++) {
+        const before = { x: vm.ball.x, y: vm.ball.y }
+        const players = vm.players.map((player) => ({ x: player.x, y: player.y }))
+        const wasLive = vm.celebration === null && vm.restart === null
+        const wasCelebrating = vm.celebration !== null
+
+        vm.advance(state, 1 / 60)
+
+        if (!wasCelebrating && vm.celebration !== null) goalScenes += 1
+        const stillLive = vm.celebration === null && vm.restart === null
+        if (!wasLive || !stillLive) continue
+
+        const moved = Math.hypot(vm.ball.x - before.x, vm.ball.y - before.y)
+        if (moved < 5) continue
+        const contact = Math.min(
+          ...players.map((player) => Math.hypot(player.x - before.x, player.y - before.y)),
+        )
+        if (contact > SHOT_CONTACT_DIST) nonContactJumps.push(moved)
+      }
+    }
+
+    vm.sync(state)
+    expect(nonContactJumps, `비접촉 5m 이상 이동 ${nonContactJumps.join(', ')}`).toHaveLength(0)
+    expect(
+      Math.max(0, queuedGoals - goalScenes),
+      `예약 골 장면 ${goalScenes} / 유예 시간이 남은 득점 ${queuedGoals} / 전체 득점 ${simulatedGoals}`,
+    ).toBe(0)
+    expect(vm.displayScore).toEqual(state.score)
   })
 })
