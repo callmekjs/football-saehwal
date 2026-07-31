@@ -4,7 +4,7 @@ import {
   formationSlotKey,
   slotsForPlayers,
 } from '../sim/formations'
-import { effectivePos, getPlayer } from '../sim/squad'
+import { AWAY_XI, abilityOf, effectivePos, getPlayer } from '../sim/squad'
 import { AWAY_SHAPES, awaySlots } from '../sim/awayShape'
 import { TOTAL_TICKS } from '../sim/constants'
 import { calloutOf, type Callout } from './callout'
@@ -772,6 +772,44 @@ const bounceGrip = (impact: number) => clamp(1 - impact * 0.035, 0.72, 1)
 
 const TOP_SPEED: Record<Position, number> = { GK: 5.2, DF: 7.4, MF: 7.6, FW: 8.0 }
 
+/**
+ * 선수 개인의 속도를 관전 최고 속도에 섞는다.
+ *
+ * **QA-14 에서 걸렸다.** 명단 다시 뽑기로 나온 스타의 계산 속도가 66에서
+ * 100이 되어도 관전 최고 속도는 6.495m/s 그대로였고, 75초 동안 두 위치의
+ * 차이가 **0.000m** 였다. 관전이 포지션별 고정 속도만 써서, 카드 숫자만
+ * 커지고 뛰는 것은 똑같았다. 감독이 화면으로 확인할 방법이 없었다.
+ *
+ * 자리는 여전히 `TOP_SPEED` 가 정한다 — 골키퍼가 공격수보다 빠르면 안 된다.
+ * 그 위에 **그 선수가 명단 평균보다 얼마나 빠른가**를 곱한다.
+ *
+ * 우리 선발의 평균 속도가 72 근처라 그 값을 1.0 으로 둔다.
+ *
+ * 기울기는 **0.6에서 0.45로 낮췄다.** 0.6 에서는 빨라진 수비가 예약된 골
+ * 장면을 가로채, 80골 중 셋이 화면에 골 장면 없이 지나갔다
+ * (`visual.test.ts` 의 "시뮬이 골이라고 하면 화면에서도 골이 들어간다").
+ * 시뮬이 골이라고 했는데 화면이 안 보여주는 것은 더 큰 고장이므로 그쪽을
+ * 지켰다. 0.45 에서도 스타는 눈에 띄게 빠르다.
+ *
+ * **확률에는 닿지 않는다.** 관전 계층이므로 경기 결과를 바꾸지 않는다.
+ */
+const SPEED_PIVOT = 72
+const SPEED_SLOPE = 0.45
+
+/**
+ * 상대 등번호별 속도.
+ *
+ * 등번호는 대형이 바뀌어도 역할에 붙어 다니지만 **자리는 바뀐다.** 그래서
+ * 대형이 준 포지션으로 id 를 만들면 안 맞는다(4-4-2 의 3번은 수비지만
+ * 3-5-2 에서는 다른 줄에 선다). 번호로 찾는다.
+ */
+const AWAY_SPEED_BY_NUM = new Map(AWAY_XI.map((p) => [p.num, p.speed]))
+
+function topSpeedOf(pos: Position, speed: number): number {
+  const factor = clamp(1 + (SPEED_SLOPE * (speed - SPEED_PIVOT)) / 100, 0.85, 1.2)
+  return TOP_SPEED[pos] * factor
+}
+
 export class VisualMatch {
   players: VPlayer[] = []
   ball: VBall
@@ -1042,7 +1080,7 @@ export class VisualMatch {
         slot: slotIndex,
         homeX: base.x,
         homeY: base.y,
-        top: TOP_SPEED[pos],
+        top: topSpeedOf(pos, abilityOf(s).speed),
         stamina: s.stamina,
         booked: s.booked,
         order: s.order,
@@ -1076,7 +1114,8 @@ export class VisualMatch {
         slot: i,
         homeX: x,
         homeY: y,
-        top: TOP_SPEED[pos],
+        // 상대는 등번호별 속도가 명단에 있다. 지어내지 않는다
+        top: topSpeedOf(pos, AWAY_SPEED_BY_NUM.get(num) ?? 72),
         // 상대는 팀 하나의 체력을 쓴다. 개인별 값을 지어내지 않는다
         stamina: state.awayStamina,
         booked: state.away.booked.includes(num),
@@ -1281,7 +1320,8 @@ export class VisualMatch {
       v.booked = s.booked
       v.order = s.order
       v.pos = effectivePos(s)
-      v.top = TOP_SPEED[v.pos]
+      // 교체로 들어온 선수와 자리를 옮긴 선수도 자기 속도로 뛴다
+      v.top = topSpeedOf(v.pos, abilityOf(s).speed)
       /**
        * 손으로 놓은 좌표가 이 선수의 기준 자리다.
        *
