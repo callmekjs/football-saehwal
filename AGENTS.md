@@ -194,32 +194,61 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 파일도 함께 추가한다. 역할·범위·금지선·검증 기준을 두 실행 파일에 복사하지
 않는다. 그래야 한쪽만 수정되어 서로 다른 에이전트가 되는 일을 막을 수 있다.
 
-**다섯 에이전트 모두 이 구조를 따른다.** `game-agent` 와 `qa-agent` 는 이
+**여섯 에이전트 모두 이 구조를 따른다.** `game-agent` 와 `qa-agent` 는 이
 규칙보다 먼저 만들어져 한동안 Claude Code 전용이었고, 지침이 실행 파일
 안에 직접 들어 있었다. 2026-07-29에 공통 원본으로 옮기고 Codex 실행
 파일을 추가해 맞췄다.
 
-| 에이전트 | 공통 원본 | Claude Code | Codex |
-|---|---|---|---|
-| 게임 | `docs/agents/game-agent.md` | `game-agent` | `game_agent` |
-| UX/UI | `docs/agents/uxui-agent.md` | `uxui-agent` | `uxui_agent` |
-| Coach | `docs/agents/coach-agent.md` | `coach-agent` | `coach_agent` |
-| QA | `docs/agents/qa-agent.md` | `qa-agent` | `qa_agent` |
-| 한국어 | `docs/agents/korean-agent.md` | `korean-agent` | `korean_agent` |
+| 에이전트 | 공통 원본 | Claude Code | Codex | 코드를 고치나 |
+|---|---|---|---|---|
+| 총괄·배포 심사 | `docs/agents/lead-agent.md` | `lead-agent` | `lead_agent` | **안 고친다** |
+| 게임 | `docs/agents/game-agent.md` | `game-agent` | `game_agent` | 고친다 |
+| UX/UI | `docs/agents/uxui-agent.md` | `uxui-agent` | `uxui_agent` | UI만 |
+| Coach | `docs/agents/coach-agent.md` | `coach-agent` | `coach_agent` | 분석 영역만 |
+| QA | `docs/agents/qa-agent.md` | `qa-agent` | `qa_agent` | **안 고친다** |
+| 한국어 | `docs/agents/korean-agent.md` | `korean-agent` | `korean_agent` | 글만 |
 
 **같이 돌려도 되는 조합**
 
-| | 게임 | UX/UI | Coach | QA | 한국어 |
-|---|---|---|---|---|---|
-| **게임** | — | ⚠ 화면 충돌 | ○ | ○ | ○ |
-| **UX/UI** | ⚠ | — | ○ | ○ | ⚠ `src/ui` 충돌 |
-| **Coach** | ○ | ○ | — | ○ | ⚠ 분석 문구 충돌 |
-| **QA** | ○ | ○ | ○ | — | ○ |
-| **한국어** | ○ | ⚠ | ⚠ | ○ | — |
+| | 총괄 | 게임 | UX/UI | Coach | QA | 한국어 |
+|---|---|---|---|---|---|---|
+| **총괄** | — | ○ | ○ | ○ | ○ | ○ |
+| **게임** | ○ | — | ⚠ 화면 충돌 | ○ | ○ | ○ |
+| **UX/UI** | ○ | ⚠ | — | ○ | ○ | ⚠ `src/ui` 충돌 |
+| **Coach** | ○ | ○ | ○ | — | ○ | ⚠ 분석 문구 충돌 |
+| **QA** | ○ | ○ | ○ | ○ | — | ○ |
+| **한국어** | ○ | ○ | ⚠ | ⚠ | ○ | — |
 
-QA 는 코드를 고치지 않아 **언제나 안전**하다.
+**총괄과 QA 는 코드를 고치지 않아 언제나 안전하다.** 다만 총괄이 심사하는
+동안 다른 에이전트가 파일을 고치고 있으면 **심사 대상이 움직인다.** 판정을
+받을 때는 작업 트리를 깨끗이 하고 부른다.
 
 ---
+
+## 4.4.1 총괄 · 배포 심사 에이전트
+
+다섯 전문 에이전트를 총괄하고 배포 가부를 판정하는 자리다. Codex 에서는
+**`lead_agent`** (`.codex/agents/lead-agent.toml`), Claude Code 에서는
+**`lead-agent`** (`.claude/agents/lead-agent.md`)를 쓴다. 두 실행 파일은
+공통 원본 `docs/agents/lead-agent.md`를 반드시 읽는다.
+
+페르소나는 **20년차 개발자**다. 사용자가 정했다 — **여기서 통과를 받아야
+Vercel 에 배포한다.** 지금 GitHub Pages 는 작업용이고 Vercel 은 사람들에게
+보여주는 자리다.
+
+**코드를 고치지 않는다.** QA 와 같은 규칙이다 — 심사하는 사람이 고치면
+자기가 고친 것을 자기가 심사하게 된다. 불가 항목은 어느 에이전트 소관인지
+지정해서 사용자에게 넘긴다.
+
+**남의 보고를 믿지 않는 것이 이 자리의 존재 이유다.** 검사·타입·빌드·밸런스를
+직접 돌린 출력만 근거로 쓴다. 실제로 한 에이전트가 「타입 오류 2건」이라고
+보고했는데 다시 재보니 0이었고(다른 에이전트의 편집 중간 상태를 본 것),
+QA 회차 표가 이미 고쳐진 항목을 「미수정」으로 적고 있었다.
+
+심사표는 다섯 칸이다 — ⓐ 기계가 답하는 것(검사·타입·빌드·밸런스)
+ⓑ 1·3절 불변식 ⓒ 대회 규칙(마감 뒤 커밋은 **실격**) ⓓ 처음 보는 사람
+(1차 관문이 대중 투표다) ⓔ 문서가 코드와 같은 말을 하는가. 판정은
+**통과 · 조건부 통과 · 불가** 셋 중 하나이고 **의심스러우면 불가**다.
 
 ## 4.5 게임 전문가 에이전트
 
