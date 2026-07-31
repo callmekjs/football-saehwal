@@ -5988,9 +5988,47 @@ button {
 .tp-line .tp-spot { fill: rgba(214, 245, 228, 0.4); stroke: none; }
 .tp-line .tp-goal { stroke: rgba(214, 245, 228, 0.45); }
 
-.tp-pass path { stroke-width: 2; stroke-dasharray: 7 6; stroke-linecap: round; }
+.tp-pass path {
+  stroke-width: 2;
+  stroke-dasharray: 7 6;
+  stroke-linecap: round;
+  /* 점선이 받는 쪽으로 흐른다. 13은 점선 한 주기라 이어 붙어도 안 튄다 */
+  animation: tp-dash 1.6s linear infinite;
+}
+@keyframes tp-dash { to { stroke-dashoffset: -13; } }
 .tp-pass .theirs { stroke: #e08a80; color: #e08a80; }
 .tp-pass .ours { stroke: #6fd8a4; color: #6fd8a4; }
+
+/*
+  스물두 명이 자기 자리 안에서 조금씩 흔들린다.
+  사용자가 정했다 — "각 점 하나하나 살아 있어야 해."
+
+  바깥 `g` 가 자리를 잡고 안쪽 `g` 가 흔든다. 한 요소에서 둘 다 하면
+  흔드는 transform 이 자리 transform 을 덮어써 선수가 왼쪽 위로 몰린다.
+  움직임의 폭은 2 사용자 단위 — 원 반지름이 11이라 대형이 흐트러지지 않는다.
+*/
+.tp-bob { animation: tp-bob-0 7s ease-in-out infinite; will-change: transform; }
+.tp-bob.v1 { animation-name: tp-bob-1; }
+.tp-bob.v2 { animation-name: tp-bob-2; }
+
+@keyframes tp-bob-0 {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(1.7px, -1.1px); }
+  50% { transform: translate(-0.9px, 1.6px); }
+  75% { transform: translate(-1.6px, -0.7px); }
+}
+@keyframes tp-bob-1 {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(-1.5px, -1.5px); }
+  60% { transform: translate(1.2px, 1.3px); }
+  80% { transform: translate(1.6px, -0.9px); }
+}
+@keyframes tp-bob-2 {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(0.8px, 1.7px); }
+  55% { transform: translate(-1.7px, 0.4px); }
+  85% { transform: translate(0.6px, -1.6px); }
+}
 
 .tp-dots text {
   fill: currentColor;
@@ -6130,6 +6168,9 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .title-play { transition: none; }
   .title-play:hover { transform: none; }
+  /* 움직임에 멀미가 나는 사람이 있다. 대형은 그대로 다 보인다 */
+  .tp-bob,
+  .tp-pass path { animation: none; }
 }
 
 

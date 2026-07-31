@@ -51,6 +51,38 @@ function widestPair(dots: readonly BoardDot[], pos: BoardDot['pos']): [BoardDot,
   return [line[0], line[line.length - 1]]
 }
 
+/**
+ * 한 명.
+ *
+ * 사용자가 정했다 — *"점들도 움직이는게 있어야 해. 각 점 하나하나 살아
+ * 있어야 해."* 그래서 자기 자리를 중심으로 조금씩 흔들린다. 실제 축구에서
+ * 공이 없는 선수도 가만히 서 있지 않는다.
+ *
+ * **자리를 옮기는 것이 아니라 자리 안에서 흔든다.** 대형은 그 판의 실제
+ * 대형이라 움직임이 자리를 바꿔버리면 화면이 거짓말을 하게 된다.
+ *
+ * 흔드는 속도와 시작 시점은 **등번호에서 만든다.** `Math.random` 을 쓰면
+ * 스물두 명이 매번 다른 리듬으로 서고, 무엇보다 이 저장소는 화면 값도
+ * 재현되게 두기로 했다.
+ */
+function Dot({ side, dot }: { side: 'ours' | 'theirs'; dot: BoardDot }) {
+  const salt = dot.num + (side === 'ours' ? 0 : 37)
+  return (
+    <g className={side} transform={`translate(${px(dot.y)} ${py(dot.x)})`}>
+      <g
+        className={`tp-bob v${salt % 3}`}
+        style={{
+          animationDuration: `${5.5 + (salt % 5) * 0.9}s`,
+          animationDelay: `-${(salt % 7) * 0.8}s`,
+        }}
+      >
+        <circle r="11" />
+        <text dy="3.6">{dot.num}</text>
+      </g>
+    </g>
+  )
+}
+
 export interface TitlePitchProps {
   ours: readonly BoardDot[]
   theirs: readonly BoardDot[]
@@ -137,16 +169,10 @@ export function TitlePitch({ ours, theirs }: TitlePitchProps) {
 
       <g className="tp-dots">
         {theirs.map((d) => (
-          <g key={`a${d.num}`} className="theirs" transform={`translate(${px(d.y)} ${py(d.x)})`}>
-            <circle r="11" />
-            <text dy="3.6">{d.num}</text>
-          </g>
+          <Dot key={`a${d.num}`} side="theirs" dot={d} />
         ))}
         {ours.map((d) => (
-          <g key={`h${d.num}`} className="ours" transform={`translate(${px(d.y)} ${py(d.x)})`}>
-            <circle r="11" />
-            <text dy="3.6">{d.num}</text>
-          </g>
+          <Dot key={`h${d.num}`} side="ours" dot={d} />
         ))}
       </g>
     </svg>
