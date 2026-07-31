@@ -471,9 +471,14 @@ export function App() {
           </section>
 
           <p className="kickoff-time-note">
-            {halfLabel(selectedHalf)} {breakStart(selectedHalf)}분 급수 타임에서 지시를 마친 뒤,
-            {kickoffMinute(selectedHalf)}분에 재개해 {segmentEnd(selectedHalf)}분까지
-            진행합니다. 추가시간은 +{addedTimeOf(selectedHalf)}분입니다.
+            {/*
+              JSX 는 표현식 바로 앞뒤의 줄바꿈을 지운다. `뒤,` 다음에 그냥
+              줄을 바꾸면 화면에 `뒤,70분에` 로 붙어 나오므로 띄어쓰기를
+              명시한다. 문장 자체는 그대로다.
+            */}
+            {halfLabel(selectedHalf)} {breakStart(selectedHalf)}분 급수 타임에서 지시를 마친 뒤,{' '}
+            {kickoffMinute(selectedHalf)}분에 재개해 {segmentEnd(selectedHalf)}분까지 진행합니다.
+            추가시간은 +{addedTimeOf(selectedHalf)}분입니다.
           </p>
         </main>
       </div>
