@@ -40,6 +40,8 @@ export const BASE = {
 export const LINE = [
   { behind: 0.45, steal: 0.8, drain: 0.9, entryXg: 0.58, setPiece: 4.2 },
   { behind: 1.0, steal: 1.0, drain: 1.0, entryXg: 1.0, setPiece: 1.0 },
+  // 화면의 포메이션 역할을 계산에도 연결한 뒤 높은 라인 정답의 격차를
+  // 20.5%p로 복구한 최소값이다. 1.34에서는 20.0%p라 회귀 여유가 없었다.
   { behind: 2.2, steal: 1.25, drain: 1.15, entryXg: 1.35, setPiece: 0.6 },
 ] as const
 
