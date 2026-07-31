@@ -5,6 +5,7 @@ import {
   type MatchAnalysis,
 } from '../analysis/compare'
 import type { CoachFinding, OutcomeProfile } from '../analysis/coach'
+import { toRecordCompare, type RecordCompare } from '../analysis/history'
 import type {
   Decision,
   Level,
@@ -142,8 +143,14 @@ export function AnalysisPanel({
   decisions: Decision[]
   kickoff: number
   kickoffHalf: 1 | 2
-  /** 150판 비교가 끝나면 방치 대비 차이를 한 번 알린다 */
-  onDelta?: (delta: number) => void
+  /**
+   * 150판 비교가 끝나면 한 번 알린다.
+   *
+   * 차이(`delta`)만 넘기면 기록에 "+8.2%p" 한 줄밖에 안 남아서, 나중에
+   * `04 · 분석·기록` 이 "그래서 무엇을 어떻게 바꾸라는 것인가"를 그릴 수
+   * 없다. 세 갈래 평균까지 함께 넘긴다.
+   */
+  onDelta?: (delta: number, compare: RecordCompare | null) => void
   /** 전반에 내린 결정. 전반부터 뛴 경기에서만 있다 */
   firstHalf?: Decision[] | null
   firstHalfState?: MatchState | null
@@ -205,8 +212,8 @@ export function AnalysisPanel({
         )
         if (cancelled) return
         setAnalysis(next)
-        // 150판 비교가 끝났다. 기록에 방치 대비 차이를 채워 넣게 알린다
-        onDelta?.(next.userDelta)
+        // 150판 비교가 끝났다. 기록에 방치 대비 차이와 세 갈래 평균을 채워 넣게 알린다
+        onDelta?.(next.userDelta, toRecordCompare(next.rows))
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
       }

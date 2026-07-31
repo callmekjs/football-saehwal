@@ -12,6 +12,8 @@
  * 한다. 그래서 모든 접근을 감싸고, 실패하면 조용히 이번 방문에만 기억한다.
  */
 
+import type { RecordCompare, RecordSetup } from '../analysis/history'
+
 export interface MatchRecord {
   /** 저장 시각(밀리초). 화면이 사람 말로 바꾼다 */
   at: number
@@ -28,6 +30,20 @@ export interface MatchRecord {
   decisions: number
   /** 150판 비교에서 방치 대비 몇 %p 였나. 없으면 null */
   delta: number | null
+  /**
+   * 아래 셋은 **옛 기록에 없다.**
+   *
+   * 이 칸들이 생기기 전에 저장된 줄이 브라우저에 그대로 남아 있고, 그것도
+   * 진짜 기록이므로 버리지 않는다. 그래서 전부 선택 항목이고, 화면은 값이
+   * 있는 줄만 골라 쓴다. 없는 줄에 0을 채워 그리면 있지도 않은 경기를
+   * 그리는 것이 된다.
+   */
+  /** 경기가 끝난 시점의 우리 설정 */
+  setup?: RecordSetup
+  /** 그 국면의 검증된 권장 설정 */
+  recommended?: RecordSetup
+  /** 무개입·나의 판단·권장 전술 150판 비교. 분석이 끝나야 채워진다 */
+  compare?: RecordCompare
 }
 
 const KEY = 'saehwal.history.v1'

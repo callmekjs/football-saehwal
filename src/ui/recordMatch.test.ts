@@ -68,4 +68,54 @@ describe('끝난 경기를 기록 한 줄로', () => {
       false,
     )
   })
+
+  /**
+   * `04 · 분석·기록` 이 다음 판에 쓸 문장을 만들려면 "+8.2%p" 한 줄로는
+   * 모자란다. 종료 시점의 설정과 그 국면의 권장 설정이 함께 남아야
+   * "라인 낮음 → 보통부터 맞추세요"를 말할 수 있다.
+   */
+  it('종료 시점의 우리 설정을 함께 남긴다', () => {
+    const final = { ...createState(survive), score: [1, 0] as [number, number] }
+    final.tactics = { line: 2, press: 0, width: 2 }
+    final.formation = '3-4-3'
+    const record = toRecord(finished({ final }))
+    expect(record.setup).toEqual({
+      formation: '3-4-3',
+      line: 2,
+      press: 0,
+      width: 2,
+    })
+  })
+
+  it('그 국면의 검증된 권장 설정도 함께 남긴다', () => {
+    const record = toRecord(finished())
+    expect(record.recommended).toEqual({
+      formation: survive.recommendation!.formation,
+      line: survive.recommendation!.tactics.line,
+      press: survive.recommendation!.tactics.press,
+      width: survive.recommendation!.tactics.width,
+    })
+  })
+
+  it('150판 비교가 아직이면 그 칸을 아예 만들지 않는다', () => {
+    // 없는 값을 0으로 채우면 있지도 않은 경기를 그리게 된다
+    expect('compare' in toRecord(finished())).toBe(false)
+  })
+
+  it('150판 비교가 끝나면 세 갈래를 그대로 담는다', () => {
+    const compare = {
+      rates: { noop: 0.2, user: 0.4, recommendation: 0.6 },
+      noop: { goalsFor: 0, goalsAgainst: 2, homeShot: 1, awayShot: 6, setPiece: 9, behind: 5 },
+      user: { goalsFor: 0, goalsAgainst: 1, homeShot: 2, awayShot: 4, setPiece: 6, behind: 3 },
+      recommendation: {
+        goalsFor: 0,
+        goalsAgainst: 0.6,
+        homeShot: 3,
+        awayShot: 2,
+        setPiece: 4,
+        behind: 2,
+      },
+    }
+    expect(toRecord(finished({ compare })).compare).toEqual(compare)
+  })
 })

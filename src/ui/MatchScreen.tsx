@@ -1296,7 +1296,7 @@ export function MatchScreen({
             firstHalf={firstHalf ? firstHalf.decisions : null}
             firstHalfState={firstHalf ? firstHalf.state : null}
             opponent={opponent}
-            onDelta={(delta) =>
+            onDelta={(delta, compare) =>
               onFinish?.({
                 problem,
                 final: state,
@@ -1305,6 +1305,7 @@ export function MatchScreen({
                 decisions:
                   decisions.current.length + (firstHalf ? firstHalf.decisions.length : 0),
                 delta,
+                ...(compare ? { compare } : {}),
                 at: Date.now(),
               })
             }

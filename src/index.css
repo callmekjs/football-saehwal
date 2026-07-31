@@ -6681,10 +6681,342 @@ button {
 .history-board-num b { font-family: var(--num); font-size: 12px; color: var(--accent); }
 .history-board-num b[data-none='on'] { color: var(--dim-3); font-family: inherit; font-size: 11px; }
 
+/* ──────────────────────────────────────────────────────────────────
+   04 의 그래프 셋.
+
+   전부 CSS 도형이다 — 이 저장소에는 이미지 파일이 하나도 없고, 차트
+   라이브러리도 넣지 않는다. 막대 하나가 곧 한 문장이라 SVG 로 그릴
+   만큼 복잡하지 않다.
+
+   세 갈래의 색은 화면 전체에서 같은 뜻이다.
+   회색 = 무개입 · 초록 = 나의 판단 · 노랑 = 권장 전술.
+   ────────────────────────────────────────────────────────────────── */
+.history-section {
+  --who-noop: #64748b;
+  --who-user: var(--accent);
+  --who-rec: var(--warn);
+}
+
+.lesson-board,
+.habit-board,
+.trend-board {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.lesson-board > header > span,
+.habit-board > header > span,
+.trend-board > header > span {
+  display: block;
+  color: var(--dim-3);
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.lesson-board > header > h3,
+.habit-board > header > h3,
+.trend-board > header > h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+/* ── 세 갈래 막대 ── */
+.triple-bar { display: grid; gap: 4px; min-width: 0; }
+.triple-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.triple-name { color: var(--dim-2); font-size: 10.5px; white-space: nowrap; }
+.triple-track {
+  display: block;
+  height: 9px;
+  min-width: 0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.triple-track i { display: block; height: 100%; border-radius: 5px; }
+.triple-value {
+  font-family: var(--num);
+  font-size: 13px;
+  text-align: right;
+  color: var(--text-4);
+}
+.triple-row[data-who='noop'] .triple-track i { background: var(--who-noop); }
+.triple-row[data-who='user'] .triple-track i { background: var(--who-user); }
+.triple-row[data-who='rec'] .triple-track i { background: var(--who-rec); }
+.triple-row[data-who='user'] .triple-name,
+.triple-row[data-who='user'] .triple-value { color: var(--who-user); }
+.triple-row[data-who='rec'] .triple-name,
+.triple-row[data-who='rec'] .triple-value { color: var(--who-rec); }
+
+/* ── 가장 최근 판 ── */
+.lesson-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px;
+}
+.lesson-legend li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.lesson-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--who-noop);
+}
+.lesson-legend li[data-who='user'] i { background: var(--who-user); }
+.lesson-legend li[data-who='rec'] i { background: var(--who-rec); }
+.lesson-legend b { font-size: 12px; }
+.lesson-legend small {
+  grid-column: 2;
+  color: var(--dim-2);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.lesson-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 14px;
+}
+.lesson-rate {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.lesson-rate .triple-track { height: 12px; }
+.lesson-rate .triple-value { font-size: 15px; }
+
+.lesson-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lesson-row-head b { font-size: 13px; }
+.lesson-row-head small { color: var(--dim-3); font-size: 9.5px; }
+
+.lesson-text { display: grid; gap: 8px; align-content: start; }
+.lesson-text p {
+  margin: 0;
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.lesson-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+  gap: 8px;
+}
+.lesson-row {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.lesson-row p {
+  margin: 0;
+  color: var(--dim-2);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.lesson-gaps { display: grid; gap: 6px; }
+.lesson-gaps h4 {
+  margin: 0;
+  font-family: var(--label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--dim-2);
+}
+.lesson-gaps ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lesson-gaps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(243, 201, 95, 0.08);
+}
+.lesson-gaps small { color: var(--dim-3); font-size: 10px; }
+.lesson-gaps b { color: var(--dim-2); font-size: 12px; font-weight: 500; }
+.lesson-gaps i { color: var(--dim-3); font-style: normal; font-size: 11px; }
+.lesson-gaps strong { color: var(--warn); font-size: 12px; }
+
+/* ── 전술 버릇 ── */
+.habit-board ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+  gap: 8px;
+}
+.habit-board li {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--line-3);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.habit-board li[data-lean='MATCHED'] { border-left-color: var(--accent); }
+.habit-board li[data-lean='LOWER'] { border-left-color: #5f7d9c; }
+.habit-board li[data-lean='HIGHER'] { border-left-color: #c9a35a; }
+.habit-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.habit-head b { font-size: 13px; }
+.habit-head small { color: var(--dim-3); font-size: 10px; }
+.habit-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  min-width: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+.habit-bar i { display: block; min-width: 3px; }
+.habit-bar i[data-seg='matched'] { background: var(--accent); }
+.habit-bar i[data-seg='lower'] { background: #5f7d9c; }
+.habit-bar i[data-seg='higher'],
+.habit-bar i[data-seg='other'] { background: #c9a35a; }
+.habit-board p {
+  margin: 0;
+  color: var(--dim-2);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* ── 판단의 흐름 ── */
+/*
+  기둥 수(`--n`)를 화면이 넘겨준다. 남는 폭을 그냥 나눠 쓰면 두 판일 때
+  기둥 하나가 600px 짜리 색면이 되어 그래프로 안 읽힌다. 폭이 좁아지면
+  기둥도 같이 좁아져야 하므로 상한만 걸고 `1fr` 로 늘어나게 둔다.
+*/
+.trend-chart {
+  position: relative;
+  height: 112px;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 46px));
+  justify-content: start;
+  gap: 4px;
+  padding: 0 2px;
+}
+.trend-zero {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 0;
+  border-top: 1px dashed var(--border);
+}
+.trend-col { position: relative; min-width: 0; }
+.trend-col i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: block;
+  min-height: 2px;
+  border-radius: 3px;
+}
+.trend-col[data-sign='up'] i { bottom: 50%; background: var(--accent); }
+.trend-col[data-sign='down'] i { top: 50%; background: var(--away); }
+/*
+  기둥은 **판단**의 값이고 점은 **그 한 판의 결과**다. 둘이 어긋나는
+  칸이 이 저장소의 house rule 을 눈으로 보여준다 — 좋은 판단도 결과가
+  나쁠 수 있다.
+*/
+.trend-col::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  border: 1.5px solid var(--dim-2);
+  background: var(--bg, #0d1420);
+}
+.trend-col[data-passed='on']::after {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.trend-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.trend-axis small { color: var(--dim-3); font-size: 9.5px; }
+.trend-board > p {
+  margin: 0;
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.trend-board > p.trend-legend { color: var(--dim-2); font-size: 11px; }
+.trend-legend b { color: var(--text-4); font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .lesson-top { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 900px) {
   .history-blank { grid-template-columns: minmax(0, 1fr); }
   .history-board li { grid-template-columns: minmax(0, 1fr) 110px; }
   .history-board-bars { grid-column: 1 / -1; }
+}
+
+@media (max-width: 520px) {
+  .lesson-board,
+  .habit-board,
+  .trend-board { padding: 12px; }
+  .lesson-rows,
+  .habit-board ul { grid-template-columns: minmax(0, 1fr); }
+  .triple-row { grid-template-columns: 52px minmax(0, 1fr) 42px; gap: 6px; }
+  .trend-chart { gap: 2px; height: 96px; }
 }
 
 @media (max-width: 900px) {

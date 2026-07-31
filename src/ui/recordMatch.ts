@@ -12,6 +12,7 @@
  */
 import { judge } from '../sim/engine'
 import { opponentInfo } from '../analysis/opponents'
+import type { RecordCompare, RecordSetup } from '../analysis/history'
 import type { MatchState, OpponentId, Problem } from '../sim/types'
 import type { Half } from '../matchClock'
 import type { MatchRecord } from './matchHistory'
@@ -32,12 +33,32 @@ export interface FinishedMatch {
    * 사용자가 화면을 떠날 수 있는데, 그러면 판 자체가 사라진다.
    */
   delta: number | null
+  /**
+   * 무개입·나의 판단·권장 전술 150판 비교. `delta` 와 같은 순간에 온다.
+   *
+   * **`delta` 하나만으로는 다음 판에 쓸 것이 안 남는다.** "+8.2%p" 는
+   * 점수일 뿐 무엇을 어떻게 바꾸라는 말이 아니다. 세 갈래의 평균 실점과
+   * 세트피스 위험까지 함께 남겨야 `04 · 분석·기록` 이 "권장안은 상대
+   * 슈팅을 여기까지 줄인다"를 그릴 수 있다.
+   */
+  compare?: RecordCompare
   /** 저장 시각(ms) */
   at: number
 }
 
+/** 경기가 끝난 시점의 우리 설정. 화면이 아니라 시뮬레이션 상태에서 읽는다 */
+function setupOf(final: MatchState): RecordSetup {
+  return {
+    formation: final.formation,
+    line: final.tactics.line,
+    press: final.tactics.press,
+    width: final.tactics.width,
+  }
+}
+
 export function toRecord(match: FinishedMatch): MatchRecord {
-  const { problem, final, opponent, half, decisions, delta, at } = match
+  const { problem, final, opponent, half, decisions, delta, compare, at } = match
+  const recommendation = problem.recommendation
   return {
     at,
     problemId: problem.id,
@@ -50,6 +71,19 @@ export function toRecord(match: FinishedMatch): MatchRecord {
     passed: judge(final, problem.objective),
     decisions,
     delta,
+    setup: setupOf(final),
+    // 권장 전술이 없는 국면도 데이터상 가능하다. 없으면 칸 자체를 만들지 않는다
+    ...(recommendation
+      ? {
+          recommended: {
+            formation: recommendation.formation,
+            line: recommendation.tactics.line,
+            press: recommendation.tactics.press,
+            width: recommendation.tactics.width,
+          },
+        }
+      : {}),
+    ...(compare ? { compare } : {}),
   }
 }
 
