@@ -180,6 +180,34 @@ export interface PlayerAttributes {
   endurance: number
   /** 타고난 체력 */
   naturalFitness: number
+
+  /**
+   * ── 골키퍼 전용 ──
+   *
+   * 골키퍼에게 태클·헤더·드리블을 보여주는 것은 그 자리를 설명하지 못한다.
+   * 사용자가 골키퍼 화면을 주고 정했다. 필드 선수는 이 칸들을 갖고 있어도
+   * 화면에 보이지 않는다.
+   */
+  /** 1:1 방어 */
+  oneOnOne: number
+  /** 반사 신경 */
+  reflexes: number
+  /** 볼 핸들링 */
+  handling: number
+  /** 공중 장악력 */
+  aerialReach: number
+  /** 페널티 박스 장악력 */
+  commandOfArea: number
+  /** 수비 조율 */
+  organisation: number
+  /** 골킥 */
+  goalKick: number
+  /** 공 던지기 */
+  throwing: number
+  /** 돌진 성향 */
+  rushingOut: number
+  /** 펀칭 성향 */
+  punching: number
 }
 
 /** 경기 중 변하는 선수 상태 */

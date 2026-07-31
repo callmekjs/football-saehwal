@@ -46,10 +46,40 @@ export interface PlayerData {
  * 판단해야 하는지를 알려준다. 이 프로젝트는 계산에 안 쓰이는 종합 평점을
  * 일부러 만들지 않았고, 그 원칙을 능력치에서도 깨지 않는다.
  */
-const ATTRIBUTE_LAYOUT: ReadonlyArray<{
+type AttributeLayout = ReadonlyArray<{
   title: string
   rows: ReadonlyArray<{ key: keyof PlayerAttributes; label: string; used?: boolean }>
-}> = [
+}>
+
+/**
+ * 골키퍼의 기술적 능력.
+ *
+ * 사용자가 골키퍼 화면을 주고 정했다. 골키퍼에게 태클·헤더·드리블·크로스를
+ * 보여주는 것은 그 자리를 설명하지 못한다. 실제로 골키퍼를 가르는 것은
+ * 반사 신경과 볼 핸들링, 공중과 박스를 얼마나 장악하는가다.
+ *
+ * **정신과 신체는 필드 선수와 같은 것을 쓴다.** 집중력과 판단력은 골키퍼
+ * 에게도 같은 뜻이고, 나눠 놓으면 같은 값이 두 이름으로 존재하게 된다.
+ */
+const KEEPER_TECHNICAL: AttributeLayout[number] = {
+  title: '기술적 능력',
+  rows: [
+    { key: 'oneOnOne', label: '1:1 방어' },
+    { key: 'reflexes', label: '반사 신경' },
+    { key: 'handling', label: '볼 핸들링' },
+    { key: 'aerialReach', label: '공중 장악력' },
+    { key: 'commandOfArea', label: '페널티 박스 장악력' },
+    { key: 'organisation', label: '수비 조율' },
+    { key: 'goalKick', label: '골킥' },
+    { key: 'throwing', label: '공 던지기' },
+    { key: 'rushingOut', label: '돌진 성향' },
+    { key: 'punching', label: '펀칭 성향' },
+    { key: 'pass', label: '패스' },
+    { key: 'firstTouch', label: '퍼스트 터치' },
+  ],
+}
+
+const ATTRIBUTE_LAYOUT: AttributeLayout = [
   {
     title: '기술적 능력',
     rows: [
@@ -128,7 +158,7 @@ export function playerDataOf(state: PlayerState): PlayerData {
     hasFreePosition: state.position !== null,
     star: isStarAbility(ability),
     profile: player.profile,
-    attributeGroups: ATTRIBUTE_LAYOUT.map((group) => ({
+    attributeGroups: layoutFor(player.pos).map((group) => ({
       title: group.title,
       rows: group.rows.map((row) => ({
         key: row.key,
@@ -141,13 +171,25 @@ export function playerDataOf(state: PlayerState): PlayerData {
 }
 
 /**
+ * 자리에 맞는 능력치 묶음.
+ *
+ * 골키퍼만 기술 칸을 통째로 갈아 끼운다. 정신과 신체는 그대로다.
+ */
+function layoutFor(pos: Position): AttributeLayout {
+  if (pos !== 'GK') return ATTRIBUTE_LAYOUT
+  return [KEEPER_TECHNICAL, ...ATTRIBUTE_LAYOUT.slice(1)]
+}
+
+/**
  * 능력치 한 칸의 한국어 이름.
  *
- * `ATTRIBUTE_LAYOUT` 이 이름표의 단일 원본이므로 여기서 되짚어 읽는다.
- * 분석 계층(`opponentSquad`)은 값만 정하고 이름은 화면이 붙인다.
+ * 두 묶음을 합쳐 이름표의 단일 원본으로 삼는다. 분석 계층
+ * (`opponentSquad`)은 값만 정하고 이름은 화면이 붙인다.
  */
 const ATTRIBUTE_LABEL = new Map<keyof PlayerAttributes, string>(
-  ATTRIBUTE_LAYOUT.flatMap((group) => group.rows.map((row) => [row.key, row.label] as const)),
+  [KEEPER_TECHNICAL, ...ATTRIBUTE_LAYOUT].flatMap((group) =>
+    group.rows.map((row) => [row.key, row.label] as const),
+  ),
 )
 
 export function attributeLabel(key: keyof PlayerAttributes): string {
@@ -190,7 +232,8 @@ export function attributeLabel(key: keyof PlayerAttributes): string {
  * 고르는 것은 줄에 요약해 세울 몇 칸뿐이다.
  */
 const SUMMARY_KEYS: Record<Position, ReadonlyArray<keyof PlayerAttributes>> = {
-  GK: ['anticipation', 'positioning', 'concentration'],
+  // 골키퍼는 전용 능력치가 생겼으므로 그 자리를 실제로 가르는 셋을 쓴다
+  GK: ['reflexes', 'handling', 'commandOfArea'],
   DF: ['marking', 'tackle', 'header'],
   MF: ['pass', 'vision', 'workRate'],
   FW: ['finish', 'offTheBall', 'pace'],

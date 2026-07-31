@@ -16,22 +16,26 @@
     "GK": {
       "technique": 8, "finish": 4, "dribble": 5, "marking": 6, "longThrow": 8, "longShot": 4, "corner": 4, "cross": 4, "tackle": 5, "pass": 9, "firstTouch": 9, "penalty": 5, "setPiece": 5, "header": 8,
       "offTheBall": 5, "bravery": 14, "leadership": 12, "positioning": 15, "determination": 13, "vision": 9, "anticipation": 14, "aggression": 7, "concentration": 15, "flair": 6, "composure": 13, "teamwork": 12, "judgement": 13, "workRate": 8,
-      "balance": 12, "strength": 13, "agility": 14, "pace": 11, "jump": 14, "speed": 11, "endurance": 12, "naturalFitness": 13
+      "balance": 12, "strength": 13, "agility": 14, "pace": 11, "jump": 14, "speed": 11, "endurance": 12, "naturalFitness": 13,
+      "oneOnOne": 14, "reflexes": 15, "handling": 14, "aerialReach": 13, "commandOfArea": 13, "organisation": 12, "goalKick": 12, "throwing": 12, "rushingOut": 11, "punching": 9
     },
     "DF": {
       "technique": 10, "finish": 6, "dribble": 7, "marking": 15, "longThrow": 11, "longShot": 6, "corner": 6, "cross": 9, "tackle": 14, "pass": 10, "firstTouch": 10, "penalty": 5, "setPiece": 7, "header": 14,
       "offTheBall": 7, "bravery": 15, "leadership": 12, "positioning": 15, "determination": 14, "vision": 9, "anticipation": 13, "aggression": 13, "concentration": 13, "flair": 6, "composure": 11, "teamwork": 13, "judgement": 13, "workRate": 12,
-      "balance": 12, "strength": 14, "agility": 11, "pace": 14, "jump": 14, "speed": 14, "endurance": 13, "naturalFitness": 13
+      "balance": 12, "strength": 14, "agility": 11, "pace": 14, "jump": 14, "speed": 14, "endurance": 13, "naturalFitness": 13,
+      "oneOnOne": 3, "reflexes": 3, "handling": 3, "aerialReach": 4, "commandOfArea": 3, "organisation": 9, "goalKick": 5, "throwing": 6, "rushingOut": 5, "punching": 4
     },
     "MF": {
       "technique": 13, "finish": 10, "dribble": 12, "marking": 10, "longThrow": 9, "longShot": 12, "corner": 11, "cross": 11, "tackle": 11, "pass": 14, "firstTouch": 13, "penalty": 10, "setPiece": 11, "header": 9,
       "offTheBall": 12, "bravery": 11, "leadership": 11, "positioning": 11, "determination": 13, "vision": 13, "anticipation": 12, "aggression": 11, "concentration": 12, "flair": 12, "composure": 12, "teamwork": 14, "judgement": 12, "workRate": 14,
-      "balance": 12, "strength": 10, "agility": 13, "pace": 14, "jump": 9, "speed": 14, "endurance": 14, "naturalFitness": 13
+      "balance": 12, "strength": 10, "agility": 13, "pace": 14, "jump": 9, "speed": 14, "endurance": 14, "naturalFitness": 13,
+      "oneOnOne": 3, "reflexes": 3, "handling": 3, "aerialReach": 3, "commandOfArea": 3, "organisation": 7, "goalKick": 5, "throwing": 6, "rushingOut": 5, "punching": 4
     },
     "FW": {
       "technique": 14, "finish": 14, "dribble": 14, "marking": 4, "longThrow": 7, "longShot": 12, "corner": 6, "cross": 9, "tackle": 5, "pass": 10, "firstTouch": 13, "penalty": 13, "setPiece": 8, "header": 11,
       "offTheBall": 15, "bravery": 11, "leadership": 9, "positioning": 6, "determination": 13, "vision": 11, "anticipation": 14, "aggression": 10, "concentration": 11, "flair": 14, "composure": 13, "teamwork": 9, "judgement": 11, "workRate": 10,
-      "balance": 13, "strength": 12, "agility": 14, "pace": 15, "jump": 12, "speed": 15, "endurance": 11, "naturalFitness": 12
+      "balance": 13, "strength": 12, "agility": 14, "pace": 15, "jump": 12, "speed": 15, "endurance": 11, "naturalFitness": 12,
+      "oneOnOne": 3, "reflexes": 3, "handling": 2, "aerialReach": 3, "commandOfArea": 2, "organisation": 4, "goalKick": 4, "throwing": 5, "rushingOut": 5, "punching": 3
     }
   },
 
