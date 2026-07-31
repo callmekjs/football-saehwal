@@ -39,6 +39,8 @@ const P03_83918 = {
   seed: 83918,
 }
 
+const P02_ACTUAL = problems.find((problem) => problem.id === 'p02') as unknown as Problem
+
 const P03_85776 = {
   ...(problems.find((problem) => problem.id === 'p03') as unknown as Problem),
   seed: 85776,
@@ -2172,12 +2174,64 @@ describe('심판 셋과 오프사이드', () => {
      * 데드볼이 늘어 75초짜리 관전에서 볼 것이 사라진다. 아래쪽은 0을
      * 막기만 한다. 애매하면 안 부는 쪽이 맞기 때문이다
      */
-    const wide = Array.from({ length: 24 }, (_, i) => watchOfficials(P.seed + 900 + i * 31).vm)
-    const total = wide.reduce((a, vm) => a + vm.offsideCount, 0)
-    const per = total / wide.length
-    expect(per, `판당 ${per.toFixed(2)}회`).toBeLessThan(2.5)
-    expect(total, `스물네 판에서 ${total}회`).toBeGreaterThan(0)
-  })
+    let total = 0
+    let raised = 0
+    let linked = 0
+    let afterDefenderOwned = 0
+    let badRestartPlace = 0
+
+    for (let i = 0; i < 100; i++) {
+      const seed = P02_ACTUAL.seed + 500 + i * 13
+      const problem = { ...P02_ACTUAL, seed }
+      const rng = createRng(seed)
+      let state = createState(problem)
+      const vm = new VisualMatch(state, seed)
+      let flaggedTarget: string | null = null
+
+      for (let tickIndex = 0; tickIndex < TOTAL_TICKS; tickIndex++) {
+        state = tick(state, rng)
+        vm.sync(state)
+        for (let frame = 0; frame < 6; frame++) {
+          const oldCalls = vm.offsideCount
+          const oldFlags = vm.flagsRaised
+          const beforeHolder = vm.ball.mode === 'HELD' ? vm.ball.holder : null
+          vm.advance(state, 1 / 60)
+
+          const hidden = vm as unknown as { flagged: { toId: string } | null }
+          if (vm.flagsRaised > oldFlags) {
+            raised += vm.flagsRaised - oldFlags
+            flaggedTarget = hidden.flagged?.toId ?? null
+          }
+          if (vm.offsideCount > oldCalls) {
+            total += vm.offsideCount - oldCalls
+            const target = vm.players.find((player) => player.id === flaggedTarget)
+            const holder = vm.players.find((player) => player.id === beforeHolder)
+            if (target && holder && holder.side !== target.side) afterDefenderOwned += 1
+            if (vm.whistle?.kind === 'OFFSIDE' && vm.restart?.kind === 'FREE_KICK' && vm.offside) {
+              linked += 1
+              if (
+                Math.abs(vm.offside.x - vm.restart.x) > 0.001 ||
+                Math.abs(vm.offside.y - vm.restart.y) > 0.001
+              ) {
+                badRestartPlace += 1
+              }
+            }
+            flaggedTarget = null
+          } else if (!hidden.flagged) {
+            flaggedTarget = null
+          }
+        }
+      }
+    }
+
+    const per = total / 100
+    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회`).toBeGreaterThanOrEqual(0.7)
+    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회`).toBeLessThanOrEqual(1)
+    expect(raised).toBeGreaterThan(total)
+    expect(afterDefenderOwned, '수비 소유 뒤 오프사이드').toBe(0)
+    expect(linked, `깃발 뒤 휘슬·프리킥 ${linked}/${total}`).toBe(total)
+    expect(badRestartPlace).toBe(0)
+  }, 10_000)
 
   it('오프사이드를 불어도 공이 순간이동하지 않는다', () => {
     /**
@@ -2294,6 +2348,11 @@ describe('오프사이드 위치 — 규칙 11조', () => {
     expect(
       offsidePosition({ attacking: 'AWAY', toX: mirror(40), ballX: mirror(10), lineX: mirror(20) }),
     ).toBe(false)
+  })
+
+  it('공보다 10m·두 번째 수비선보다 5m 앞이면 양 방향 모두 오프사이드다', () => {
+    expect(offsidePosition({ attacking: 'HOME', toX: 80, ballX: 70, lineX: 75 })).toBe(true)
+    expect(offsidePosition({ attacking: 'AWAY', toX: 25, ballX: 35, lineX: 30 })).toBe(true)
   })
 
   it('애매하면 안 분다 — 여유만큼 확실히 앞서야 한다', () => {
