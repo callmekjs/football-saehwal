@@ -601,12 +601,23 @@ export function App() {
    * 계산한다. 그래야 사이드바에 43이라고 보인 선수가 경기장에 들어가자마자
    * 70으로 바뀌는 일이 없다.
    */
+  /**
+   * 「명단 다시 뽑기」는 국면 시드도 함께 옮긴다.
+   *
+   * 전에는 능력치 씨앗만 바꿔서, 눌러도 **경고와 체력과 물려받은 전술이
+   * 그대로**였다. 그 셋은 국면 시드에서 뽑히기 때문이다. 사용자가
+   * "8번과 10번이 다시 뽑아도 계속 경고가 나온다"고 한 것이 이것이다.
+   *
+   * 경고 자체는 판마다 고르게 흩어진다 — 실측으로 2~10번이 비슷한 비율로
+   * 나온다. 문제는 분포가 아니라 **버튼이 그 주사위를 안 굴린 것**이었다.
+   */
+  const rerollOffset = rosterSeed * 104729
   const previewProblem = useMemo(
     () => ({
       ...selectedEntry.problem,
-      seed: selectedEntry.problem.seed + (attempt + 1) * 7919,
+      seed: selectedEntry.problem.seed + (attempt + 1) * 7919 + rerollOffset,
     }),
-    [attempt, selectedEntry],
+    [attempt, rerollOffset, selectedEntry],
   )
   const previewState = useMemo(
     () => createState(previewProblem, opponent, starters ?? undefined, roster),
@@ -615,7 +626,7 @@ export function App() {
   if (picked) {
     const problem = {
       ...picked.entry.problem,
-      seed: picked.entry.problem.seed + attempt * 7919,
+      seed: picked.entry.problem.seed + attempt * 7919 + rerollOffset,
     }
     return (
       <MatchScreen
@@ -641,7 +652,10 @@ export function App() {
       <TitleScreen
         historyCount={history.length}
         onStart={() => {
-          setSection('situation')
+          // 선수부터 보고 고를 수 있게 우리 팀으로 들어간다.
+          // 사용자가 정했다 — "바로 시작하면 1번으로 가서 선수들을 고를 수
+          // 있게 해줘."
+          setSection('squad')
           setEntered(true)
         }}
         onGo={(next: HomeSection) => {

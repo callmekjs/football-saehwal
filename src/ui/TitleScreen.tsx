@@ -86,7 +86,7 @@ export function TitleScreen({ onStart, onGo, historyCount }: TitleScreenProps) {
           <button type="button" className="title-main" onClick={onStart}>
             <span>
               <b>바로 시작</b>
-              <small>국면을 고르고 곧바로 킥오프</small>
+              <small>선수단을 보고 선발을 고른 뒤 킥오프</small>
             </span>
             <i aria-hidden>▶</i>
           </button>
