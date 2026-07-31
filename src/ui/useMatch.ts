@@ -213,15 +213,37 @@ export function useMatch(
   /** 감독이 고른 선발과 다시 뽑은 명단. 없으면 기본 선수단이다 */
   squad?: MatchSquad,
 ) {
-  const selectedStarters = squad?.starters
-  const selectedRoster = squad?.roster
-  const freshState = useCallback(
-    () => createFreshMatchState(problem, opponent, {
-      starters: selectedStarters,
-      roster: selectedRoster,
-    }),
-    [opponent, problem, selectedRoster, selectedStarters],
-  )
+  /**
+   * 지금 값을 담아두는 통.
+   *
+   * `freshState` 는 **언제 다시 만들지**와 **무엇으로 만들지**를 갈라야 한다.
+   * `problem` 을 의존성에 넣으면 호출부가 그 객체를 매 렌더 새로 만들기
+   * 때문에(`App.tsx` 의 `{ ...picked.entry.problem, seed }`) 함수가 매번 새로
+   * 생기고, 그것을 따라 `reset` 과 `useEffect` 가 실행되어 **판이 처음으로
+   * 되감긴다.**
+   *
+   * 실제로 그렇게 됐다. 경기가 끝나면 `onFinish` 가 기록을 저장하며 App 을
+   * 다시 그리고, 그 순간 감독 보고서가 0.4초 만에 사라지며 같은 판이 다시
+   * 시작됐다. 60초 급수 → 75초 경기 → 0.4초 보고서를 무한 반복하면서 아무도
+   * 안 친 판이 기록에 쌓였다(실측 3판 → 17판, 전부 실패).
+   */
+  const latest = useRef({ problem, opponent, squad })
+  latest.current = { problem, opponent, squad }
+
+  /**
+   * 값은 통에서 꺼내므로 이 함수는 **한 번 만들고 다시 만들지 않는다.**
+   *
+   * 국면·상대·선발이 바뀌면 `MatchScreen` 자체가 새 `key` 로 다시 마운트되어
+   * 첫 `useState` 가 새 상태를 만든다(`App.tsx`). 그래서 이 함수가 참조를
+   * 유지해도 낡은 값을 쓰는 일이 없다.
+   */
+  const freshState = useCallback(() => {
+    const now = latest.current
+    return createFreshMatchState(now.problem, now.opponent, {
+      starters: now.squad?.starters,
+      roster: now.squad?.roster,
+    })
+  }, [])
   const [state, setState] = useState<MatchState>(freshState)
   const [phase, setPhase] = useState<Phase>('READY')
 
@@ -236,16 +258,30 @@ export function useMatch(
   stateRef.current = state
   phaseRef.current = phase
 
+  /**
+   * 판을 처음으로 되돌린다.
+   *
+   * **의존성은 국면의 정체성뿐이다.** 객체 참조를 넣으면 위에 적은 되감김이
+   * 되살아난다. `id` 와 `seed` 와 상대가 같으면 같은 판이므로 다시 만들 이유가
+   * 없다.
+   */
   const reset = useCallback(() => {
     clearInterval(timerRef.current)
-    rngRef.current = createRng(problem.seed)
+    rngRef.current = createRng(latest.current.problem.seed)
     decisionsRef.current = []
     const fresh = freshState()
     stateRef.current = fresh
     setState(fresh)
     setPhase('READY')
-  }, [freshState, problem.seed])
+  }, [freshState])
 
+  /**
+   * 마운트할 때 한 번만 돈다.
+   *
+   * 위 `reset` 이 참조를 유지하므로 이 효과는 다시 실행되지 않는다. 그것이
+   * 이 자리에서 지켜야 할 전부다 — 경기 도중이나 종료 뒤에 이 효과가 한 번
+   * 더 돌면 감독이 치른 판이 통째로 사라진다.
+   */
   useEffect(() => reset(), [reset])
 
   /**
