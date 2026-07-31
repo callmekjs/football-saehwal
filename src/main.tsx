@@ -5,8 +5,16 @@ import { createRoot } from 'react-dom/client'
  * 막혀 있을 때 글자가 통째로 다른 모양으로 뜬다. 배포 URL 하나로 평가받는
  * 대회라 외부 요청에 기대면 안 된다. 전부 OFL 이라 번들이 허용된다.
  */
-// 한글 헤드라인
-import '@fontsource/black-han-sans'
+/**
+ * 한글 헤드라인. **한글·라틴 부분집합만 가져온다.**
+ *
+ * 전에는 부분집합을 안 걸어 유니코드 구간 여든셋이 통째로 딸려왔다. 브라우저는
+ * 실제로 쓰는 구간만 내려받지만 `@font-face` 규칙 여든셋이 CSS 에 그대로
+ * 실려, 첫 화면을 그리기 전에 읽어야 하는 파일이 그만큼 커졌다. 아래
+ * 본문 폰트는 이미 이렇게 막아뒀는데 이 폰트만 빠져 있었다.
+ */
+import '@fontsource/black-han-sans/korean-400.css'
+import '@fontsource/black-han-sans/latin-400.css'
 // 스코어·시계·등번호 같은 큰 숫자
 import '@fontsource/bebas-neue/latin-400.css'
 // 라벨·캡스. 500·600·700 세 굵기를 쓴다
