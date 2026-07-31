@@ -906,7 +906,8 @@ export function awaySummary(state: MatchState): string {
 
 export function AwayPanel({ state }: { state: MatchState }) {
   const shown = awaySlots(state.away.formation, state.awayCount)
-  const captain = awayCaptainNumber(state.away.formation, state.awayCount)
+  // 주장은 팀마다 다르다. 오늘 만난 상대를 넘겨 리더십으로 고르게 한다
+  const captain = awayCaptainNumber(state.away.formation, state.awayCount, state.opponentTeam)
   /**
    * 상대 체력은 **팀 하나의 값**이다(`state.awayStamina`).
    *

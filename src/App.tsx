@@ -167,11 +167,14 @@ function ShapeBoard({
 function AwayShapeBoard({
   formation,
   count = 11,
+  opponent,
 }: {
   formation: AwayFormationId
   count?: number
+  /** 주장은 팀마다 다르다. 리더십이 가장 높은 선수가 찬다 */
+  opponent?: OpponentId
 }) {
-  const captain = awayCaptainNumber(formation, count)
+  const captain = awayCaptainNumber(formation, count, opponent)
   const dots = awaySlots(formation, count).map(([pos, x, y, num]) => ({
     pos,
     x,
@@ -372,7 +375,7 @@ function OpponentPicker({
               즐겨 서는 대형
               <small>{squad.formation}</small>
             </h3>
-            <AwayShapeBoard formation={squad.formation} />
+            <AwayShapeBoard formation={squad.formation} opponent={value} />
           </div>
 
           <p className="opp-foot">
@@ -824,6 +827,7 @@ export function App() {
                   <AwayShapeBoard
                     formation={opponentSquad(opponent).formation}
                     count={selectedProblem.awayCount}
+                    opponent={opponent}
                   />
                   <p className="kickoff-setup-hint">{selectedOpponent.tag}</p>
                   <ul className="kickoff-setup-chips">

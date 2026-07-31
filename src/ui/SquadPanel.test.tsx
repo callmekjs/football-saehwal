@@ -4,6 +4,7 @@ import { createState } from '../sim/engine'
 import { FORMATION_IDS } from '../sim/formations'
 import { PROBLEMS } from '../sim/problems'
 import { AWAY_SHAPE_BY_MOOD, awaySlots } from '../sim/awayShape'
+import { homeCaptainNumber, awayCaptainNumber } from '../captain'
 import { AwayPanel, SquadPanel, awaySummary } from './SquadPanel'
 
 const stateOf = (id: string) =>
@@ -68,15 +69,25 @@ describe('우리 팀 배치판', () => {
       />,
     )
     expect(html).toContain('class="captain-marker"')
-    expect(html).toContain('aria-label="2번 주장, DF')
+    // 주장은 리더십으로 정해져 판마다 다르다. 등번호를 박지 않고
+    // 완장을 찬 선수가 실제로 화면에 주장으로 적히는지만 본다
+    const captain = homeCaptainNumber(stateOf('p02').players)
+    expect(html).toContain(`aria-label="${captain}번 주장,`)
   })
 })
 
 describe('상대 배치판', () => {
   it('상대 주장 카드에도 C와 한국어 접근성 이름을 함께 붙인다', () => {
-    const html = renderToStaticMarkup(<AwayPanel state={stateOf('p02')} />)
+    const state = stateOf('p02')
+    const html = renderToStaticMarkup(<AwayPanel state={state} />)
     expect(html).toContain('class="captain-marker"')
-    expect(html).toContain('aria-label="2번 주장, DF')
+    // 상대 주장도 팀마다 다르다. 등번호를 박지 않는다
+    const captain = awayCaptainNumber(
+      state.away.formation,
+      state.awayCount,
+      state.opponentTeam,
+    )
+    expect(html).toContain(`aria-label="${captain}번 주장,`)
   })
 
   it('전부 올라오는 상대를 뒤로 물러난다고 설명하지 않는다', () => {

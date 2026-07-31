@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { homeCaptainNumber } from '../captain'
 import { buildHalftime } from './halftime'
 import { createState, tick } from '../sim/engine'
 import { createRng } from '../sim/rng'
@@ -37,17 +38,16 @@ describe('하프타임 주장 정리', () => {
     }
   })
 
-  it('말하는 사람은 피치 위 필드 플레이어 중 등번호가 가장 작다', () => {
-    // 급수 타임 브리핑과 같은 규칙이어야 둘이 다른 사람이 말하지 않는다
+  it('말하는 사람은 피치 위 주장이다', () => {
+    // 급수 타임 브리핑과 같은 규칙이어야 둘이 다른 사람이 말하지 않는다.
+    // 주장은 등번호가 아니라 리더십으로 정해지므로 판마다 달라진다
     for (const problem of FIRST_HALF) {
       const s = playOut(problem)
       const h = buildHalftime(problem, s)
-      const nums = s.players
-        .filter((p) => p.onPitch && !p.out)
-        .map((p) => getPlayer(p.id))
-        .filter((p) => p.pos !== 'GK')
-        .map((p) => p.num)
-      expect(h.speaker).toBe(Math.min(...nums))
+      expect(h.speaker).toBe(homeCaptainNumber(s.players))
+      const speaker = s.players.find((p) => getPlayer(p.id).num === h.speaker)!
+      expect(speaker.onPitch && !speaker.out).toBe(true)
+      expect(getPlayer(speaker.id).pos).not.toBe('GK')
     }
   })
 
