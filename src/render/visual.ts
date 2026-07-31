@@ -422,13 +422,13 @@ const BEHIND_GAP = 13
  */
 const BEHIND_TRAIL = 8
 /**
- * 뚫리는 수비수가 침투한 선수 **뒤**를 겨누는 거리(m).
+ * 뚫리는 수비수가 침투한 선수의 **진행 방향 앞**을 겨누는 거리(m).
  *
- * 쫓는 사람은 앞지르려고 뛰는 것이 아니라 등을 따라간다. `separate` 가
- * 모든 선수에게 강제하는 개인 공간과 같은 폭이라, 이보다 좁게 잡으면
- * 둘이 매 프레임 서로 밀어내며 떤다.
+ * 느린 수비수가 현재 자리만 뒤쫓으면 슈터와의 간격이 계속 벌어진다.
+ * 달리는 길을 향해 가로막아야 실제 속도는 느려도 마지막까지 장면 안에
+ * 남는다. `separate` 가 강제하는 개인 공간만큼 앞을 겨눈다.
  */
-const BEHIND_CHASE_LAG = 1.4
+const BEHIND_CHASE_LEAD = 1.4
 
 /**
  * 태클이 성립하는 거리.
@@ -3150,8 +3150,12 @@ export class VisualMatch {
     if (along <= 0 || along >= 1) return null
 
     // 슈터-골키퍼 직선을 골라인까지 늘린 점을 노리면 공이 실제 GK를 지난다.
-    const targetY = shooter.y + (keeper.y - shooter.y) / along
-    if (Math.abs(targetY - GOAL_MID) >= GOAL_HALF - BALL_RADIUS) return null
+    const keeperLineY = shooter.y + (keeper.y - shooter.y) / along
+    // 기존 장면 문법도 지킨다. 비득점 슛은 GK 정면 2m 안이거나 포스트
+    // 밖이어야 하며, 그 사이 애매한 궤적은 선방도 빗나감도 읽히지 않는다.
+    const targetY = clamp(keeperLineY, GOAL_MID - 1.9, GOAL_MID + 1.9)
+    const pathAtKeeper = shooter.y + (targetY - shooter.y) * along
+    if (Math.abs(pathAtKeeper - keeper.y) >= 2) return null
 
     const travel = Math.hypot(keeper.x - shooter.x, keeper.y - shooter.y) / SHOT_SPEED
     const height = lift * travel - (GRAVITY * travel * travel) / 2
@@ -3762,8 +3766,9 @@ export class VisualMatch {
        */
       if (behind && runner) {
         if (p.id === behind.chaserId) {
-          // 앞지르지 않는다. 뒤에서 어깨를 쫓는 그림이라야 "뚫렸다"로 보인다
-          p.tx = clamp(runner.x + BEHIND_CHASE_LAG, 3, PITCH_W - 3)
+          // 현재 자리만 쫓으면 느린 수비수는 화면 밖으로 멀어진다. 침투
+          // 경로 앞을 겨눠 가로막되, 실제 속도 차이 때문에 끝내 뒤처진다.
+          p.tx = clamp(runner.x - BEHIND_CHASE_LEAD, 3, PITCH_W - 3)
           p.ty = clamp(runner.y, 3, PITCH_H - 3)
           p.effort = 'SPRINT'
           locked.add(p.id)
@@ -4224,11 +4229,11 @@ export class VisualMatch {
         ? b.x - BALL_RADIUS >= GOAL_LINE_HOME
         : b.x + BALL_RADIUS <= GOAL_LINE_AWAY
     if (!crossed) return false
-    // 크로스바는 2.44미터다
-    const inPosts = Math.abs(b.y - GOAL_MID) < GOAL_HALF && b.z < 2.44
-    if (!inPosts) return false
 
     if (b.willScore) {
+      // 득점 슛은 시작할 때 이미 골문 안 목표를 확정했다. 공 전체가 선을
+      // 넘은 뒤의 한 프레임 좌표로 다시 판정하면 가까운 슛이 골문 뒤로
+      // 계속 날아가 장면이 사라질 수 있다.
       // 골망에 꽂힌다. 공은 골 안에 그대로 두고 잠시 멈춘다
       b.mode = 'LOOSE'
       b.holder = null
@@ -4239,6 +4244,10 @@ export class VisualMatch {
       this.beginCelebration(b.lastTouch, b.x, b.y)
       return true
     }
+
+    // 크로스바는 2.44미터다
+    const inPosts = Math.abs(b.y - GOAL_MID) < GOAL_HALF && b.z < 2.44
+    if (!inPosts) return false
 
     // 비득점 슛은 시작할 때부터 실제 GK를 지나거나 포스트 밖을 노린다.
     // 여기서 선방을 지어내면 공이 골라인을 넘은 뒤 손도 안 댄 GK가 막은
