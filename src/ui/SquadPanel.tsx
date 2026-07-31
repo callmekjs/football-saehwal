@@ -8,7 +8,7 @@ import {
   type FormationId,
 } from '../sim/formations'
 import { awaySlots } from '../sim/awayShape'
-import { getPlayer } from '../sim/squad'
+import { effectivePos, formationRoleOf, getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkPosition } from '../sim/engine'
 import { awayCaptainNumber, homeCaptainNumber } from '../captain'
 import {
@@ -380,7 +380,7 @@ export function SquadPanel({
       seats.current.formation === state.formation && seats.current.slotKey === currentSlotKey
         ? seats.current.map
         : new Map()
-    const assigned = assignFormationSlots(onPitch, slots, (s) => getPlayer(s.id).pos, before)
+    const assigned = assignFormationSlots(onPitch, slots, formationRoleOf, before)
     seats.current = {
       key,
       formation: state.formation,
@@ -391,7 +391,7 @@ export function SquadPanel({
   const placed = assignFormationSlots(
     onPitch,
     slots,
-    (s) => getPlayer(s.id).pos,
+    formationRoleOf,
     seats.current.map,
   ).placed.map(({ player: s, slot }) => ({ s, slot }))
 
@@ -692,6 +692,7 @@ export function SquadPanel({
 
           {placed.map(({ s }) => {
             const p = getPlayer(s.id)
+            const currentRole = effectivePos(s)
             const isCaptain = p.num === captain
             const warn = alertOf(s, state.tactics.press)
             const tag =
@@ -699,7 +700,7 @@ export function SquadPanel({
                 ? ORDER_TAG[s.order]
                 : s.position
                   ? positionZone(s.position).depth
-                  : (warn?.tag ?? p.pos)
+                  : (warn?.tag ?? currentRole)
             const stamina = Math.max(0, Math.min(100, s.stamina))
             const held = drag?.id === s.id
             const baseDisplay = displayPositions.get(s.id)!
@@ -708,7 +709,7 @@ export function SquadPanel({
                 ? boardPointOf(drag.target.position, { width: 100, height: 100 })
                 : null
             const detail =
-              `${p.num}번 ${p.pos} · 체력 ${Math.round(s.stamina)} · 속도 ${p.speed}` +
+              `${p.num}번 ${currentRole} · 체력 ${Math.round(s.stamina)} · 속도 ${p.speed}` +
               (warn ? ` · ${warn.why}` : '') +
               (s.order !== 'NONE' ? ` · 지시: ${ORDER_LABELS[s.order].name}` : '') +
               (s.position ? ` · 자유 위치: ${positionZone(s.position).depth} ${positionZone(s.position).lane}` : '')
@@ -726,7 +727,7 @@ export function SquadPanel({
                 aria-pressed={picked === s.id}
                 aria-label={
                   isCaptain
-                    ? `${p.num}번 주장, ${p.pos}, 체력 ${Math.round(s.stamina)}`
+                    ? `${p.num}번 주장, ${currentRole}, 체력 ${Math.round(s.stamina)}`
                     : undefined
                 }
                 disabled={locked}

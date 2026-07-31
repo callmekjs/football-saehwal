@@ -4,7 +4,13 @@ import {
   formationSlotKey,
   slotsForPlayers,
 } from '../sim/formations'
-import { AWAY_XI, abilityOf, effectivePos, getPlayer } from '../sim/squad'
+import {
+  AWAY_XI,
+  abilityOf,
+  effectivePos,
+  formationRoleOf,
+  getPlayer,
+} from '../sim/squad'
 import { AWAY_SHAPES, awaySlots } from '../sim/awayShape'
 import { TOTAL_TICKS } from '../sim/constants'
 import { calloutOf, type Callout } from './callout'
@@ -1250,7 +1256,7 @@ export class VisualMatch {
     const assigned = assignFormationSlots(
       onPitch,
       slots,
-      (player) => getPlayer(player.id).pos,
+      formationRoleOf,
       previousSeats,
     )
 

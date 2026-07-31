@@ -27,6 +27,21 @@ describe('우리 팀 배치판', () => {
     expect(html).toContain('11번 FW')
   })
 
+  it('5-4-1 수비 자리에 배정된 선수를 등록 포지션이 아닌 현재 역할로 표시한다', () => {
+    const html = renderToStaticMarkup(
+      <SquadPanel
+        state={stateOf('p01')}
+        locked={false}
+        onOrder={() => null}
+        onPosition={() => null}
+        onFormation={() => undefined}
+      />,
+    )
+
+    expect(html).toContain('11번 DF')
+    expect(html).not.toContain('11번 FW')
+  })
+
   it('잠긴 뒤에는 포메이션 아홉 개를 모두 누를 수 없다', () => {
     const html = renderToStaticMarkup(
       <SquadPanel

@@ -40,7 +40,7 @@ export const BASE = {
 export const LINE = [
   { behind: 0.45, steal: 0.8, drain: 0.9, entryXg: 0.58, setPiece: 4.2 },
   { behind: 1.0, steal: 1.0, drain: 1.0, entryXg: 1.0, setPiece: 1.0 },
-  { behind: 2.2, steal: 1.25, drain: 1.15, entryXg: 1.3, setPiece: 0.6 },
+  { behind: 2.2, steal: 1.25, drain: 1.15, entryXg: 1.35, setPiece: 0.6 },
 ] as const
 
 /** 압박 강도 3단계. drain 이 압박의 유일한 진짜 비용이다 */

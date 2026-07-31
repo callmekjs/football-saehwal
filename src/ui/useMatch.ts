@@ -3,6 +3,7 @@ import { createRng, type Rng } from '../sim/rng'
 import { applySub, createState, tick, checkSub, checkOrder, checkPosition } from '../sim/engine'
 import { TOTAL_TICKS } from '../sim/constants'
 import type { FormationId } from '../sim/formations'
+import { assignFormationRoles } from '../sim/squad'
 import type {
   MatchAbility,
   Decision,
@@ -101,19 +102,20 @@ export function changeFormation(
     ...cleared.map((player) => ({ type: 'ORDER' as const, target: player.id, order: 'NONE' as const })),
   ]
   const clearedIds = new Set(cleared.map((player) => player.id))
+  const players = state.players.map((player) =>
+    clearedIds.has(player.id) || player.position !== null
+      ? {
+          ...player,
+          order: clearedIds.has(player.id) ? 'NONE' as const : player.order,
+          position: null,
+        }
+      : player,
+  )
   return {
     next: {
       ...state,
       formation: value,
-      players: state.players.map((player) =>
-        clearedIds.has(player.id) || player.position !== null
-          ? {
-              ...player,
-              order: clearedIds.has(player.id) ? 'NONE' : player.order,
-              position: null,
-            }
-          : player,
-      ),
+      players: assignFormationRoles(players, value),
     },
     records,
   }

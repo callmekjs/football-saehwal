@@ -14,6 +14,7 @@ import { drainTick, effectiveFactor, recoverAtHalftime } from './stamina'
 import { AWAY_FATIGUE, HALFTIME_RECOVERY, STAMINA } from './constants'
 import { shiftAwayShape } from './awayShape'
 import {
+  assignFormationRoles,
   bestFinishing,
   effectivePos,
   getPlayer,
@@ -72,7 +73,7 @@ export function createState(
    * 매 틱 18개를 뽑는 `drawTick()` 의 수열은 한 톨도 안 바뀐다.
    */
   const rolled = rollSetup(problem, initialPlayers(problem, starters, roster))
-  const players = rolled.players
+  const players = assignFormationRoles(rolled.players, problem.initialFormation)
   /**
    * 이번 판에 만나는 상대. 대형·경고·부상·체력이 판마다 다르다.
    * 전용 스트림이라 우리 팀 시작 조건의 난수 순서는 그대로다.
@@ -147,14 +148,27 @@ export function applySub(players: PlayerState[], out: string, inId: string): Pla
     return players
   }
 
+  const inheritedRole = outgoing.formationRole ?? getPlayer(outgoing.id).pos
   return players.map((s) => {
     // 나간 선수의 지시는 함께 걷힌다. 들어온 선수는 지시 없이 시작한다 —
     // 안 그러면 벤치에 앉아 있던 선수에게 유령 지시가 붙어 들어온다
     if (s.id === out) {
-      return { ...s, onPitch: false, order: 'NONE' as const, position: null }
+      return {
+        ...s,
+        onPitch: false,
+        order: 'NONE' as const,
+        position: null,
+        formationRole: undefined,
+      }
     }
     if (s.id === inId) {
-      return { ...s, onPitch: true, order: 'NONE' as const, position: null }
+      return {
+        ...s,
+        onPitch: true,
+        order: 'NONE' as const,
+        position: null,
+        formationRole: inheritedRole,
+      }
     }
     return s
   })
@@ -438,7 +452,14 @@ export function tick(state: MatchState, rng: Rng): MatchState {
     players = players.map((s) => (s.id === ev.booked ? { ...s, booked: true } : s))
   }
   if (ev.removed) {
-    players = players.map((s) => (s.id === ev.removed ? { ...s, onPitch: false, out: true } : s))
+    players = assignFormationRoles(
+      players.map((s) =>
+        s.id === ev.removed
+          ? { ...s, onPitch: false, out: true, formationRole: undefined }
+          : s,
+      ),
+      state.formation,
+    )
   }
   for (const e of ev.events) {
     const detail =
@@ -689,10 +710,13 @@ function applyDecision(state: MatchState, d: Decision, atTick: number): MatchSta
   if (d.type === 'FORMATION') {
     // 새 포메이션은 전체 재배치다. 전에 손으로 옮긴 좌표를 남겨두면
     // 새 자리와 겹치고, 배치판과 중앙 경기장이 서로 다른 모양이 된다.
+    const players = state.players.map((s) =>
+      s.position === null ? s : { ...s, position: null },
+    )
     return {
       ...state,
       formation: d.value,
-      players: state.players.map((s) => (s.position === null ? s : { ...s, position: null })),
+      players: assignFormationRoles(players, d.value),
     }
   }
   if (d.type === 'ORDER') {

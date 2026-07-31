@@ -1,5 +1,10 @@
 import raw from '../data/squads.json' with { type: 'json' }
 import { FREE_POSITION, ROSTER } from './constants'
+import {
+  assignFormationSlots,
+  slotsForPlayers,
+  type FormationId,
+} from './formations'
 import type {
   MatchAbility,
   Player,
@@ -271,6 +276,47 @@ export function initialPlayers(
 }
 
 /**
+ * 현재 명단을 포메이션 자리에 배정하고 그 자리의 역할을 선수 상태에 남긴다.
+ *
+ * 배치판과 경기 계산이 따로 선수를 줄에 끼워 넣지 않도록
+ * `assignFormationSlots` 하나만 쓴다. 등록 포지션은 빈자리를 처음
+ * 배정할 때만 쓰고, 배정된 뒤에는 `formationRole`이 실제 기본 역할이다.
+ */
+export function assignFormationRoles(
+  players: PlayerState[],
+  formation: FormationId,
+): PlayerState[] {
+  const onPitch = players.filter((player) => player.onPitch && !player.out)
+  const slots = slotsForPlayers(
+    formation,
+    onPitch.map((player) => getPlayer(player.id).pos),
+  )
+  const assigned = assignFormationSlots(
+    onPitch,
+    slots,
+    (player) => getPlayer(player.id).pos,
+  )
+  const roles = new Map(
+    assigned.placed.map(({ player, slot }) => [player.id, slot.pos] as const),
+  )
+
+  return players.map((player) => {
+    const role = roles.get(player.id)
+    if (role === undefined) {
+      if (player.formationRole === undefined) return player
+      const { formationRole: _discarded, ...rest } = player
+      return rest
+    }
+    return player.formationRole === role ? player : { ...player, formationRole: role }
+  })
+}
+
+/** 자유 배치나 줄 이동을 적용하기 전, 포메이션이 정한 기본 역할. */
+export function formationRoleOf(state: PlayerState): Position {
+  return state.formationRole ?? getPlayer(state.id).pos
+}
+
+/**
  * 이 판에 이 선수가 실제로 가진 능력.
  *
  * 판마다 섞이므로 명단의 고정값이 아니라 상태에서 읽어야 한다. 값이 없는
@@ -305,7 +351,7 @@ export function effectivePos(s: PlayerState): Position {
   }
   if (s.order === 'DROP_BACK') return 'DF'
   if (s.order === 'PUSH_UP') return 'FW'
-  return base
+  return formationRoleOf(s)
 }
 
 /**

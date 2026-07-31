@@ -1,5 +1,5 @@
 import { EVENTS, XG } from './constants'
-import { getPlayer } from './squad'
+import { effectivePos } from './squad'
 import type { TickDraws } from './attack'
 import type { Coefficients } from './tactics'
 import type { PlayerState } from './types'
@@ -46,7 +46,7 @@ function pickFouler(players: PlayerState[], draw: number): string | null {
     if (!s.onPitch || s.out) return false
     // 물러서라고 한 선수는 몸을 안 던진다. 반칙 후보에서 빠진다
     if (s.order === 'BACK_OFF') return false
-    const pos = getPlayer(s.id).pos
+    const pos = effectivePos(s)
     return pos === 'DF' || pos === 'MF'
   })
   if (candidates.length === 0) return null

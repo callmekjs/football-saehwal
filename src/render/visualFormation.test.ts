@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FREE_POSITION } from '../sim/constants'
 import { createState } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
+import { effectivePos, formationRoleOf } from '../sim/squad'
 import { changeFormation } from '../ui/useMatch'
 import { VisualMatch } from './visual'
 
@@ -49,6 +50,21 @@ describe('중앙 경기장의 포메이션 배치', () => {
     const six = visual.players.find((player) => player.side === 'HOME' && player.num === 6)!
     expect(six.pos).toBe('MF')
     expect(six.order).toBe('NONE')
+  })
+
+  it('5-4-1의 다섯 번째 수비 자리는 화면과 계산에서 모두 수비 역할이다', () => {
+    const { problem, state: base } = stateOf('p02')
+    const changed = changeFormation(base, '5-4-1').next
+    const visual = new VisualMatch(changed, problem.seed)
+    const stateEleven = changed.players.find((player) => player.id === 'FW11')!
+    const shownEleven = visual.players.find(
+      (player) => player.side === 'HOME' && player.num === 11,
+    )!
+
+    expect(formationRoleOf(stateEleven)).toBe('DF')
+    expect(effectivePos(stateEleven)).toBe('DF')
+    expect(shownEleven.pos).toBe('DF')
+    expect(shownEleven.homeX).toBe(26)
   })
 
   it('자유 좌표를 중앙 경기장의 기준 자리로 그대로 쓴다', () => {

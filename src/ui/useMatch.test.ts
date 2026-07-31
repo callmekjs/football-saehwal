@@ -3,7 +3,7 @@ import { createState, simulate, tick } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
 import { createRng } from '../sim/rng'
 import { TOTAL_TICKS } from '../sim/constants'
-import { effectivePos } from '../sim/squad'
+import { effectivePos, formationRoleOf } from '../sim/squad'
 import type { Decision, MatchState } from '../sim/types'
 import { catchUp, changeFormation, changePosition, openForOrders, targetTick } from './useMatch'
 
@@ -244,6 +244,11 @@ describe('포메이션 변경', () => {
     expect(replay.final.formation).toBe(changed.next.formation)
     expect(replay.final.players.find((player) => player.id === 'MF06')?.order).toBe('NONE')
     expect(replay.final.players.find((player) => player.id === 'MF06')?.position).toBeNull()
+    const roles = (state: MatchState) =>
+      state.players
+        .filter((player) => player.onPitch && !player.out)
+        .map((player) => [player.id, formationRoleOf(player)])
+    expect(roles(replay.final)).toEqual(roles(changed.next))
   })
 })
 
