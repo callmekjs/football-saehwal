@@ -14,6 +14,9 @@
  * 그린 야간 경기장이며 외부 파일을 한 개도 부르지 않는다.
  */
 
+import { TitlePitch } from './TitlePitch'
+import type { TitleBoard } from './titleBoard'
+
 export type HomeSection = 'squad' | 'opponent' | 'situation' | 'history'
 
 /** 첫 화면 오른쪽 카드가 읽는 값. 전부 실제 국면에서 온다 */
@@ -33,6 +36,8 @@ export interface TitlePreview {
   goal: string
   subsLeft: number
   bookedCount: number
+  /** 전술판이 그릴 스물두 명. 곧 시작할 그 판의 실제 대형이다 */
+  board: TitleBoard
 }
 
 export interface TitleScreenProps {
@@ -68,17 +73,15 @@ export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScree
 
   return (
     <div className="title-screen">
-      {/* 야간 경기장. 전부 CSS 도형이라 부르는 파일이 없다 */}
+      {/*
+        야간 경기장의 조명. 전부 CSS 도형이라 부르는 파일이 없다.
+        경기장 선은 배경에서 뺐다 — 오른쪽 전술판이 진짜 경기장이라,
+        각도가 다른 경기장이 둘이면 눈이 어디를 봐야 할지 잃는다.
+      */}
       <div className="title-stage" aria-hidden>
         <i className="title-sky" />
         <i className="title-glow left" />
         <i className="title-glow right" />
-        <div className="title-pitch">
-          <i className="line halfway" />
-          <i className="circle" />
-          <i className="box near" />
-          <i className="box far" />
-        </div>
         <i className="title-vignette" />
       </div>
 
@@ -102,8 +105,8 @@ export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScree
             {preview.score[1]} · {preview.goal}
           </p>
           <h1 className="title-headline">
-            한 장면에서
-            <b>승부가 갈린다</b>
+            당신의 선택이
+            <b>승부를 가른다</b>
           </h1>
           <p className="title-tagline">
             바둑에 사활문제가 있다면, 축구에는 국면이 있습니다. 이미 벌어진 상황
@@ -131,25 +134,13 @@ export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScree
 
         {/* 곧 시작할 그 판의 실제 값. 예시가 아니다 */}
         <aside className="title-card" aria-label="곧 시작할 국면">
-          <header>
-            <span>주어지는 국면</span>
-            <em>
-              <i aria-hidden />
-              여기서 시작합니다
-            </em>
-          </header>
-
           <div className="title-card-score">
-            <span className="crest home">{preview.homeName}</span>
+            <span className="crest ours">{preview.homeName}</span>
             <b>{preview.score[0]}</b>
             <i>:</i>
             <b>{preview.score[1]}</b>
-            <span className="crest away">{preview.awayName}</span>
+            <span className="crest theirs">{preview.awayName}</span>
           </div>
-          <p className="title-card-sides">
-            <span>홈</span>
-            <span>원정</span>
-          </p>
 
           <div className="title-card-clock">
             <strong>{preview.kickoffMinute}:00</strong>
@@ -159,6 +150,25 @@ export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScree
             <small>
               {preview.regulationMinute}′ +{added}
             </small>
+          </div>
+
+          {/*
+            전술판. 사용자가 정했다 — "첫 페이지만 봐도 축구 시뮬레이션이구나
+            알 수 있도록." 여기 선 스물두 명도 그 판의 실제 대형이다
+          */}
+          <div className="title-board">
+            {/* 딱지가 경기장 모서리에 정확히 붙도록 비율이 같은 상자에 넣는다 */}
+            <div className="tp-frame">
+              <p className="tp-chip theirs">
+                <i aria-hidden />
+                상대 · {preview.awayName} · {preview.board.theirFormation}
+              </p>
+              <TitlePitch ours={preview.board.ours} theirs={preview.board.theirs} />
+              <p className="tp-chip ours">
+                <i aria-hidden />
+                우리 · {preview.board.ourFormation} · {preview.board.ourLabel}
+              </p>
+            </div>
           </div>
 
           <dl className="title-card-facts">

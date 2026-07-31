@@ -30,6 +30,7 @@ import type { Level, OpponentId, Position, Problem } from './sim/types'
 import { attributeLabel } from './ui/playerData'
 import { MatchScreen } from './ui/MatchScreen'
 import { TitleScreen, type HomeSection } from './ui/TitleScreen'
+import { titleBoard } from './ui/titleBoard'
 import { regulationEnd } from './matchClock'
 import { clearHistory, readHistory, upsertRecord, type MatchRecord } from './ui/matchHistory'
 import { isSameMatch, toRecord } from './ui/recordMatch'
@@ -705,6 +706,7 @@ export function App() {
           goal: goalLabel(selectedEntry.problem),
           subsLeft: selectedEntry.problem.subsLeft,
           bookedCount: selectedEntry.problem.booked.length,
+          board: titleBoard(previewState, selectedEntry.problem.initialFormation),
         }}
         onStart={() => {
           // 선수부터 보고 고를 수 있게 우리 팀으로 들어간다.
