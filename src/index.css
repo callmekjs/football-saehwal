@@ -7024,3 +7024,97 @@ button {
 @media (max-width: 760px) {
   .title-art { display: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   준비 세 걸음.
+
+   전에는 왼쪽에 세로 안내가 있었다. 네 곳을 아무 때나 오갈 수 있으면
+   무엇을 먼저 해야 하는지가 사라진다. 준비에는 순서가 있다.
+   ───────────────────────────────────────────────────────────── */
+.step-bar {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.step-bar li { flex: 1 1 160px; min-width: 0; }
+
+.step-bar button {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-top-width: 3px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--dim-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-bar button b { font-family: var(--num); font-size: 14px; }
+.step-bar button span { font-size: 13px; }
+
+.step-bar li[data-state='now'] button {
+  border-top-color: var(--accent);
+  background: rgba(100, 212, 155, 0.1);
+  color: var(--text);
+}
+.step-bar li[data-state='now'] button b { color: var(--accent); }
+
+.step-bar li[data-state='done'] button {
+  border-top-color: var(--accent-lo);
+  color: var(--text-4);
+}
+
+.step-bar li[data-state='todo'] button {
+  border-top-color: var(--border);
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 아래 이동 줄 */
+.step-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.step-nav button {
+  min-height: 48px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.step-nav .step-next {
+  border-color: var(--accent);
+  background: rgba(100, 212, 155, 0.16);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.step-nav button:hover { border-color: var(--accent); color: var(--text); }
+
+@media (max-width: 640px) {
+  .step-bar li { flex: 1 1 100%; }
+  .step-nav { flex-direction: column-reverse; }
+  .step-nav button { width: 100%; }
+}

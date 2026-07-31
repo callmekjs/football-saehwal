@@ -501,53 +501,82 @@ const NAV_STEPS: ReadonlyArray<{ id: HomeSection; n: string; label: string; hint
   { id: 'history', n: '04', label: '분석 · 기록', hint: '지난 판' },
 ]
 
+/** 준비는 세 걸음이다. 기록은 걸음이 아니라 경기 뒤에 오는 자리다 */
+const FLOW: readonly HomeSection[] = ['squad', 'opponent', 'situation']
+
 /**
- * 왼쪽 차례 안내.
+ * 지금 몇 걸음째인지 보여주는 줄.
  *
- * **누르면 화면이 통째로 바뀐다.** 전에는 같은 화면 안의 자리로 스크롤만
- * 했고, 넓고 높은 화면에서는 내용이 한 화면에 다 들어가 옮길 자리조차
- * 없어서 아무 일도 일어나지 않았다. 활성 표시도 첫 항목에 고정이었다.
+ * 전에는 왼쪽에 세로 안내가 있었다. 사용자가 정했다 — *"이 부분 필요없어
+ * 보여. 그냥 처음부터 플레이 누르면 1번으로 가고 거기서 다음 누르면
+ * 2번으로."* 네 곳을 아무 때나 오갈 수 있게 두면 **무엇을 먼저 해야
+ * 하는지**가 사라진다. 준비에는 순서가 있다 — 내 선수를 보고, 상대를
+ * 고르고, 판을 고른다.
  *
- * 사용자가 정했다 — *"1번 누르면 그거에 맞는 페이지가 있어야 하는데 그냥
- * 밑으로 내려간다."*
+ * 걸음을 눌러 이미 지나온 곳으로는 돌아갈 수 있다. 앞으로 건너뛰지는
+ * 못한다.
  */
-function KickoffNav({
+function StepBar({
   value,
   onPick,
 }: {
   value: HomeSection
   onPick: (section: HomeSection) => void
 }) {
+  const at = FLOW.indexOf(value)
+  if (at === -1) return null
   return (
-    <nav className="kickoff-nav" aria-label="킥오프 준비 순서">
-      <small>MANAGER</small>
-      {NAV_STEPS.map((step) => (
-        <button
-          type="button"
-          key={step.id}
-          className={value === step.id ? 'active' : undefined}
-          aria-current={value === step.id ? 'page' : undefined}
-          onClick={() => onPick(step.id)}
-        >
-          <b>{step.n}</b>
-          <span>
-            {step.label}
-            <i>{step.hint}</i>
-          </span>
-        </button>
-      ))}
+    <ol className="step-bar" aria-label="킥오프 준비 순서">
+      {FLOW.map((id, index) => {
+        const step = NAV_STEPS.find((entry) => entry.id === id)!
+        const state = index === at ? 'now' : index < at ? 'done' : 'todo'
+        return (
+          <li key={id} data-state={state}>
+            <button
+              type="button"
+              disabled={index > at}
+              aria-current={state === 'now' ? 'step' : undefined}
+              onClick={() => onPick(id)}
+            >
+              <b>{step.n}</b>
+              <span>{step.label}</span>
+            </button>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
 
-      <div className="kickoff-nav-rules" id="rules">
-        <small>SURVIVAL RULES</small>
-        <p>판단은 되돌릴 수 없고 시계는 멈추지 않습니다.</p>
-        <div aria-label="한 판의 단계">
-          <i>읽기</i>
-          <i>판단</i>
-          <i>관전</i>
-          <i>복기</i>
-        </div>
-      </div>
-    </nav>
+/** 걸음 사이를 오가는 아래 줄 */
+function StepNav({
+  value,
+  onPick,
+}: {
+  value: HomeSection
+  onPick: (section: HomeSection) => void
+}) {
+  const at = FLOW.indexOf(value)
+  if (at === -1) return null
+  const prev = at > 0 ? FLOW[at - 1] : null
+  const next = at < FLOW.length - 1 ? FLOW[at + 1] : null
+  const label = (id: HomeSection) => NAV_STEPS.find((entry) => entry.id === id)!.label
+
+  return (
+    <div className="step-nav">
+      {prev ? (
+        <button type="button" className="step-back" onClick={() => onPick(prev)}>
+          ← {label(prev)}
+        </button>
+      ) : (
+        <span />
+      )}
+      {next && (
+        <button type="button" className="step-next" onClick={() => onPick(next)}>
+          다음 · {label(next)} →
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -639,6 +668,17 @@ export function App() {
         onFinish={(finished) => {
           // 같은 판이면 덮어쓴다. 분석이 끝나면 같은 판이 한 번 더 온다
           setHistory(upsertRecord(toRecord(finished), isSameMatch))
+          /**
+           * 경기를 마치고 나가면 **기록**으로 간다.
+           *
+           * 전에는 국면 선택으로 되돌아왔다. 방금 한 판이 어디에도 안 보이고
+           * 곧바로 다음 판을 고르라는 화면이었다. 사용자가 찾았다 —
+           * *"플레이가 다 끝나면 4번으로 안 가고 바로 다시 3번으로 가더라."*
+           *
+           * 아직 경기 화면이 떠 있으므로 이 자리에서 바꿔둬도 보이지 않는다.
+           * 나가는 순간 그 자리가 펼쳐진다.
+           */
+          setSection('history')
         }}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
@@ -697,7 +737,7 @@ export function App() {
       </header>
 
       <div className="kickoff-layout" data-section={section}>
-        <KickoffNav value={section} onPick={setSection} />
+        <StepBar value={section} onPick={setSection} />
 
         {/*
           한 화면에 한 가지만 둔다.
@@ -961,6 +1001,7 @@ export function App() {
           </p>
             </>
           )}
+          <StepNav value={section} onPick={setSection} />
         </main>
       </div>
 
