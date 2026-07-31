@@ -1893,14 +1893,30 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
   it('경기가 재개 때문에 멈춰 있지 않는다', () => {
     // 데드볼이 길면 75초짜리 관전에서 볼 것이 사라진다. 실제 중계도
     // 공이 살아 있는 시간이 절반을 넘는다
+    //
+    // 이 비율은 재개 횟수가 적어 기존 열두 판에서는 경계에서 흔들렸다.
+    // 같은 시드 묶음의 앞 열두 판은 15.089%였지만, 120판으로 넓히면
+    // 14.073%다. 임계값 15%를 느슨하게 바꾸지 않고 표본만 늘린다.
+    // 아래 관전은 프레임 배열을 저장하지 않고 정지 여부만 세므로, 다른
+    // 검사가 함께 쓰는 MULTI는 그대로 두면서도 120판을 가볍게 잴 수 있다.
     let dead = 0
     let total = 0
-    for (const fs of MULTI) {
-      dead += fs.filter((f) => f.restart).length
-      total += fs.length
+    for (let i = 0; i < 120; i++) {
+      const seed = P.seed + i
+      const rng = createRng(seed)
+      let state = createState({ ...P, seed })
+      const vm = new VisualMatch(state, seed)
+
+      for (let tickIndex = 0; tickIndex < TOTAL_TICKS; tickIndex++) {
+        state = tick(state, rng)
+        vm.sync(state)
+        for (let frame = 0; frame < 6; frame++) vm.advance(state, 1 / 60)
+        if (vm.restart) dead += 1
+        total += 1
+      }
     }
     expect(dead / total, `정지 비율 ${((dead / total) * 100).toFixed(1)}%`).toBeLessThan(0.15)
-  })
+  }, 30_000)
 
   it('재개는 반드시 끝난다', () => {
     // 공을 가지러 간 선수가 도착하지 못하면 경기가 영영 멈춘다
