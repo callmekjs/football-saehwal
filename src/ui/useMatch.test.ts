@@ -8,6 +8,11 @@ import type { Decision, MatchState } from '../sim/types'
 import { catchUp, changeFormation, changePosition, openForOrders, targetTick } from './useMatch'
 
 const problem = PROBLEMS.find((entry) => entry.id === 'p02')!
+type LineDecision = {
+  tick: number
+  type: 'LINE'
+  value: MatchState['tactics']['line']
+}
 
 /**
  * 절대 시각과 조작 시점 — QA-31.
@@ -23,13 +28,21 @@ describe('절대 시각과 조작 시점', () => {
     while (next.tick < to) next = tick(next, rng)
     return next
   }
-  /** `useMatch.setLever` 가 상태에 하는 일과 같은 모양 */
-  const pullLever = (state: MatchState): MatchState => ({
+  /** `useMatch.setLever` 가 결정 이력에 남기는 것과 같은 모양 */
+  const leverDecision = (state: MatchState, at: number): LineDecision => ({
+    tick: at,
+    type: 'LINE',
+    value: state.tactics.line === 0 ? 2 : 0,
+  })
+  /** 위 결정을 화면 상태에 즉시 반영한다 */
+  const pullLever = (state: MatchState, decision: LineDecision): MatchState => ({
     ...state,
-    tactics: { ...state.tactics, line: state.tactics.line === 0 ? 2 : 0 },
+    tactics: { ...state.tactics, line: decision.value },
   })
   /** 옛 방식이 한 회에 따라잡던 양 */
   const OLD_CAP = 60
+  const SAMPLE_SIZE = 200
+  const FULL_TIME_MS = 75_000
 
   it('목표 틱은 흐른 실제 시간이 정하고 경기 길이를 넘지 않는다', () => {
     expect(targetTick(0)).toBe(0)
@@ -37,6 +50,7 @@ describe('절대 시각과 조작 시점', () => {
     expect(targetTick(Number.NaN)).toBe(0)
     expect(targetTick(20_000)).toBeGreaterThan(targetTick(10_000))
     expect(targetTick(10_000)).toBeGreaterThan(0)
+    expect(targetTick(FULL_TIME_MS)).toBe(TOTAL_TICKS)
     // 시계가 아무리 오래 밀려 있어도 경기보다 길어지지는 않는다
     expect(targetTick(60 * 60 * 1000)).toBe(TOTAL_TICKS)
   })
@@ -48,45 +62,98 @@ describe('절대 시각과 조작 시점', () => {
     expect(caught.tick).toBeGreaterThan(OLD_CAP)
   })
 
-  it('밀린 화면에 들어온 지시는 이미 지나간 틱에 걸리지 않는다', () => {
+  it('20초 복귀 뒤 지시는 현재 틱에 기록되고 남은 구간에만 걸린다', () => {
     const hiddenMs = 20_000
     const target = targetTick(hiddenMs)
-    let stalePastChanged = 0
-    let syncedPastChanged = 0
+    let staleFinalChanged = 0
+    let fixedFinalChanged = 0
+    let fixedRecordChanged = 0
 
-    for (let i = 0; i < 30; i += 1) {
+    for (let i = 0; i < SAMPLE_SIZE; i += 1) {
       const p = { ...problem, seed: 5100 + i }
 
-      // 기준 — 절대 시각의 목표 틱까지 간 상태. 여기가 「지금」이다
-      const refRng = createRng(p.seed)
-      const reference = JSON.stringify(runTo(createState(p), refRng, target))
+      // 기준 — 같은 지시를 절대 시각의 「지금」에 건 정상 재현
+      const initial = createState(p)
+      const expectedDecision = leverDecision(initial, target)
+      const expectedFinal = simulate(p, [expectedDecision]).final
 
       // 옛 방식 — 60틱만 따라잡은 낡은 상태에 그대로 걸고 목표까지 간다
       const staleRng = createRng(p.seed)
       const lagged = runTo(createState(p), staleRng, OLD_CAP)
-      const stale = runTo(pullLever(lagged), staleRng, target)
-      if (JSON.stringify(stale) !== reference) stalePastChanged += 1
+      const staleDecision = leverDecision(lagged, lagged.tick)
+      const staleFinal = runTo(pullLever(lagged, staleDecision), staleRng, TOTAL_TICKS)
+      if (JSON.stringify(staleFinal) !== JSON.stringify(expectedFinal)) {
+        staleFinalChanged += 1
+      }
 
-      // 지금 방식 — 같은 낡은 상태에서 조작이 들어온다
+      // 지금 방식 — 목표 틱까지 먼저 확정한 뒤 지시하고 끝까지 진행한다
       const syncRng = createRng(p.seed)
       const opened = openForOrders(runTo(createState(p), syncRng, OLD_CAP), syncRng, hiddenMs)
-      expect(opened.state.tick).toBe(target)
-      if (JSON.stringify(opened.state) !== reference) syncedPastChanged += 1
+      const decisions: Decision[] = []
+      let fixedFinal = opened.state
+      if (!opened.reason) {
+        const decision = leverDecision(opened.state, opened.state.tick)
+        decisions.push(decision)
+        fixedFinal = runTo(pullLever(opened.state, decision), syncRng, TOTAL_TICKS)
+      }
+      if (JSON.stringify(fixedFinal) !== JSON.stringify(expectedFinal)) {
+        fixedFinalChanged += 1
+      }
+      if (JSON.stringify(decisions) !== JSON.stringify([expectedDecision])) {
+        fixedRecordChanged += 1
+      }
     }
 
     // 옛 방식이 과거를 바꾼다는 것 자체가 이 검사가 살아 있다는 증거다
-    expect(stalePastChanged).toBeGreaterThan(0)
-    expect(syncedPastChanged).toBe(0)
+    expect(staleFinalChanged).toBeGreaterThan(0)
+    expect(fixedFinalChanged).toBe(0)
+    expect(fixedRecordChanged).toBe(0)
   })
 
-  it('실제 시각으로 끝난 경기는 사유를 돌려주고 지시를 받지 않는다', () => {
-    const rng = createRng(problem.seed)
-    const lagged = runTo(createState(problem), rng, OLD_CAP)
-    // 화면은 아직 6초를 보여주지만 실제로는 75초가 다 갔다
-    const opened = openForOrders(lagged, rng, TOTAL_TICKS * 1000)
-    expect(opened.state.tick).toBe(TOTAL_TICKS)
-    expect(opened.reason).toBeTruthy()
-    expect(opened.reason).toMatch(/휘슬/)
+  it('75초 복귀 뒤 입력은 종료 상태와 결정 기록을 하나도 바꾸지 않는다', () => {
+    let staleFinalChanged = 0
+    let staleScoreChanged = 0
+    let fixedFinalChanged = 0
+    let fixedRecordChanged = 0
+
+    for (let i = 0; i < SAMPLE_SIZE; i += 1) {
+      const p = { ...problem, seed: 5500 + i }
+      const reference = simulate(p, []).final
+
+      // 옛 방식이면 아직 6초 상태라 늦은 지시가 남은 69초에 소급된다
+      const staleRng = createRng(p.seed)
+      const lagged = runTo(createState(p), staleRng, OLD_CAP)
+      const staleDecision = leverDecision(lagged, lagged.tick)
+      const staleFinal = runTo(pullLever(lagged, staleDecision), staleRng, TOTAL_TICKS)
+      if (JSON.stringify(staleFinal) !== JSON.stringify(reference)) {
+        staleFinalChanged += 1
+      }
+      if (JSON.stringify(staleFinal.score) !== JSON.stringify(reference.score)) {
+        staleScoreChanged += 1
+      }
+
+      // 지금 방식이면 실제 75초 상태를 먼저 확정하고 입력 자체를 거부한다
+      const fixedRng = createRng(p.seed)
+      const opened = openForOrders(
+        runTo(createState(p), fixedRng, OLD_CAP),
+        fixedRng,
+        FULL_TIME_MS,
+      )
+      const decisions: Decision[] = []
+      if (!opened.reason) decisions.push(leverDecision(opened.state, opened.state.tick))
+      if (JSON.stringify(opened.state) !== JSON.stringify(reference)) {
+        fixedFinalChanged += 1
+      }
+      if (decisions.length > 0) fixedRecordChanged += 1
+
+      expect(opened.reason).toMatch(/휘슬/)
+    }
+
+    // 고정 점수 대신 결함이 재현되는 방향과 수정 뒤 완전 동등성을 지킨다
+    expect(staleFinalChanged).toBeGreaterThan(0)
+    expect(staleScoreChanged).toBeGreaterThan(0)
+    expect(fixedFinalChanged).toBe(0)
+    expect(fixedRecordChanged).toBe(0)
   })
 
   it('따라잡기 자체는 경기를 바꾸지 않는다 — 나눠 돌린 것과 같은 결과', () => {
