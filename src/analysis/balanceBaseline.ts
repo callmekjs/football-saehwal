@@ -1,23 +1,73 @@
+import { REFERENCE_TEAM } from './opponents'
+import type { OpponentId } from '../sim/types'
+
 /**
- * 기준팀(미국)에서 1,200개 시드를 돌려 잰 무개입 통과율.
+ * 상대 열세 팀 × 다섯 국면의 무개입 통과율.
  *
- * 엔진의 확률 상수가 아니라 이미 끝난 균형 검사의 결과다. 홈 화면은
- * 이 값을 "아무것도 안 하면 얼마나 살아남는가"로 공개한다. 다른 상대를
- * 골라도 이 수치는 미국 기준이라는 사실을 함께 적어 오해를 막는다.
+ * **확률 공식이 아니라 이미 끝난 균형 검사의 결과다.** 팀마다 1,200시드 ×
+ * 27조합 × 5국면을 실제로 돌려 잰 값이고, 그 실행이 65개 숫자의 단일
+ * 원본이다(`npm run sim -- --team=ALL`).
+ *
+ * 국면 카드는 이 값을 **고른 상대 기준으로** 공개한다. 전에는 기준팀
+ * 하나뿐이라, 베트남을 골라놓고도 미국 숫자를 보고 판을 골랐다.
+ *
+ * ## 다시 잴 때
+ *
+ * **엔진이나 상대 계수를 손대면 이 표 전체가 낡는다.** 아래를 하나라도
+ * 건드렸으면 다시 재라.
+ *
+ * - `src/sim/` 의 확률·난수·계수
+ * - 국면 데이터(`problems.json`)의 시작 조건
+ * - 선수 명단의 인원이나 능력 — 난수 소비 개수가 바뀌어 모든 시드가 밀린다
+ *
+ * 반대로 **화면만 고쳤으면 다시 잴 필요가 없다.**
+ *
+ * ## 마지막 측정
+ *
+ * 2026-07-31. 그때 함께 들어간 것: 컨디션·능력 판마다 다시 뽑기, 선수
+ * 스물여섯 명, 하프타임 회복률 4.5%, 베트남·중국 계수 조정.
+ *
+ * 그 측정에서 **열세 팀 모두 다섯 국면이 60% 아래**였다. 60%를 넘으면
+ * 아무것도 안 해도 통과해서 감독이 판단할 것이 사라진다는 것이 이
+ * 저장소가 정한 위험선이다.
  */
-const REFERENCE_NO_ACTION_RATE: Readonly<Record<string, number>> = {
-  p01: 0.111,
-  p02: 0.489,
-  p03: 0.485,
-  p04: 0.379,
-  p05: 0.186,
+const NO_ACTION_RATE: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  ARG: { p01: 0.078, p02: 0.305, p03: 0.345, p04: 0.238, p05: 0.136 },
+  ESP: { p01: 0.078, p02: 0.351, p03: 0.378, p04: 0.271, p05: 0.145 },
+  FRA: { p01: 0.081, p02: 0.355, p03: 0.354, p04: 0.266, p05: 0.129 },
+  ENG: { p01: 0.083, p02: 0.303, p03: 0.336, p04: 0.241, p05: 0.138 },
+  BRA: { p01: 0.081, p02: 0.364, p03: 0.367, p04: 0.278, p05: 0.131 },
+  ITA: { p01: 0.076, p02: 0.368, p03: 0.388, p04: 0.3, p05: 0.139 },
+  MAR: { p01: 0.09, p02: 0.43, p03: 0.435, p04: 0.339, p05: 0.153 },
+  // 기준팀. 다섯 국면의 합격 판정은 언제나 이 줄에서만 잰다
+  USA: { p01: 0.109, p02: 0.495, p03: 0.493, p04: 0.378, p05: 0.183 },
+  JPN: { p01: 0.103, p02: 0.449, p03: 0.464, p04: 0.36, p05: 0.17 },
+  EGY: { p01: 0.115, p02: 0.521, p03: 0.513, p04: 0.415, p05: 0.203 },
+  UZB: { p01: 0.113, p02: 0.487, p03: 0.493, p04: 0.38, p05: 0.212 },
+  CHN: { p01: 0.139, p02: 0.552, p03: 0.549, p04: 0.44, p05: 0.23 },
+  VIE: { p01: 0.139, p02: 0.549, p03: 0.546, p04: 0.446, p05: 0.229 },
 }
 
-export function referenceNoActionRate(problemId: string): number {
-  const rate = REFERENCE_NO_ACTION_RATE[problemId]
+/**
+ * 이 상대를 만났을 때 아무것도 안 하면 얼마나 살아남는가.
+ *
+ * 없는 국면이나 팀은 조용히 0%를 보이지 않고 오류를 낸다. 화면에 0%가
+ * 뜨면 "아무것도 안 하면 절대 못 산다"로 읽히는데, 그건 재본 적 없다는
+ * 뜻과 정반대다.
+ */
+export function noActionRate(problemId: string, opponent: OpponentId): number {
+  const team = NO_ACTION_RATE[opponent]
+  if (!team) {
+    throw new Error(`무개입 통과율을 재지 않은 상대: ${opponent}`)
+  }
+  const rate = team[problemId]
   if (rate === undefined) {
-    throw new Error(`무개입 통과율이 없는 국면: ${problemId}`)
+    throw new Error(`무개입 통과율이 없는 국면: ${problemId} (상대 ${opponent})`)
   }
   return rate
 }
 
+/** 기준팀에서 잰 값. 합격 판정과 문서가 쓰는 자리다 */
+export function referenceNoActionRate(problemId: string): number {
+  return noActionRate(problemId, REFERENCE_TEAM)
+}

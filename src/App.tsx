@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import raw from './data/problems.json' with { type: 'json' }
-import { referenceNoActionRate } from './analysis/balanceBaseline'
+import { noActionRate, referenceNoActionRate } from './analysis/balanceBaseline'
 import {
   OUR_ABILITY_AVERAGE,
   TIER_LABEL,
@@ -390,15 +390,24 @@ function SituationCard({
   entry,
   n,
   selected,
+  opponent,
   onPick,
 }: {
   entry: Entry
   n: number
   selected: boolean
+  /** 오늘 고른 상대. 통과율은 이 상대 기준으로 보여준다 */
+  opponent: OpponentId
   onPick: () => void
 }) {
   const { problem } = entry
-  const noActionRate = referenceNoActionRate(problem.id)
+  /**
+   * 고른 상대 기준으로 보여준다.
+   *
+   * 전에는 기준팀 하나뿐이라, 베트남을 골라놓고도 미국 숫자를 보고 판을
+   * 골랐다. 실제로는 같은 국면이 미국 49.5% 베트남 54.9% 로 다르다.
+   */
+  const rate = noActionRate(problem.id, opponent)
   const survive = problem.objective.type === 'SURVIVE'
 
   return (
@@ -436,11 +445,11 @@ function SituationCard({
         </u>
       </span>
       <span className="kickoff-survival">
-        <small>미국 기준 · 아무것도 안 하면</small>
-        <b>{(noActionRate * 100).toFixed(1)}%</b>
+        <small>{opponentInfo(opponent).name} 상대 · 아무것도 안 하면</small>
+        <b>{(rate * 100).toFixed(1)}%</b>
         <em>만 버팁니다</em>
         <i className="kickoff-survival-bar" aria-hidden>
-          <b style={{ width: `${Math.max(3, noActionRate * 100)}%` }} />
+          <b style={{ width: `${Math.max(3, rate * 100)}%` }} />
         </i>
       </span>
       <span className="kickoff-selected-mark" aria-hidden>
@@ -721,6 +730,8 @@ export function App() {
               problems={entries.map((item) => ({
                 id: item.problem.id,
                 title: item.problem.title,
+                // 기록 화면은 기준팀으로 본다. 판마다 상대가 다르므로
+                // 한 팀을 정해두지 않으면 국면끼리 비교가 안 된다
                 noActionRate: referenceNoActionRate(item.problem.id),
                 goal: goalLabel(item.problem),
               }))}
@@ -872,7 +883,7 @@ export function App() {
                 </div>
               </div>
               <p>한 국면의 정답이 다른 국면에서는 오판이 됩니다.</p>
-              <small>미국 기준 · 1,200시드 실측</small>
+              <small>{opponentInfo(opponent).name} 상대 · 1,200시드 실측</small>
             </div>
             <div className="kickoff-situation-grid">
               {entries.map((entry, index) => (
@@ -881,6 +892,7 @@ export function App() {
                   entry={entry}
                   n={index + 1}
                   selected={index === selectedIndex}
+                  opponent={opponent}
                   onPick={() => setSelectedIndex(index)}
                 />
               ))}
