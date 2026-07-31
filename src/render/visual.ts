@@ -50,6 +50,8 @@ export const GOAL_LINE_HOME = 105
 export const GOAL_LINE_AWAY = 0
 export const GOAL_HALF = 3.66
 export const GOAL_MID = PITCH_H / 2
+/** 실제 5호 축구공 반지름(미터). 골은 공 전체가 라인을 넘어야 한다. */
+export const BALL_RADIUS = 0.11
 
 const WALK = 1.4
 const ACCEL = 8.5
@@ -3119,11 +3121,13 @@ export class VisualMatch {
   private shoot(shooter: VPlayer, willScore: boolean) {
     const gx = this.goalX(shooter.side)
     let gy: number
+    let lift: number
     if (willScore) {
       // 골대 안쪽. 구석으로 갈수록 그림이 산다
       const corner = this.rng.next() < 0.65 ? 1 : 0
       const sign = this.rng.next() < 0.5 ? -1 : 1
       gy = GOAL_MID + sign * (corner ? 2.2 + this.rng.next() * 1.2 : this.rng.next() * 1.6)
+      lift = 1.0 + this.rng.next() * 1.8
     } else {
       // 막히거나 빗나간다. 멀리서 쏠수록 골대를 벗어나기 쉽다 —
       // 10미터 20% → 25미터 53% → 35미터 75%. 가까운 슛은 골키퍼
@@ -3131,18 +3135,37 @@ export class VisualMatch {
       const dGoal = Math.hypot(gx - shooter.x, GOAL_MID - shooter.y)
       const wide = this.rng.next() < clamp(0.2 + (dGoal - 10) * 0.022, 0.2, 0.8)
       const sign = this.rng.next() < 0.5 ? -1 : 1
-      gy = wide
-        ? GOAL_MID + sign * (GOAL_HALF + 1 + this.rng.next() * (2 + dGoal * 0.06))
-        : GOAL_MID + sign * this.rng.next() * 2
+      const placement = this.rng.next()
+      lift = 1.0 + this.rng.next() * 3.4
+      const keeperTarget = wide ? null : this.reachableKeeperTarget(shooter, gx, lift)
+      gy = keeperTarget ?? GOAL_MID + sign * (GOAL_HALF + 1 + placement * (2 + dGoal * 0.06))
     }
 
     // 슛은 살짝 뜬다. 크로스바(2.44m) 밑으로 지나가야 하므로 높이 못 준다
-    const lift = willScore ? 1.0 + this.rng.next() * 1.8 : 1.0 + this.rng.next() * 3.4
     this.ball.willScore = willScore
     this.kickBall(shooter, gx, clamp(gy, 2, PITCH_H - 2), SHOT_SPEED, lift, 'SHOT', null, 'SHOT')
     this.ball.fromX = shooter.x
     this.ball.fromY = shooter.y
     this.flash('SHOT', shooter.x, shooter.y)
+  }
+
+  /** 현재 골키퍼가 실제로 닿을 수 있는 비득점 슛의 골라인 목표점. */
+  private reachableKeeperTarget(shooter: VPlayer, gx: number, lift: number): number | null {
+    const keeper = this.players.find((p) => p.side !== shooter.side && p.pos === 'GK')
+    if (!keeper) return null
+    const shotDx = gx - shooter.x
+    if (Math.abs(shotDx) < 0.01) return null
+    const along = (keeper.x - shooter.x) / shotDx
+    if (along <= 0 || along >= 1) return null
+
+    // 슈터-골키퍼 직선을 골라인까지 늘린 점을 노리면 공이 실제 GK를 지난다.
+    const targetY = shooter.y + (keeper.y - shooter.y) / along
+    if (Math.abs(targetY - GOAL_MID) >= GOAL_HALF - BALL_RADIUS) return null
+
+    const travel = Math.hypot(keeper.x - shooter.x, keeper.y - shooter.y) / SHOT_SPEED
+    const height = lift * travel - (GRAVITY * travel * travel) / 2
+    if (height > REACH_HEIGHT) return null
+    return targetY
   }
 
   /** 득점 슛과 같은 네 난수 슬롯으로 골망 안의 도착점을 만든다. */
@@ -4205,7 +4228,10 @@ export class VisualMatch {
   private resolveShot(): boolean {
     const b = this.ball
     const gx = this.goalX(b.lastTouch)
-    const crossed = gx === GOAL_LINE_HOME ? b.x >= GOAL_LINE_HOME : b.x <= GOAL_LINE_AWAY
+    const crossed =
+      gx === GOAL_LINE_HOME
+        ? b.x - BALL_RADIUS >= GOAL_LINE_HOME
+        : b.x + BALL_RADIUS <= GOAL_LINE_AWAY
     if (!crossed) return false
     // 크로스바는 2.44미터다
     const inPosts = Math.abs(b.y - GOAL_MID) < GOAL_HALF && b.z < 2.44
@@ -4223,12 +4249,10 @@ export class VisualMatch {
       return true
     }
 
-    // 시뮬은 골이 아니라고 했는데 공이 골문 안으로 들어오고 있다.
-    // 골키퍼가 자리를 비운 드문 경우다 — 골라인에서 걷어내 코너로 만든다.
-    // 여기서 그냥 통과시키면 점수판이 안 오르는 유령 골이 나온다
-    this.flash('SAVE', b.x, b.y)
-    this.beginRestart('CORNER', b.lastTouch, gx, b.y < PITCH_H / 2 ? 0 : PITCH_H)
-    return true
+    // 비득점 슛은 시작할 때부터 실제 GK를 지나거나 포스트 밖을 노린다.
+    // 여기서 선방을 지어내면 공이 골라인을 넘은 뒤 손도 안 댄 GK가 막은
+    // 것처럼 보인다. 안전망에서는 판정하지 않고 아웃 처리에 맡긴다.
+    return false
   }
 
   private moveBall(dt: number) {

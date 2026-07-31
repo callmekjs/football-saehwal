@@ -5,6 +5,7 @@ import {
   PITCH_H,
   GOAL_HALF,
   GOAL_MID,
+  BALL_RADIUS,
   flagTipY,
   FLAG_REACH,
   SHOT_CONTACT_DIST,
@@ -36,6 +37,11 @@ const P: Problem = {
 const P03_83918 = {
   ...(problems.find((problem) => problem.id === 'p03') as unknown as Problem),
   seed: 83918,
+}
+
+const P03_85776 = {
+  ...(problems.find((problem) => problem.id === 'p03') as unknown as Problem),
+  seed: 85776,
 }
 
 /** 경기를 관전하며 매 프레임을 기록한다. 화면과 같은 60fps로 돈다 */
@@ -2634,5 +2640,69 @@ describe('예약 득점은 공 없는 슈터에게 순간이동하지 않는다'
       `예약 골 장면 ${goalScenes} / 유예 시간이 남은 득점 ${queuedGoals} / 전체 득점 ${simulatedGoals}`,
     ).toBe(0)
     expect(vm.displayScore).toEqual(state.score)
+  })
+})
+
+describe('비득점 슛은 골라인 뒤에서 가짜 선방을 만들지 않는다', () => {
+  it('p03/85776부터 스무 판에서 실제 GK 접촉이나 빗나감으로 끝난다', () => {
+    let fakeSaveCorners = 0
+    let wholeCrossings = 0
+    const saveDistances: number[] = []
+    const insideShots: Array<{ saved: boolean }> = []
+
+    for (let seedOffset = 0; seedOffset < 20; seedOffset++) {
+      const problem = { ...P03_85776, seed: P03_85776.seed + seedOffset }
+      const rng = createRng(problem.seed)
+      let state = createState(problem)
+      const vm = new VisualMatch(state, problem.seed)
+      let shot: { attacking: 'HOME' | 'AWAY'; inside: boolean; saved: boolean } | null = null
+
+      for (let tickIndex = 0; tickIndex < TOTAL_TICKS; tickIndex++) {
+        state = tick(state, rng)
+        vm.sync(state)
+        for (let frame = 0; frame < 6; frame++) {
+          if (vm.ball.mode === 'SHOT' && !vm.ball.willScore && !shot) {
+            shot = {
+              attacking: vm.ball.lastTouch,
+              inside: Math.abs(vm.ball.toY - GOAL_MID) < GOAL_HALF,
+              saved: false,
+            }
+          }
+          if (
+            vm.ball.mode === 'SHOT' &&
+            !vm.ball.willScore &&
+            (vm.ball.x + BALL_RADIUS < 0 || vm.ball.x - BALL_RADIUS > PITCH_W)
+          ) {
+            wholeCrossings += 1
+          }
+
+          const oldFlashes = new Set(vm.flashes)
+          vm.advance(state, 1 / 60)
+          const save = vm.flashes.find((flash) => flash.kind === 'SAVE' && !oldFlashes.has(flash))
+          if (save && shot) {
+            shot.saved = true
+            const keeper = vm.players.find(
+              (player) => player.pos === 'GK' && player.side !== shot!.attacking,
+            )!
+            saveDistances.push(Math.hypot(keeper.x - save.x, keeper.y - save.y))
+            if (vm.restart?.kind === 'CORNER') fakeSaveCorners += 1
+          }
+          if (shot && vm.ball.mode !== 'SHOT') {
+            if (shot.inside) insideShots.push({ saved: shot.saved })
+            shot = null
+          }
+        }
+      }
+
+      vm.sync(state)
+      expect(vm.displayScore, `시드 ${problem.seed}`).toEqual(state.score)
+    }
+
+    expect(fakeSaveCorners).toBe(0)
+    expect(wholeCrossings).toBe(0)
+    expect(insideShots.length, '골문 안 비득점 슛 표본').toBeGreaterThan(0)
+    expect(insideShots.every((shot) => shot.saved)).toBe(true)
+    expect(saveDistances.length, '실제 선방 표본').toBeGreaterThan(0)
+    expect(Math.max(...saveDistances), 'GK와 접촉점 최대 거리').toBeLessThan(3.5)
   })
 })
