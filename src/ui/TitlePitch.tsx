@@ -12,7 +12,9 @@
  * 로 놓는다. 보는 사람이 자기 팀을 아래에 두고 위로 공격하는 것이 축구
  * 중계의 기본 시점이다.
  */
+import { useEffect, useState } from 'react'
 import type { BoardDot } from './titleBoard'
+import { boardFrame, type BoardFrame, type MovingDot } from './titleBoardMotion'
 
 /** 실제 경기장 치수(m). 선을 눈대중으로 긋지 않으려고 적어둔다 */
 const PITCH = { width: 68, length: 105, box: 40.32, boxDepth: 16.5, six: 18.32, sixDepth: 5.5, goal: 7.32, circle: 9.15 }
@@ -33,54 +35,48 @@ const sh = (m: number) => (m / PITCH.length) * IN_H
 
 const CENTER_X = px(PITCH.width / 2)
 
-/** 한 선의 양 끝을 잡아 살짝 휜 패스 길을 만든다 */
-function passPath(a: BoardDot, b: BoardDot, bend: number): string {
-  const [x1, y1] = [px(a.y), py(a.x)]
-  const [x2, y2] = [px(b.y), py(b.x)]
-  const [mx, my] = [(x1 + x2) / 2, (y1 + y2) / 2]
-  // 두 점을 잇는 선의 수직 방향으로 밀어 곡선을 만든다
-  const len = Math.hypot(x2 - x1, y2 - y1) || 1
-  const [nx, ny] = [-(y2 - y1) / len, (x2 - x1) / len]
-  return `M ${x1} ${y1} Q ${mx + nx * bend} ${my + ny * bend} ${x2} ${y2}`
-}
-
-/** 같은 줄에서 가장 멀리 떨어진 두 명. 둘을 잇는 패스가 가장 잘 보인다 */
-function widestPair(dots: readonly BoardDot[], pos: BoardDot['pos']): [BoardDot, BoardDot] | null {
-  const line = dots.filter((d) => d.pos === pos).sort((a, b) => a.y - b.y)
-  if (line.length < 2) return null
-  return [line[0], line[line.length - 1]]
+/** 한 명 */
+function Dot({ side, dot }: { side: 'ours' | 'theirs'; dot: MovingDot }) {
+  return (
+    <g
+      className={dot.onBall ? `${side} on-ball` : side}
+      transform={`translate(${px(dot.y)} ${py(dot.x)})`}
+    >
+      <circle r="11" />
+      <text dy="3.6">{dot.num}</text>
+    </g>
+  )
 }
 
 /**
- * 한 명.
+ * 흐르는 시간.
  *
- * 사용자가 정했다 — *"점들도 움직이는게 있어야 해. 각 점 하나하나 살아
- * 있어야 해."* 그래서 자기 자리를 중심으로 조금씩 흔들린다. 실제 축구에서
- * 공이 없는 선수도 가만히 서 있지 않는다.
+ * `requestAnimationFrame` 은 탭이 안 보이면 멈춘다. 여기서는 그게 맞다 —
+ * 안 보이는 첫 화면을 계속 다시 그릴 이유가 없다. 경기 진행이 절대 시각을
+ * 쓰는 것과는 다른 얘기다(그쪽은 탭 전환이 일시정지 치트가 되면 안 된다).
  *
- * **자리를 옮기는 것이 아니라 자리 안에서 흔든다.** 대형은 그 판의 실제
- * 대형이라 움직임이 자리를 바꿔버리면 화면이 거짓말을 하게 된다.
- *
- * 흔드는 속도와 시작 시점은 **등번호에서 만든다.** `Math.random` 을 쓰면
- * 스물두 명이 매번 다른 리듬으로 서고, 무엇보다 이 저장소는 화면 값도
- * 재현되게 두기로 했다.
+ * 움직임에 멀미가 나는 사람에게는 아예 안 돌린다. 그때는 시각 0의 한 장면,
+ * 곧 **기준 대형 그대로**가 보인다.
  */
-function Dot({ side, dot }: { side: 'ours' | 'theirs'; dot: BoardDot }) {
-  const salt = dot.num + (side === 'ours' ? 0 : 37)
-  return (
-    <g className={side} transform={`translate(${px(dot.y)} ${py(dot.x)})`}>
-      <g
-        className={`tp-bob v${salt % 3}`}
-        style={{
-          animationDuration: `${5.5 + (salt % 5) * 0.9}s`,
-          animationDelay: `-${(salt % 7) * 0.8}s`,
-        }}
-      >
-        <circle r="11" />
-        <text dy="3.6">{dot.num}</text>
-      </g>
-    </g>
-  )
+function useBoardClock(): number {
+  const [t, setT] = useState(0)
+  const still =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  useEffect(() => {
+    if (still) return
+    let raf = 0
+    let start = 0
+    const step = (now: number) => {
+      if (start === 0) start = now
+      setT((now - start) / 1000)
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [still])
+
+  return still ? 0 : t
 }
 
 export interface TitlePitchProps {
@@ -89,8 +85,7 @@ export interface TitlePitchProps {
 }
 
 export function TitlePitch({ ours, theirs }: TitlePitchProps) {
-  const theirPass = widestPair(theirs, 'MF') ?? widestPair(theirs, 'DF')
-  const ourPass = widestPair(ours, 'DF') ?? widestPair(ours, 'MF')
+  const frame: BoardFrame = boardFrame(ours, theirs, useBoardClock())
 
   return (
     <svg
@@ -157,24 +152,22 @@ export function TitlePitch({ ours, theirs }: TitlePitchProps) {
         })}
       </g>
 
-      {/* 공이 도는 길. 늘 참인 것만 그린다 — 같은 줄 안에서 공을 돌린다 */}
-      <g className="tp-pass" fill="none">
-        {theirPass && (
-          <path className="theirs" d={passPath(theirPass[0], theirPass[1], 26)} markerEnd="url(#tp-head)" />
-        )}
-        {ourPass && (
-          <path className="ours" d={passPath(ourPass[1], ourPass[0], 26)} markerEnd="url(#tp-head)" />
-        )}
-      </g>
-
       <g className="tp-dots">
-        {theirs.map((d) => (
+        {frame.theirs.map((d) => (
           <Dot key={`a${d.num}`} side="theirs" dot={d} />
         ))}
-        {ours.map((d) => (
+        {frame.ours.map((d) => (
           <Dot key={`h${d.num}`} side="ours" dot={d} />
         ))}
       </g>
+
+      {/* 공. 지금 어디를 놓고 스물두 명이 움직이는지가 이 점 하나로 읽힌다 */}
+      <circle
+        className="tp-ball"
+        cx={px(frame.ball.y)}
+        cy={py(frame.ball.x)}
+        r="4"
+      />
     </svg>
   )
 }
