@@ -21,7 +21,12 @@ import {
   resolveDrop,
   type DropTarget,
 } from './squadDrag'
-import { playerDataOf } from './playerData'
+import {
+  OUR_ABILITY_AVERAGE,
+  opponentAbilityAverage,
+  opponentAbilityRatio,
+} from '../analysis/opponents'
+import { attributeTone, playerDataOf } from './playerData'
 import type {
   Level,
   MatchState,
@@ -156,7 +161,39 @@ export function PlayerDataCard({
           <dd>{data.finishing.toFixed(2)}×</dd>
         </div>
       </dl>
-      <p>경기 계산에 실제로 쓰이는 값만 표시합니다.</p>
+
+      {/*
+        능력치는 판마다 주인이 바뀐다. 같은 6번이라도 오늘은 발이 가장
+        빠르고 다음 판에는 가장 느릴 수 있다. 그래서 명단이 아니라 이
+        경기의 상태에서 읽는다.
+      */}
+      <div className="player-attributes">
+        {data.attributeGroups.map((group) => (
+          <section key={group.title}>
+            <h4>{group.title}</h4>
+            <dl>
+              {group.rows.map((row) => (
+                <div key={row.key} data-used={row.used ? 'on' : 'off'}>
+                  <dt>
+                    {row.label}
+                    {row.used && (
+                      <i aria-label="경기 계산에 쓰이는 값" title="경기 계산에 쓰이는 값">
+                        ●
+                      </i>
+                    )}
+                  </dt>
+                  <dd data-tone={attributeTone(row.value)}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
+      </div>
+
+      <p>
+        능력치는 1~20이며 전부 창작입니다. <b>●</b> 표시가 이번 경기 계산에
+        실제로 들어가는 값이고, 누가 어떤 능력을 갖는지는 판마다 다시 정해집니다.
+      </p>
     </section>
   )
 }
@@ -870,6 +907,8 @@ export function AwayPanel({ state }: { state: MatchState }) {
    * 막대를 만들면 그건 지어낸 값이다. 팀 막대 하나로 보여준다.
    */
   const stamina = Math.max(0, Math.min(100, state.awayStamina))
+  const awayAbility = opponentAbilityAverage(state.opponentTeam)
+  const abilityRatio = opponentAbilityRatio(state.opponentTeam)
   return (
     <section className="panel away-panel" aria-label="상대 포메이션">
       <h2>
@@ -889,6 +928,21 @@ export function AwayPanel({ state }: { state: MatchState }) {
           <i style={{ width: `${stamina}%` }} data-low={stamina < 60 ? 'on' : undefined} />
         </span>
         <b aria-label={`상대 팀 체력 ${Math.round(stamina)}`}>{Math.round(stamina)}</b>
+      </div>
+
+      {/*
+        상대 개별 능력치는 지어내지 않는다. 엔진이 상대를 선수 단위로
+        추적하지 않기 때문이다. 대신 **팀 평균**을 보여준다 — 이 값은
+        상대 세기 계수에서 그대로 유도하므로 화면과 실제가 어긋나지 않는다.
+      */}
+      <div className="away-ability" aria-label={`상대 평균 능력치 ${awayAbility.toFixed(1)}, 우리 ${OUR_ABILITY_AVERAGE.toFixed(1)}`}>
+        <span className="away-vitals-label">평균 능력치</span>
+        <b data-side={awayAbility > OUR_ABILITY_AVERAGE ? 'over' : 'under'}>
+          {awayAbility.toFixed(1)}
+        </b>
+        <small>
+          우리 {OUR_ABILITY_AVERAGE.toFixed(1)} · {abilityRatio.toFixed(2)}배
+        </small>
       </div>
 
       <div className="squad-shape away">

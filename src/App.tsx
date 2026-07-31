@@ -1,7 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import raw from './data/problems.json' with { type: 'json' }
 import { referenceNoActionRate } from './analysis/balanceBaseline'
-import { TIER_LABEL, opponentInfo, teamsByTier } from './analysis/opponents'
+import {
+  OUR_ABILITY_AVERAGE,
+  TIER_LABEL,
+  opponentAbilityAverage,
+  opponentAbilityRatio,
+  opponentInfo,
+  teamsByTier,
+} from './analysis/opponents'
 import {
   addedTimeOf,
   breakStart,
@@ -97,6 +104,16 @@ function OpponentPicker({
           <i>참고 순위 {selected.rank}위</i>
         </span>
         <p>{selected.note}</p>
+        {/*
+          평균 능력치는 세기 계수에서 유도한다. 따로 적어두면 계수를 손볼
+          때마다 화면과 실제가 갈린다.
+        */}
+        <em className="kickoff-opponent-ability">
+          평균 능력치 <b>{opponentAbilityAverage(value).toFixed(1)}</b>
+          <i>
+            우리 {OUR_ABILITY_AVERAGE.toFixed(1)} · {opponentAbilityRatio(value).toFixed(2)}배
+          </i>
+        </em>
       </div>
     </section>
   )
@@ -179,6 +196,118 @@ function HalfPicker({
       })}
     </div>
   )
+}
+
+/** 왼쪽 차례 안내가 가리키는 자리들 */
+const NAV_STEPS = [
+  { id: 'match-preview', n: '01', label: '킥오프' },
+  { id: 'opponents', n: '02', label: '상대 선택' },
+  { id: 'situations', n: '03', label: '국면 선택' },
+  { id: 'start-point', n: '04', label: '시작 지점' },
+] as const
+
+/**
+ * 킥오프 준비 차례.
+ *
+ * **전에는 눌러도 아무 일이 없었다.** 그냥 `href="#id"` 였는데, 넓고 높은
+ * 화면에서는 내용이 한 화면에 다 들어가 스크롤할 곳이 없다. 1600×1000 에서
+ * 문서 높이가 정확히 1000px 이라 브라우저가 옮길 자리가 없었다. 1280×720
+ * 처럼 스크롤이 생기는 크기에서만 동작했다.
+ *
+ * 활성 표시도 `01` 에 고정으로 박혀 있어 어디를 보고 있든 늘 켜져 있었다.
+ *
+ * 그래서 두 가지를 고친다. 스크롤이 가능하면 부드럽게 옮기고, **옮길 자리가
+ * 없어도 그 자리를 잠깐 밝혀** 클릭이 언제나 눈에 보이게 한다. 지금 보고
+ * 있는 자리는 화면에 실제로 들어온 것을 보고 정한다.
+ */
+function KickoffNav() {
+  const [active, setActive] = useState<string>(NAV_STEPS[0].id)
+  const [flash, setFlash] = useState<string | null>(null)
+
+  useEffect(() => {
+    const sections = NAV_STEPS.map((step) => document.getElementById(step.id)).filter(
+      (el): el is HTMLElement => el !== null,
+    )
+    if (sections.length === 0) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const seen = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+        if (seen) setActive(seen.target.id)
+      },
+      { rootMargin: '-20% 0px -60% 0px', threshold: [0.1, 0.5, 1] },
+    )
+    for (const section of sections) observer.observe(section)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (flash === null) return
+    const timer = window.setTimeout(() => setFlash(null), 1100)
+    return () => window.clearTimeout(timer)
+  }, [flash])
+
+  const go = (id: string) => {
+    const target = document.getElementById(id)
+    if (!target) return
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    target.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
+    setActive(id)
+    // 옮길 자리가 없어도 누른 것이 보여야 한다
+    setFlash(id)
+  }
+
+  return (
+    <nav className="kickoff-nav" aria-label="킥오프 준비 순서">
+      <small>MANAGER</small>
+      {NAV_STEPS.map((step) => (
+        <a
+          key={step.id}
+          href={`#${step.id}`}
+          className={active === step.id ? 'active' : undefined}
+          aria-current={active === step.id ? 'true' : undefined}
+          onClick={(event) => {
+            event.preventDefault()
+            go(step.id)
+          }}
+        >
+          <b>{step.n}</b>
+          {step.label}
+        </a>
+      ))}
+      <span className="kickoff-nav-muted">
+        <b>05</b>
+        종료 뒤 분석
+      </span>
+
+      <div className="kickoff-nav-rules" id="rules">
+        <small>SURVIVAL RULES</small>
+        <p>판단은 되돌릴 수 없고 시계는 멈추지 않습니다.</p>
+        <div aria-label="한 판의 단계">
+          <i>읽기</i>
+          <i>판단</i>
+          <i>관전</i>
+          <i>복기</i>
+        </div>
+      </div>
+      <FlashStyle id={flash} />
+    </nav>
+  )
+}
+
+/** 누른 자리를 잠깐 밝힌다. 스크롤이 없어도 클릭이 보이게 하는 장치다 */
+function FlashStyle({ id }: { id: string | null }) {
+  useEffect(() => {
+    if (id === null) return
+    const target = document.getElementById(id)
+    if (!target) return
+    target.dataset.flash = 'on'
+    return () => {
+      delete target.dataset.flash
+    }
+  }, [id])
+  return null
 }
 
 const TICKER =
@@ -276,40 +405,7 @@ export function App() {
       </header>
 
       <div className="kickoff-layout">
-        <nav className="kickoff-nav" aria-label="킥오프 준비 순서">
-          <small>MANAGER</small>
-          <a className="active" href="#match-preview">
-            <b>01</b>
-            킥오프
-          </a>
-          <a href="#opponents">
-            <b>02</b>
-            상대 선택
-          </a>
-          <a href="#situations">
-            <b>03</b>
-            국면 선택
-          </a>
-          <a href="#start-point">
-            <b>04</b>
-            시작 지점
-          </a>
-          <span className="kickoff-nav-muted">
-            <b>05</b>
-            종료 뒤 분석
-          </span>
-
-          <div className="kickoff-nav-rules" id="rules">
-            <small>SURVIVAL RULES</small>
-            <p>판단은 되돌릴 수 없고 시계는 멈추지 않습니다.</p>
-            <div aria-label="한 판의 단계">
-              <i>읽기</i>
-              <i>판단</i>
-              <i>관전</i>
-              <i>복기</i>
-            </div>
-          </div>
-        </nav>
+        <KickoffNav />
 
         <aside className="kickoff-sidebar">
           <OpponentPicker value={opponent} onPick={setOpponent} />
