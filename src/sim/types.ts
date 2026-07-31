@@ -64,6 +64,43 @@ export interface Player {
   stamina0: number
   /** 0.7~1.3. 슈팅 기대값에 곱해진다 */
   finishing: number
+  /** 1~20 능력치 열다섯 개. 전부 창작이다 */
+  attributes: PlayerAttributes
+}
+
+/**
+ * 선수 능력치. 축구 게임의 관례대로 **1~20** 이며 전부 창작이다.
+ *
+ * `speed` · `stamina0` · `finishing` 과 **따로 노는 장식이 아니다.**
+ * 속도는 `(pace + speed) / 2 × 5`, 마무리는 `0.55 + 0.045 × finish` 와
+ * 어긋나지 않아야 하고 `squad.test.ts` 가 그것을 지킨다. 반대로
+ * `stamina0` 은 능력이 아니라 **이 국면을 시작하는 시점의 컨디션**이라
+ * 능력치와 묶지 않는다 — 벤치가 100인 것은 잘 뛰어서가 아니라 아직 안
+ * 뛰었기 때문이다.
+ *
+ * 여기 있는 값이 확률에 어떻게 닿는지는 `constants.ts` 의 `ABILITY` 가
+ * 정한다. **0 이어도 효과가 0 이 되지는 않는다** — 체력이 그렇듯 바닥값을
+ * 두고 그 위에서 폭이 열린다.
+ */
+export interface PlayerAttributes {
+  /** 기술 */
+  finish: number
+  pass: number
+  dribble: number
+  tackle: number
+  header: number
+  setPiece: number
+  /** 정신 */
+  vision: number
+  judgement: number
+  composure: number
+  workRate: number
+  aggression: number
+  /** 신체 */
+  pace: number
+  speed: number
+  endurance: number
+  strength: number
 }
 
 /** 경기 중 변하는 선수 상태 */
@@ -114,6 +151,34 @@ export interface PlayerState {
    * 이 기능을 넣기 전과 비트 단위로 같아야 한다.
    */
   position: PlayerPosition | null
+  /**
+   * 이 판의 능력. **판마다 다시 뽑는다.**
+   *
+   * 사용자가 정했다 — *"선수들의 능력치는 랜덤이야. 게임이 끝나고 다시
+   * 플레이를 하면 능력치가 각자 다 다를 거야. 저번처럼 6번만 집중하는 거
+   * 하지 말고."*
+   *
+   * 값을 새로 뽑는 것이 아니라 **누가 어떤 능력을 갖는지**를 다시 뽑는다.
+   * 팀이 가진 능력 묶음이 그대로라 가장 느린 수비수의 속도와 가장 좋은
+   * 마무리 값이 보존되고, 달라지는 것은 그게 누구냐다. 값 자체를 흔들면
+   * 판마다 팀 전력이 널뛰어 다섯 국면의 합격선이 무너진다.
+   *
+   * 없으면 명단의 고정값을 쓴다. 이 칸이 생기기 전에 쓰인 검사 픽스처가
+   * 그대로 살아 있어야 하기 때문이다.
+   */
+  ability?: MatchAbility
+}
+
+/**
+ * 한 판 동안 이 선수가 갖는 능력 한 벌.
+ *
+ * 셋을 **묶어서** 옮긴다. 속도만 섞고 능력치를 그대로 두면 카드에는 발이
+ * 느리다고 적힌 선수가 실제로는 배후를 지키게 된다.
+ */
+export interface MatchAbility {
+  speed: number
+  finishing: number
+  attributes: PlayerAttributes
 }
 
 export interface Objective {

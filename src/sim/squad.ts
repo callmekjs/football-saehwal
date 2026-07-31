@@ -1,13 +1,34 @@
 import raw from '../data/squads.json' with { type: 'json' }
 import { FREE_POSITION } from './constants'
-import type { Player, PlayerState, Position, Problem } from './types'
+import type {
+  MatchAbility,
+  Player,
+  PlayerAttributes,
+  PlayerState,
+  Position,
+  Problem,
+} from './types'
 
-type RawEntry = { num: number; pos: string; speed?: number; stamina0?: number; finishing?: number }
+type RawEntry = {
+  num: number
+  pos: string
+  speed?: number
+  stamina0?: number
+  finishing?: number
+  attributes?: Partial<PlayerAttributes>
+}
 
 const DEFAULTS = raw.positionDefaults
+/** 능력치를 적지 않은 선수가 물려받는 포지션 평균 */
+const ATTRIBUTE_DEFAULTS = raw.attributeDefaults
 
 function isPosition(v: string): v is Position {
   return v === 'GK' || v === 'DF' || v === 'MF' || v === 'FW'
+}
+
+/** 1~20 정수로 맞춘다 */
+function toAttribute(value: number): number {
+  return Math.max(1, Math.min(20, Math.round(value)))
 }
 
 /** "DF04" — 포지션 + 등번호 두 자리 */
@@ -33,6 +54,27 @@ function build(e: RawEntry, side: 'HOME' | 'AWAY', onBench: boolean): Player {
     throw new Error(`${e.pos}${e.num}: 마무리가 0.7~1.3 밖이다 (${finishing})`)
   }
 
+  /**
+   * 능력치를 안 적은 선수는 포지션 평균에서 물려받되, **엔진이 실제로 쓰는
+   * 값과 어긋나지 않게** 속도와 마무리는 그 값에서 되돌려 만든다.
+   *
+   * 상대 열한 명이 이 경우다. 성향 테이블로 다루므로 능력치를 손으로 적지
+   * 않지만, 속도만은 개별로 적혀 있어서 평균을 그대로 쓰면 발이 80인
+   * 선수의 카드에 70이 뜬다.
+   */
+  const attributes = {
+    ...ATTRIBUTE_DEFAULTS[e.pos],
+    pace: toAttribute(speed / 5),
+    speed: toAttribute(speed / 5),
+    finish: toAttribute((finishing - 0.55) / 0.045),
+    ...(e.attributes ?? {}),
+  }
+  for (const [key, value] of Object.entries(attributes)) {
+    if (!Number.isInteger(value) || value < 1 || value > 20) {
+      throw new Error(`${e.pos}${e.num}: ${key} 능력치가 1~20 정수가 아니다 (${value})`)
+    }
+  }
+
   return {
     id: playerId(e.pos, e.num),
     num: e.num,
@@ -42,6 +84,7 @@ function build(e: RawEntry, side: 'HOME' | 'AWAY', onBench: boolean): Player {
     speed,
     stamina0: e.stamina0 ?? d.stamina0,
     finishing,
+    attributes,
   }
 }
 
@@ -88,7 +131,20 @@ export function initialPlayers(problem: Problem): PlayerState[] {
     out: problem.unavailable.includes(p.id),
     order: 'NONE',
     position: null,
+    ability: { speed: p.speed, finishing: p.finishing, attributes: p.attributes },
   }))
+}
+
+/**
+ * 이 판에 이 선수가 실제로 가진 능력.
+ *
+ * 판마다 섞이므로 명단의 고정값이 아니라 상태에서 읽어야 한다. 값이 없는
+ * 것은 이 칸이 생기기 전에 만들어진 검사 픽스처뿐이라 명단으로 돌아간다.
+ */
+export function abilityOf(state: PlayerState): MatchAbility {
+  if (state.ability) return state.ability
+  const p = getPlayer(state.id)
+  return { speed: p.speed, finishing: p.finishing, attributes: p.attributes }
 }
 
 /**
@@ -132,8 +188,8 @@ export function minDefenderSpeed(players: PlayerState[]): number {
   for (const s of players) {
     if (!s.onPitch || s.out) continue
     if (effectivePos(s) !== 'DF') continue
-    const p = getPlayer(s.id)
-    if (p.speed < min) min = p.speed
+    const speed = abilityOf(s).speed
+    if (speed < min) min = speed
   }
   // 수비수가 전멸하면 골키퍼만 남은 상황이다. 최악값으로 처리한다.
   return min === Infinity ? 50 : min
@@ -164,8 +220,8 @@ export function bestFinishing(players: PlayerState[]): number {
     if (!s.onPitch || s.out) continue
     const pos = effectivePos(s)
     if (pos !== 'FW' && pos !== 'MF') continue
-    const p = getPlayer(s.id)
-    if (p.finishing > best) best = p.finishing
+    const finishing = abilityOf(s).finishing
+    if (finishing > best) best = finishing
   }
   return best
 }

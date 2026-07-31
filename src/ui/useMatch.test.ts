@@ -112,15 +112,31 @@ describe('자유 위치 결정', () => {
     expect(goalkeeper.error).toBe('골키퍼는 자리를 옮길 수 없습니다')
 
     const shortProblem = PROBLEMS.find((entry) => entry.id === 'p03')!
-    const shortBase = createState(shortProblem)
+    const rolled = createState(shortProblem)
+    /**
+     * 앞 감독이 걸어둔 지시를 걷어내고 시작한다.
+     *
+     * 지시는 판마다 다른 선수에게 걸리고 `PUSH_UP` 하나면 수비수가
+     * 앞선으로 세어져 인원이 흔들린다. 여기서 볼 것은 그 무작위가 아니라
+     * **수비가 셋일 때 한 명 더 빼는 이동을 막는가**다.
+     */
+    const shortBase = {
+      ...rolled,
+      players: rolled.players.map((player) => ({
+        ...player,
+        order: 'NONE' as const,
+        position: null,
+      })),
+    }
     const defenders = shortBase.players.filter(
       (player) => player.onPitch && !player.out && effectivePos(player) === 'DF',
     )
-    const removed = defenders.at(-1)!
+    // 정확히 셋만 남긴다. 국면이 몇을 세우고 있든 같은 조건을 만든다
+    const removedIds = new Set(defenders.slice(3).map((player) => player.id))
     const short = {
       ...shortBase,
       players: shortBase.players.map((player) =>
-        player.id === removed.id ? { ...player, onPitch: false, out: true } : player,
+        removedIds.has(player.id) ? { ...player, onPitch: false, out: true } : player,
       ),
     }
     expect(

@@ -1,6 +1,6 @@
 import { createRng, type Rng } from './rng'
 import { CAPTAIN_EFFECT } from './constants'
-import { HOME_SQUAD, effectivePos, getPlayer } from './squad'
+import { HOME_SQUAD, abilityOf, effectivePos, getPlayer } from './squad'
 import { AWAY_SHAPES, AWAY_SHAPE_BY_MOOD, type AwayFormationId } from './awayShape'
 import type {
   AwaySetup,
@@ -9,6 +9,7 @@ import type {
   Mentality,
   PlayerOrder,
   PlayerState,
+  Position,
   Problem,
   Tactics,
 } from './types'
@@ -110,18 +111,142 @@ function rollTactics(problem: Problem, rng: Rng): Tactics {
 }
 
 /**
+ * 되돌리는 스위치. `false` 면 지친 선수가 국면에 적힌 그대로 고정된다.
+ *
+ * 이 값은 확률이 아니라 구조 토글이라 `constants.ts` 에 두지 않는다.
+ */
+export const SHUFFLE_CONDITION = true
+
+/** 되돌리는 스위치. `false` 면 능력이 명단에 적힌 그대로 고정된다 */
+export const SHUFFLE_ABILITY = true
+
+/**
+ * 오늘 누가 지쳐 있는지를 판마다 다시 뽑는다.
+ *
+ * **왜 필요한가.** 국면 데이터의 `staminaOverrides` 가 지친 선수를 선수
+ * 번호로 못박고 있었다. 거기에 명단의 `stamina0` 까지 6번이 가장 낮아서,
+ * 두 가지가 겹쳐 **6번이 판의 51~85%에서 가장 지친 선수**로 나왔다.
+ * 필드 플레이어가 열 명이니 무작위라면 10% 언저리여야 한다. 사용자가
+ * 정했다 — *"선수들 컨디션은 우리 팀이든 상대 팀이든 완전 랜덤."*
+ *
+ * **팀 전체의 컨디션 총량은 그대로 두고 주인만 바꾼다.** 값 자체를 새로
+ * 뽑으면 국면의 난이도가 통째로 흔들린다. 여기서는 필드 플레이어들이
+ * 가진 체력값을 자기들끼리 섞을 뿐이라, 어떤 판이든 "이만큼 지친 팀"인
+ * 것은 같고 **누가** 지쳤는지만 달라진다.
+ *
+ * 골키퍼는 섞지 않는다. 국면 데이터도 골키퍼를 지치게 만든 적이 없고,
+ * 골키퍼가 가장 지친 선수인 판은 축구가 아니다.
+ *
+ * 뽑는 개수는 **언제나 필드 플레이어 수 − 1** 이다. 국면이나 조건에 따라
+ * 달라지지 않는다.
+ */
+function shuffleCondition(base: PlayerState[], rng: Rng): PlayerState[] {
+  const field = base
+    .map((s, at) => ({ s, at }))
+    .filter(({ s }) => s.onPitch && !s.out && getPlayer(s.id).pos !== 'GK')
+  if (field.length < 2) return base
+
+  const values = field.map(({ s }) => s.stamina)
+  // 피셔–예이츠. 뽑는 개수가 field.length - 1 로 고정된다
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1))
+    const swap = Math.min(j, i)
+    ;[values[i], values[swap]] = [values[swap], values[i]]
+  }
+  if (!SHUFFLE_CONDITION) return base
+
+  const next = [...base]
+  field.forEach(({ at }, i) => {
+    next[at] = { ...next[at], stamina: values[i] }
+  })
+  return next
+}
+
+/**
+ * 능력을 섞을 때 한 묶음으로 볼 무리.
+ *
+ * **선발과 벤치를 절대 섞지 않는다.** 벤치 15번은 우리 팀에서 가장 빠른
+ * 수비수이고, 그 카드가 선발로 새어 들어가면 *"느린 수비수를 빠른 수비수로
+ * 바꾼다"* 는 이 시뮬레이션의 대표 승부처가 판마다 사라진다.
+ * `benchHasFasterDefender()` 가 지키는 것이 바로 그것이다.
+ *
+ * 포지션도 섞지 않는다. 공격수의 마무리가 수비수에게 가면 대형이 뜻을
+ * 잃는다.
+ */
+const ABILITY_GROUPS: ReadonlyArray<{ onBench: boolean; pos: Position }> = [
+  { onBench: false, pos: 'GK' },
+  { onBench: false, pos: 'DF' },
+  { onBench: false, pos: 'MF' },
+  { onBench: false, pos: 'FW' },
+  { onBench: true, pos: 'DF' },
+  { onBench: true, pos: 'MF' },
+  { onBench: true, pos: 'FW' },
+]
+
+/**
+ * 오늘 누가 어떤 선수인가를 판마다 다시 뽑는다.
+ *
+ * **값을 새로 뽑지 않고 주인만 바꾼다.** 팀이 가진 능력 묶음이 그대로라
+ * 가장 느린 수비수의 속도와 가장 좋은 마무리 값이 보존된다. 달라지는 것은
+ * 그게 **누구냐** 뿐이다. 값 자체를 흔들면 판마다 팀 전력이 널뛰어서
+ * 합격선 50%에 1%p 붙어 있는 국면 둘이 그대로 무너진다.
+ *
+ * 이미 빠진 선수(`out`)는 섞지 않는다. 퇴장으로 없는 선수의 능력이 풀에
+ * 남으면, 남은 수비수가 그 값을 받아 국면의 난이도가 판마다 달라진다.
+ *
+ * 뽑는 개수는 **무리의 명단 크기 − 1** 로 고정이다. 실제로 섞을 인원이
+ * 그보다 적어도 정해진 만큼 뽑고 남는 것은 버린다.
+ */
+function shuffleAbility(base: PlayerState[], rng: Rng): PlayerState[] {
+  const next = [...base]
+
+  for (const group of ABILITY_GROUPS) {
+    const roster = base
+      .map((s, at) => ({ s, at }))
+      .filter(({ s }) => {
+        const p = getPlayer(s.id)
+        return p.onBench === group.onBench && p.pos === group.pos
+      })
+    // 뽑는 개수를 정하는 것은 명단 크기다. 국면에 따라 달라지지 않는다
+    const draws: number[] = []
+    for (let i = 0; i < Math.max(0, roster.length - 1); i++) draws.push(rng.next())
+
+    const movable = roster.filter(({ s }) => !s.out)
+    if (movable.length < 2) continue
+
+    const values = movable.map(({ s }) => s.ability ?? abilityOf(s))
+    for (let i = values.length - 1; i > 0; i--) {
+      const draw = draws[values.length - 1 - i] ?? 0
+      const j = Math.min(i, Math.floor(draw * (i + 1)))
+      ;[values[i], values[j]] = [values[j], values[i]]
+    }
+    if (!SHUFFLE_ABILITY) continue
+
+    movable.forEach(({ at }, i) => {
+      next[at] = { ...next[at], ability: values[i] }
+    })
+  }
+
+  return next
+}
+
+/**
  * 시작 선수 상태를 뽑는다.
  *
- * 체력 → 경고 → 지시 순서로 소비한다. 이 순서를 바꾸면 저장된 모든 시드의
- * 선수단이 달라진다.
+ * 능력 섞기 → 컨디션 섞기 → 체력 → 경고 → 지시 순서로 소비한다. 이 순서를
+ * 바꾸면 저장된 모든 시드의 선수단이 달라진다.
  */
 function rollPlayers(problem: Problem, base: PlayerState[], rng: Rng): PlayerState[] {
   const v = problem.variation
   const spread = v?.staminaSpread ?? 0
   const [lo, hi] = v?.staminaRange ?? [25, 100]
 
+  // 0) 오늘 누가 어떤 선수인가를 판마다 다시 뽑는다
+  let next = shuffleAbility(base, rng)
+  next = shuffleCondition(next, rng)
+
   // 1) 체력 — 전원에게 한 번씩. 뽑는 개수가 명단 길이로 고정된다
-  let next = base.map((s) => {
+  next = next.map((s) => {
     const jitter = (rng.next() * 2 - 1) * spread
     return { ...s, stamina: Math.round(clamp(s.stamina + jitter, lo, hi)) }
   })

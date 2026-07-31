@@ -12,7 +12,20 @@ const stateOf = (id: string) => {
 
 describe('중앙 경기장의 포메이션 배치', () => {
   it('수비수 결원 열 명은 공격수 11번까지 앞선에 남긴다', () => {
-    const { problem, state } = stateOf('p04')
+    const { problem, state: rolled } = stateOf('p04')
+    /**
+     * 앞 감독의 지시를 걷어내고 대형만 본다. 지시는 판마다 다른 선수에게
+     * 걸리고 `PUSH_UP` 하나면 중원이 앞선으로 세어진다. 여기서 볼 것은
+     * **한 명이 빠진 대형의 줄 수**이지 그 무작위가 아니다.
+     */
+    const state = {
+      ...rolled,
+      players: rolled.players.map((player) => ({
+        ...player,
+        order: 'NONE' as const,
+        position: null,
+      })),
+    }
     const visual = new VisualMatch(state, problem.seed)
     const home = visual.players.filter((player) => player.side === 'HOME')
     expect(home.filter((player) => player.pos === 'DF')).toHaveLength(3)

@@ -170,3 +170,59 @@ describe('자유 배치의 실제 줄', () => {
     expect(effectivePos(player)).toBe('MF')
   })
 })
+
+/**
+ * 능력치는 화면에만 뜨는 장식이 아니다.
+ *
+ * 엔진이 직접 읽는 `speed` · `finishing` 과 어긋나면, 카드에는 발이 빠르다고
+ * 적혀 있는데 실제로는 배후를 못 지키는 선수가 생긴다. 값을 그대로 박아두면
+ * 명단을 손볼 때마다 깨지므로 **관계**만 지킨다.
+ */
+describe('선수 능력치', () => {
+  const all = [...HOME_SQUAD, ...AWAY_XI]
+
+  it('전부 1~20 정수다', () => {
+    for (const player of all) {
+      for (const [key, value] of Object.entries(player.attributes)) {
+        expect(Number.isInteger(value), `${player.id} ${key}`).toBe(true)
+        expect(value, `${player.id} ${key}`).toBeGreaterThanOrEqual(1)
+        expect(value, `${player.id} ${key}`).toBeLessThanOrEqual(20)
+      }
+    }
+  })
+
+  it('순간 속도와 주력이 엔진의 속도와 같은 선수를 가리킨다', () => {
+    for (const player of all) {
+      const derived = ((player.attributes.pace + player.attributes.speed) / 2) * 5
+      expect(Math.abs(derived - player.speed), `${player.id}`).toBeLessThanOrEqual(5)
+    }
+  })
+
+  it('골 결정력이 엔진의 마무리와 같은 선수를 가리킨다', () => {
+    for (const player of all) {
+      const derived = 0.55 + 0.045 * player.attributes.finish
+      expect(Math.abs(derived - player.finishing), `${player.id}`).toBeLessThanOrEqual(0.06)
+    }
+  })
+
+  it('가장 느린 수비수와 가장 잘 마무리하는 선수를 능력치로도 같게 짚는다', () => {
+    const defenders = HOME_XI.filter((player) => player.pos === 'DF')
+    const slowestBySpeed = [...defenders].sort((a, b) => a.speed - b.speed)[0]
+    const slowestByAttribute = [...defenders].sort(
+      (a, b) => a.attributes.pace + a.attributes.speed - (b.attributes.pace + b.attributes.speed),
+    )[0]
+    expect(slowestByAttribute.id).toBe(slowestBySpeed.id)
+
+    const bestByFinishing = [...HOME_XI].sort((a, b) => b.finishing - a.finishing)[0]
+    const bestByAttribute = [...HOME_XI].sort(
+      (a, b) => b.attributes.finish - a.attributes.finish,
+    )[0]
+    expect(bestByAttribute.id).toBe(bestByFinishing.id)
+  })
+
+  it('이름 칸은 여전히 없다', () => {
+    for (const player of all) {
+      expect(Object.keys(player)).not.toContain('name')
+    }
+  })
+})
