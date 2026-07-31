@@ -392,6 +392,20 @@ function Bench({
   const inactiveStarters = state.players.filter(
     (s) => !s.onPitch && !BENCH.some((player) => player.id === s.id),
   )
+  /**
+   * 이 칸에는 두 종류가 섞인다.
+   *
+   * 하나는 **뛰다가 나간 선수**이고, 다른 하나는 감독이 **처음부터 선발에서
+   * 뺀 선수**다. 둘 다 「교체됨」이라고 부르면, 교체 카드를 쓴 적이 없는
+   * 감독이 자기가 두 장을 썼다고 읽는다. 축구에서 교체는 뛰던 사람이 나가는
+   * 일이다.
+   *
+   * 실제로 교체가 있었는지는 경기 기록이 안다.
+   */
+  const substitutedOut = new Set(
+    // 교체 기록은 들어온 선수를 `target`, 나간 선수를 `detail` 에 담는다
+    state.log.flatMap((event) => (event.kind === 'SUB' && event.detail ? [event.detail] : [])),
+  )
   const pickedState = picked
     ? state.players.find((player) => player.id === picked) ?? null
     : null
@@ -458,7 +472,13 @@ function Bench({
 
         {inactiveStarters.length > 0 && (
           <>
-            <span className="bench-history-label">교체·이탈 선수</span>
+            {/* 제목도 실제 구성을 따라간다. 교체가 없었는데 「교체」라고 적으면
+                감독이 안 쓴 카드를 썼다고 읽는다 */}
+            <span className="bench-history-label">
+              {inactiveStarters.some((s) => s.out || substitutedOut.has(s.id))
+                ? '교체·이탈 선수'
+                : '선발에서 뺀 선수'}
+            </span>
             <div className="bench-row">
               {inactiveStarters.map((s) => {
                 const player = getPlayer(s.id)
@@ -471,7 +491,9 @@ function Bench({
                     onClick={() => setPicked(picked === s.id ? null : s.id)}
                   >
                     <span className="bench-num">{player.num}</span>
-                    <span className="bench-sub">{s.out ? '경기 이탈' : '교체됨'}</span>
+                    <span className="bench-sub">
+                      {s.out ? '경기 이탈' : substitutedOut.has(s.id) ? '교체됨' : '선발 제외'}
+                    </span>
                   </button>
                 )
               })}

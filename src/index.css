@@ -6115,7 +6115,18 @@ button {
 */
 @media (max-width: 980px) {
   .title-body { grid-template-columns: minmax(0, 1fr); }
-  .title-card { order: -1; align-self: auto; max-height: none; }
+  /*
+    좁은 화면에서는 **글과 버튼이 먼저**다.
+
+    전에는 전술판 카드를 맨 위에 올렸다(`order: -1`). 데스크톱에서는 오른쪽
+    칸이라 괜찮았지만, 한 칸으로 서면 그 카드가 666px 을 먹어 375×812 에서
+    PLAY 버튼 상단이 **y=1060** — 화면 밖 248px 아래로 밀렸다. 첫 화면에
+    볼 것만 있고 **누를 것이 하나도 없었다.**
+
+    이제 큰 문장과 PLAY 가 먼저 오고 전술판이 그 아래에 걸친다. 첫 화면에서
+    잔디가 살짝 보이므로 "축구구나"도 잃지 않는다.
+  */
+  .title-card { order: 1; align-self: auto; max-height: none; }
   .title-facts { margin-left: 0; width: 100%; }
   .title-screen { overflow: visible; }
   .title-board { min-height: auto; }
