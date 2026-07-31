@@ -6890,3 +6890,137 @@ button {
 .player-profile dt { color: var(--dim-2); font-size: 8px; }
 .player-profile dd { margin: 0; font-family: var(--num); font-size: 12px; }
 .player-data-status span[data-star='on'] { background: rgba(250,204,21,.2); color: #fde047; }
+
+/* ─────────────────────────────────────────────────────────────
+   첫 화면 오른쪽의 축구 그림.
+
+   사진이 아니라 **이 게임이 다루는 장면**이다 — 골문 앞에 벽을 세운
+   수비와 파고드는 공격. 전부 CSS 도형과 인라인 SVG 라 부르는 파일이
+   하나도 없다.
+   ───────────────────────────────────────────────────────────── */
+.title-art {
+  position: absolute;
+  right: clamp(24px, 6vw, 96px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(420px, 34vw);
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.title-art-goal {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  width: 56%;
+  height: 15%;
+  transform: translateX(-50%);
+}
+
+.title-art-goal .post,
+.title-art-goal .bar {
+  position: absolute;
+  background: rgba(226, 240, 233, 0.55);
+  border-radius: 2px;
+}
+.title-art-goal .post { top: 0; bottom: 0; width: 3px; }
+.title-art-goal .post.left { left: 0; }
+.title-art-goal .post.right { right: 0; }
+.title-art-goal .bar { top: 0; left: 0; right: 0; height: 3px; }
+
+.title-art-goal .net {
+  position: absolute;
+  inset: 3px 3px 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(226, 240, 233, 0.16) 0 1px, transparent 1px 11px),
+    repeating-linear-gradient(0deg, rgba(226, 240, 233, 0.16) 0 1px, transparent 1px 11px);
+}
+
+/* 페널티 지역과 아크 */
+.title-art-box {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  width: 88%;
+  height: 40%;
+  transform: translateX(-50%);
+  border: 2px solid rgba(190, 240, 214, 0.2);
+  border-top: 0;
+}
+
+.title-art-arc {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 34%;
+  height: 17%;
+  transform: translateX(-50%);
+  border: 2px solid rgba(190, 240, 214, 0.2);
+  border-top: 0;
+  border-radius: 0 0 50% 50% / 0 0 100% 100%;
+}
+
+.title-art-dot {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+}
+
+/*
+ * 물러서서 벽을 세운 상대.
+ *
+ * 클래스 이름을 `away`·`home` 으로 두면 안 된다. 옛 메인 화면이 쓰는
+ * 전역 `.home` 이 패딩을 먹여 점이 36×46 타원이 됐다. 특이도로 싸우지 않고
+ * 겹치지 않는 이름을 쓴다.
+ */
+.title-art-dot.theirs {
+  top: 42%;
+  background: var(--away);
+  box-shadow: 0 0 14px rgba(255, 107, 97, 0.4);
+}
+
+/* 파고드는 우리 */
+.title-art-dot.ours {
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(100, 212, 155, 0.45);
+}
+
+.title-art-ball {
+  position: absolute;
+  left: 50%;
+  top: 70%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #f3f6f9;
+  box-shadow: 0 0 18px rgba(243, 246, 249, 0.6);
+}
+
+/* 공이 갈 수 있는 두 갈래. 이 게임이 묻는 것이 이것이다 */
+.title-art-run {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.title-art-run path {
+  fill: none;
+  stroke: rgba(100, 212, 155, 0.5);
+  stroke-width: 0.7;
+  stroke-dasharray: 3 2.4;
+  stroke-linecap: round;
+}
+
+/* 좁아지면 그림을 뒤로 물리고 글이 앞선다 */
+@media (max-width: 1100px) {
+  .title-art { width: 300px; opacity: 0.4; right: -40px; }
+}
+
+@media (max-width: 760px) {
+  .title-art { display: none; }
+}

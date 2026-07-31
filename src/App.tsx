@@ -30,7 +30,8 @@ import type { Level, OpponentId, Position, Problem } from './sim/types'
 import { attributeLabel } from './ui/playerData'
 import { MatchScreen } from './ui/MatchScreen'
 import { TitleScreen, type HomeSection } from './ui/TitleScreen'
-import { clearHistory, readHistory, type MatchRecord } from './ui/matchHistory'
+import { clearHistory, readHistory, upsertRecord, type MatchRecord } from './ui/matchHistory'
+import { isSameMatch, toRecord } from './ui/recordMatch'
 import { SquadSection } from './ui/SquadSection'
 import { HistorySection } from './ui/HistorySection'
 
@@ -612,6 +613,10 @@ export function App() {
         opponent={opponent}
         starters={starters ?? undefined}
         roster={roster}
+        onFinish={(finished) => {
+          // 같은 판이면 덮어쓴다. 분석이 끝나면 같은 판이 한 번 더 온다
+          setHistory(upsertRecord(toRecord(finished), isSameMatch))
+        }}
         onExit={() => setPicked(null)}
         onRetry={() => setAttempt((n) => n + 1)}
         onReplay={() => setReplay((n) => n + 1)}

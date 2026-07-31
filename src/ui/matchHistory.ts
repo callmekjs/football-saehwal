@@ -96,6 +96,40 @@ export function addRecord(record: MatchRecord): MatchRecord[] {
   return next
 }
 
+/**
+ * 같은 판이면 덮어쓰고 아니면 새로 담는다.
+ *
+ * 한 경기가 **두 번에 나눠 저장된다.** 경기가 끝나는 순간 한 번(그때는
+ * 150판 비교가 아직 안 끝나 `delta` 가 없다), 분석이 끝난 뒤 한 번이다.
+ * 둘을 따로 담으면 목록에 같은 판이 두 줄로 남고, 두 번째를 버리면
+ * `±%p` 가 영영 안 채워진다.
+ *
+ * 그래서 같은 판이면 **처음 저장한 시각은 지키고 값만 갱신한다.** 목록의
+ * 순서가 분석이 끝나는 시점에 따라 흔들리지 않아야 하기 때문이다.
+ */
+export function upsertRecord(
+  record: MatchRecord,
+  isSame: (candidate: MatchRecord, existing: MatchRecord) => boolean,
+): MatchRecord[] {
+  const current = readHistory()
+  const at = current.findIndex((prev) => isSame(record, prev))
+  if (at === -1) return addRecord(record)
+
+  const next = [...current]
+  next[at] = { ...record, at: current[at].at }
+  const store = storage()
+  if (!store) {
+    fallback = next
+    return next
+  }
+  try {
+    store.setItem(KEY, JSON.stringify(next))
+  } catch {
+    fallback = next
+  }
+  return next
+}
+
 export function clearHistory(): MatchRecord[] {
   fallback = []
   const store = storage()

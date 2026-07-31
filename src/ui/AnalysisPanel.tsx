@@ -131,6 +131,7 @@ export function AnalysisPanel({
   firstHalf = null,
   firstHalfState = null,
   opponent = 'USA',
+  onDelta,
   onReplay,
   onRetry,
 }: {
@@ -141,6 +142,8 @@ export function AnalysisPanel({
   decisions: Decision[]
   kickoff: number
   kickoffHalf: 1 | 2
+  /** 150판 비교가 끝나면 방치 대비 차이를 한 번 알린다 */
+  onDelta?: (delta: number) => void
   /** 전반에 내린 결정. 전반부터 뛴 경기에서만 있다 */
   firstHalf?: Decision[] | null
   firstHalfState?: MatchState | null
@@ -200,7 +203,10 @@ export function AnalysisPanel({
           firstHalf,
           opponent,
         )
-        if (!cancelled) setAnalysis(next)
+        if (cancelled) return
+        setAnalysis(next)
+        // 150판 비교가 끝났다. 기록에 방치 대비 차이를 채워 넣게 알린다
+        onDelta?.(next.userDelta)
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
       }
@@ -210,6 +216,8 @@ export function AnalysisPanel({
       cancelled = true
       window.clearTimeout(timer)
     }
+    // onDelta 는 매 렌더 새로 만들어질 수 있다. 분석이 끝날 때 한 번이면 된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opponent, firstHalf, kickoff, problem, snapshot])
 
   const firstBeat = story.response.beats[0] ?? null

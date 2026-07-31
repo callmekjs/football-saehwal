@@ -62,18 +62,22 @@ export function toRecord(match: FinishedMatch): MatchRecord {
  */
 const SAME_MATCH_WINDOW_MS = 60_000
 
+export function isSameMatch(record: MatchRecord, prev: MatchRecord): boolean {
+  return (
+    prev.problemId === record.problemId &&
+    prev.opponentId === record.opponentId &&
+    prev.half === record.half &&
+    prev.score[0] === record.score[0] &&
+    prev.score[1] === record.score[1] &&
+    prev.decisions === record.decisions &&
+    Math.abs(prev.at - record.at) < SAME_MATCH_WINDOW_MS
+  )
+}
+
+/** 목록 안에 같은 판이 이미 있는가 */
 export function isDuplicate(
   record: MatchRecord,
   existing: readonly MatchRecord[],
 ): boolean {
-  return existing.some(
-    (prev) =>
-      prev.problemId === record.problemId &&
-      prev.opponentId === record.opponentId &&
-      prev.half === record.half &&
-      prev.score[0] === record.score[0] &&
-      prev.score[1] === record.score[1] &&
-      prev.decisions === record.decisions &&
-      Math.abs(prev.at - record.at) < SAME_MATCH_WINDOW_MS,
-  )
+  return existing.some((prev) => isSameMatch(record, prev))
 }

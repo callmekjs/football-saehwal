@@ -44,6 +44,7 @@ import {
 import { opponentInfo } from '../analysis/opponents'
 import { clockRatio, clockTone, secondsLeft, urgencyOf } from './urgency'
 import { leverToast, presetToast, subToast, useToast, type ToastMessage } from './toast'
+import type { FinishedMatch } from './recordMatch'
 import type {
   MatchAbility,
   Decision,
@@ -628,12 +629,31 @@ const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
   { id: 'INFO', label: '기록' },
 ]
 
+/**
+ * 경기가 끝난 순간 한 번만 알린다.
+ *
+ * 종료 화면은 다시 그려진다. 그릴 때마다 저장하면 목록이 같은 줄로
+ * 채워지므로, 붙는 순간 한 번만 부르고 그 뒤로는 조용하다.
+ */
+function FinishReporter({ onReport }: { onReport: (delta: number | null) => void }) {
+  const reported = useRef(false)
+  useEffect(() => {
+    if (reported.current) return
+    reported.current = true
+    onReport(null)
+    // onReport 는 매 렌더 새로 만들어질 수 있다. 붙을 때 한 번이 전부다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
+
 export function MatchScreen({
   problem,
   startHalf,
   opponent = 'USA',
   starters,
   roster,
+  onFinish,
   onExit,
   onRetry,
   onReplay,
@@ -643,6 +663,14 @@ export function MatchScreen({
   starters?: ReadonlySet<string>
   /** 다시 뽑은 명단. 없으면 기본 능력 */
   roster?: ReadonlyMap<string, MatchAbility>
+  /**
+   * 경기가 완전히 끝났을 때 한 번.
+   *
+   * `delta` 는 150판 비교가 끝나야 나오므로 처음에는 `null` 로 오고,
+   * 분석이 끝나면 같은 판으로 한 번 더 온다. 기록이 분석을 기다리다가
+   * 사용자가 화면을 떠나면 판 자체가 사라지기 때문이다.
+   */
+  onFinish?: (finished: FinishedMatch) => void
   /**
    * 플레이어가 **어느 반부터** 시작할지 고른 값.
    *
@@ -1243,6 +1271,20 @@ export function MatchScreen({
       */}
       {phase === 'DONE' && half === 2 && (
         <div className="match-report">
+          <FinishReporter
+            onReport={(delta) =>
+              onFinish?.({
+                problem,
+                final: state,
+                opponent,
+                half: firstHalf ? 1 : 2,
+                decisions:
+                  decisions.current.length + (firstHalf ? firstHalf.decisions.length : 0),
+                delta,
+                at: Date.now(),
+              })
+            }
+          />
           <AnalysisPanel
             problem={problem}
             initialState={initialSnapshot.current.state}
@@ -1254,6 +1296,18 @@ export function MatchScreen({
             firstHalf={firstHalf ? firstHalf.decisions : null}
             firstHalfState={firstHalf ? firstHalf.state : null}
             opponent={opponent}
+            onDelta={(delta) =>
+              onFinish?.({
+                problem,
+                final: state,
+                opponent,
+                half: firstHalf ? 1 : 2,
+                decisions:
+                  decisions.current.length + (firstHalf ? firstHalf.decisions.length : 0),
+                delta,
+                at: Date.now(),
+              })
+            }
             onReplay={() => {
               setActiveTab('TACTICS')
               if (onReplay) onReplay()
