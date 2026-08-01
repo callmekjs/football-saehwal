@@ -203,6 +203,11 @@ function digitsOf(value: number, digits: number): string {
   return value.toFixed(digits)
 }
 
+/** 사람이 화면에서 실제로 비교하는 정밀도의 값 */
+function displayedValue(value: number, digits: number): number {
+  return Number(digitsOf(value, digits))
+}
+
 /**
  * 국면이 요구하는 것에 따라 볼 칸이 다르다.
  *
@@ -241,11 +246,16 @@ function rowsOf(compare: RecordCompare, goal: Goal): LessonRow[] {
     const recommendation = compare.recommendation[item.key]
     // 양수면 권장안이 낫다는 뜻이 되도록 방향을 맞춘다
     const gain = item.lower ? user - recommendation : recommendation - user
+    const shownUser = displayedValue(user, item.digits)
+    const shownRecommendation = displayedValue(recommendation, item.digits)
+    const displayedGain = item.lower
+      ? shownUser - shownRecommendation
+      : shownRecommendation - shownUser
     const near = Math.max(0.02, 0.05 * Math.max(noop, user, recommendation))
     const verb = item.lower ? '낮춥니다' : '올립니다'
 
     const note =
-      Math.abs(gain) < near
+      displayedGain === 0 || Math.abs(gain) < near
         ? `이 항목은 권장 전술과 거의 같았습니다(${digitsOf(user, item.digits)} 대 ${digitsOf(
             recommendation,
             item.digits,
@@ -275,9 +285,11 @@ function rowsOf(compare: RecordCompare, goal: Goal): LessonRow[] {
 
 /** 양수면 권장안의 평균이 낫고, 음수면 내 판단의 평균이 낫다 */
 function recommendationGain(row: LessonRow): number {
+  const user = displayedValue(row.user, row.digits)
+  const recommendation = displayedValue(row.recommendation, row.digits)
   return row.lowerIsBetter
-    ? row.user - row.recommendation
-    : row.recommendation - row.user
+    ? user - recommendation
+    : recommendation - user
 }
 
 function metricComparison(row: LessonRow): string {
@@ -418,9 +430,10 @@ export function lastLesson(
   // 어느 칸에서 가장 많이 뒤졌나. 단위가 서로 달라 비율로 견준다
   const behind = rows
     .map((row) => {
-      const gain = row.lowerIsBetter
-        ? row.user - row.recommendation
-        : row.recommendation - row.user
+      // 아래 막대가 보여 주는 정밀도에서만 우위라고 말한다.
+      // 9.04와 8.96이 모두 9.0으로 보이는데 내부 원값만으로
+      // “권장안이 나았다”고 하면 같은 화면 안에서 두 결론이 충돌한다.
+      const gain = recommendationGain(row)
       const scale = Math.max(row.user, row.recommendation, 0.01)
       return { row, gain, ratio: gain / scale }
     })

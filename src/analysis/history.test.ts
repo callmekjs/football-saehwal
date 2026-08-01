@@ -242,6 +242,32 @@ describe('가장 최근 판이 남긴 것', () => {
     )
   })
 
+  it('원값이 달라도 화면에 9.0 대 9.0으로 보이면 권장 우위로 세지 않는다', () => {
+    const lesson = lastLesson(
+      [
+        entry({
+          compare: {
+            runs: 150,
+            rates: { noop: 0.4, user: 98 / 150, recommendation: 99 / 150 },
+            noop: profile(),
+            user: profile({ setPiece: 9.04 }),
+            recommendation: profile({ setPiece: 8.96 }),
+          },
+        }),
+      ],
+      survive,
+    )!
+    const setPiece = lesson.rows.find((row) => row.key === 'setPiece')!
+    const explanation = lesson.paragraphs.join(' ')
+
+    expect(setPiece.user).not.toBe(setPiece.recommendation)
+    expect(setPiece.note).toContain('거의 같았습니다(9.0 대 9.0)')
+    expect(explanation).toContain(
+      '공개된 공격·수비 평균에서는 권장안이 앞선 항목을 확인할 수 없습니다',
+    )
+    expect(explanation).not.toContain('세트피스 위험(내 판단 9.0 · 권장 9.0)도 권장안이 나았습니다')
+  })
+
   /**
    * 숫자는 매 경기 바뀌므로 조사를 고정하면 거의 매번 틀린 조사가 뜬다.
    * 사람은 그것을 문법 오류로 읽고 "기계가 쓴 글"로 판단한다.
