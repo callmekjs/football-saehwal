@@ -108,7 +108,7 @@ function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | n
   if (s.booked && press === 2) {
     return { tag: '퇴장', why: '이미 경고를 받았는데 계속 세게 압박하고 있습니다. 퇴장 위험이 큽니다' }
   }
-  if (s.stamina < 35) return { tag: '지침', why: '많이 지쳤습니다' }
+  if (s.stamina < 35) return { tag: '피로', why: '많이 지쳤습니다' }
   if (s.booked) return { tag: '경고', why: '경고를 한 장 받았습니다' }
   return null
 }
