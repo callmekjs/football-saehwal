@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import raw from '../data/problems.json' with { type: 'json' }
 import { toProblem } from '../sim/problems'
-import { simulate, simulateHalves } from '../sim/engine'
+import { createState, simulate, simulateHalves } from '../sim/engine'
 import type { Decision, MatchState, Problem } from '../sim/types'
+import { toRecord } from '../ui/recordMatch'
 import type { OutcomeProfile } from './coach'
 import { compareDecisions } from './compare'
+import { setupText } from './history'
 
 function problemAt(index: number): Problem {
   return toProblem(raw[index])
@@ -59,6 +61,48 @@ describe('경기 분석', () => {
   it('같은 국면과 결정은 언제나 같은 분석을 만든다', () => {
     const problem = problemAt(1)
     expect(compareDecisions(problem, [], 30)).toEqual(compareDecisions(problem, [], 30))
+  })
+
+  it('seed 56550의 실제 시작 전술을 보고서에 이어 종료 기록과 맞춘다', () => {
+    const problem = { ...problemAt(1), seed: 56550 }
+    const initial = createState(problem, 'USA')
+    const decisions: Decision[] = [
+      { tick: 0, type: 'FORMATION', value: '4-2-3-1' },
+      // 측면 공략에서 이미 중·넓게인 두 값은 다시 누르지 않아 결정에 없다.
+      { tick: 0, type: 'LINE', value: 1 },
+    ]
+    const final = simulate(problem, decisions, 'USA').final
+
+    expect(problem.initialTactics).toEqual({ line: 0, press: 0, width: 0 })
+    expect(initial.tactics).toEqual({ line: 0, press: 1, width: 2 })
+
+    const withoutSnapshot = compareDecisions(problem, decisions, 3, 70, null, 'USA')
+    const result = compareDecisions(problem, decisions, 3, 70, null, 'USA', {
+      initial,
+      final,
+      firstHalf: null,
+    })
+    // 실제 한 경기 스냅샷은 보고서 근거일 뿐 150판 계산은 바꾸지 않는다.
+    expect(result.rows).toEqual(withoutSnapshot.rows)
+
+    const recommendation = result.coach.decisionReview.find(
+      (finding) => finding.id === 'decision-recommendation',
+    )
+    const ending = recommendation?.evidence.find((line) => line.startsWith('종료 설정:'))
+    expect(ending).toContain('4-2-3-1 · 라인 보통 · 압박 중 · 폭 넓게')
+    expect(ending).not.toContain('압박 약')
+    expect(ending).not.toContain('폭 좁게')
+
+    const record = toRecord({
+      problem,
+      final,
+      opponent: 'USA',
+      half: 2,
+      decisions: decisions.length,
+      delta: result.userDelta,
+      at: 1,
+    })
+    expect(ending).toBe(`종료 설정: ${setupText(record.setup!)}`)
   })
 
   it('모든 국면의 권장 전술은 방치보다 성공 가능성을 확실히 높인다', () => {

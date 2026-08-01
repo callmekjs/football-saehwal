@@ -22,7 +22,7 @@ import { PROBLEMS } from '../sim/problems'
 import type { Problem } from '../sim/types'
 
 /** 150판 비교가 **실제로** 몇 번 돌았나. 그려진 글자가 아니라 이 숫자가 고장을 잡는다 */
-const spy = vi.hoisted(() => ({ runs: 0 }))
+const spy = vi.hoisted(() => ({ runs: 0, match: null as unknown }))
 
 vi.mock('../analysis/compare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../analysis/compare')>()
@@ -35,9 +35,10 @@ vi.mock('../analysis/compare', async (importOriginal) => {
      * 화면이 넘기는 `ANALYSIS_RUNS` 는 150 그대로다 — 그 값을 줄이는 것은
      * 이 고장을 고치는 것이 아니라 덜 아프게 만드는 것뿐이다.
      */
-    compareDecisions: ((problem, decisions, _runs, kickoff, firstHalf, opponent) => {
+    compareDecisions: ((problem, decisions, _runs, kickoff, firstHalf, opponent, match) => {
       spy.runs += 1
-      return actual.compareDecisions(problem, decisions, 2, kickoff, firstHalf, opponent)
+      spy.match = match
+      return actual.compareDecisions(problem, decisions, 2, kickoff, firstHalf, opponent, match)
     }) as typeof actual.compareDecisions,
   }
 })
@@ -115,6 +116,7 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
     clearHistory()
     window.localStorage.clear()
     spy.runs = 0
+    spy.match = null
     vi.useFakeTimers()
   })
 
@@ -139,6 +141,22 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
     expect(saves[0]).toBeNull()
     expect(saves[1]).not.toBeNull()
     expect(readHistory()).toHaveLength(1)
+
+    view.unmount()
+  })
+
+  it('실제 시작·종료 상태를 감독 보고서 입력으로 넘긴다', () => {
+    const view = mount(<Report onSave={() => {}} />)
+    wait(10)
+
+    const match = spy.match as {
+      initial: typeof INITIAL
+      final: typeof FINAL
+      firstHalf: null
+    }
+    expect(match.initial).toBe(INITIAL)
+    expect(match.final).toBe(FINAL)
+    expect(match.firstHalf).toBeNull()
 
     view.unmount()
   })

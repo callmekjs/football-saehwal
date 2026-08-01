@@ -407,6 +407,52 @@ describe('Coach 두 반 분석', () => {
     expect(secondGoal?.evidence.join(' ')).not.toContain('4-4-2')
   })
 
+  it('후반은 전반 종료 뒤 실제로 이어받은 전술·지시·배치에서 시작한다', () => {
+    const problem = { ...problemAt(), seed: 56550 }
+    const initial = createState(problem)
+    const firstEnd: MatchState = {
+      ...initial,
+      tick: 750,
+      formation: '5-4-1',
+      tactics: { line: 2, press: 0, width: 1 },
+      players: initial.players.map((player) => {
+        if (player.id === 'DF04') return { ...player, order: 'HOLD' }
+        if (player.id === 'MF08') return { ...player, position: { x: 61, y: 14 } }
+        return player
+      }),
+    }
+    const final: MatchState = {
+      ...firstEnd,
+      tick: 750,
+      score: [1, 1],
+      stats: {
+        homeAttempt: 4,
+        awayAttempt: 6,
+        homeShot: 1,
+        awayShot: 3,
+        setPiece: 4,
+        behind: 1,
+      },
+      log: [{ tick: 30, kind: 'CONCEDE', detail: 'SET_PIECE' }],
+    }
+
+    const report = buildCoachReport(
+      problem,
+      final,
+      [],
+      metrics,
+      70,
+      { decisions: [], final: firstEnd },
+      initial,
+    )
+    const secondGoal = report.goalsAgainst.find((finding) => finding.time === '후반 70:53')
+    const evidence = secondGoal?.evidence.join(' ') ?? ''
+
+    expect(evidence).toContain('5-4-1 · 라인 높음 · 압박 약 · 폭 보통')
+    expect(evidence).toContain('직접 배치 1명')
+    expect(evidence).toContain('실점 시점 내가 건 골문 앞 지시 1명')
+  })
+
   it('전반의 골과 집계를 합쳐서 요약한다', () => {
     const report = buildCoachReport(problemAt(), secondHalf(), [], metrics, 70, {
       decisions: [],

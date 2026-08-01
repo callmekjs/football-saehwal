@@ -31,6 +31,18 @@ export interface MatchAnalysis {
   coach: CoachReport
 }
 
+/**
+ * 브라우저에서 실제로 끝낸 한 판의 읽기 전용 스냅샷.
+ *
+ * 150판 성공률 계산에는 쓰지 않는다. 판마다 달라지는 시작 전술과 실제 종료
+ * 설정을 감독 보고서가 `Problem` 기본값으로 추정하지 않게 하는 근거다.
+ */
+export interface CoachMatchSnapshot {
+  initial: MatchState
+  final: MatchState
+  firstHalf: MatchState | null
+}
+
 function planOf(recommendation: Recommendation): Decision[] {
   const { line, press, width } = recommendation.tactics
   return [
@@ -181,6 +193,8 @@ export function compareDecisions(
    * 못했다"가 상대가 세서 생긴 차이를 감독 탓으로 돌리게 된다.
    */
   opponent: OpponentId = 'USA',
+  /** 실제 한 경기의 시작·종료 기록. 150판 계산과는 분리한다. */
+  match: CoachMatchSnapshot | null = null,
 ): MatchAnalysis {
   if (!Number.isInteger(runs) || runs <= 0) throw new Error('분석 횟수는 양의 정수여야 한다')
   if (!problem.recommendation) throw new Error(`${problem.id}: 권장 전술이 없다`)
@@ -202,6 +216,7 @@ export function compareDecisions(
     row('recommendation', '권장 전술', recommendation, runs),
   ]
   const userDelta = rows[1].rate - rows[0].rate
+  const reportHalftime = match?.firstHalf ?? user.firstHalftime
 
   return {
     rows,
@@ -209,7 +224,7 @@ export function compareDecisions(
     userDelta,
     coach: buildCoachReport(
       problem,
-      user.firstFinal,
+      match?.final ?? user.firstFinal,
       userDecisions,
       {
         noopRate: rows[0].rate,
@@ -226,9 +241,10 @@ export function compareDecisions(
       // 전반부터 뛴 경기라면 전반 결정과 전반 종료 기록을 함께 넘긴다.
       // 안 넘기면 전반에 내린 포메이션·교체·개별 지시가 보고서에서 통째로
       // 빠지고, 후반 장면의 "당시 설정"도 앞 감독의 초기값으로 잘못 적힌다.
-      firstHalf && user.firstHalftime
-        ? { decisions: firstHalf, final: user.firstHalftime }
+      firstHalf && reportHalftime
+        ? { decisions: firstHalf, final: reportHalftime }
         : null,
+      match?.initial ?? null,
     ),
   }
 }

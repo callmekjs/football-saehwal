@@ -1,6 +1,7 @@
 import { SEGMENT_MINUTES, halfLabel, kickoffMinute, type Half } from '../matchClock'
 import { withJosa } from './josa'
 import { TOTAL_TICKS } from '../sim/constants'
+import { carryToNextHalf } from '../sim/engine'
 import type { FormationId } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
 import { opponentInfo, REFERENCE_TEAM } from './opponents'
@@ -130,6 +131,8 @@ interface Leg {
   half: Half
   /** 이 반이 재개하는 분. 전반 25, 후반 70 */
   kickoff: number
+  /** 이 반이 시작할 때 실제로 걸려 있던 설정 */
+  start: Setup
   decisions: Decision[]
   final: MatchState
 }
@@ -226,35 +229,103 @@ function sumStats(legs: Leg[]): Stats {
   )
 }
 
-/**
- * 그 시점까지의 설정.
- *
- * **전반 결정도 반드시 포함해야 한다.** 전반에 5-4-1 로 바꾼 감독의 후반
- * 실점 장면에 "당시 포메이션 4-4-2" 라고 적으면 그건 거짓 근거다.
- */
-function setupAt(problem: Problem, timeline: Timed<Decision>[], g: number): Setup {
-  const setup: Setup = {
+function setupFromProblem(problem: Problem): Setup {
+  return {
     formation: problem.initialFormation,
     tactics: { ...problem.initialTactics },
     orders: new Map(),
     positions: new Map(),
   }
+}
+
+/** JSON 기본값이 아니라 실제 경기 상태에서 분석 시작점을 만든다. */
+function setupFromState(state: MatchState): Setup {
+  const active = state.players.filter((player) => player.onPitch && !player.out)
+  return {
+    formation: state.formation,
+    tactics: { ...state.tactics },
+    orders: new Map(
+      active
+        .filter((player) => player.order !== 'NONE')
+        .map((player) => [player.id, player.order]),
+    ),
+    positions: new Map(
+      active.flatMap((player) =>
+        player.position ? [[player.id, { ...player.position }] as const] : [],
+      ),
+    ),
+  }
+}
+
+function cloneSetup(setup: Setup): Setup {
+  return {
+    formation: setup.formation,
+    tactics: { ...setup.tactics },
+    orders: new Map(setup.orders),
+    positions: new Map(
+      [...setup.positions].map(([target, position]) => [target, { ...position }]),
+    ),
+  }
+}
+
+const movesLine = (order: PlayerOrder): boolean =>
+  order === 'DROP_BACK' || order === 'PUSH_UP'
+
+/** 화면과 엔진이 기록한 결정 하나를 보고서용 설정에 그대로 재생한다. */
+function applySetupDecision(setup: Setup, decision: Decision): void {
+  if (decision.type === 'FORMATION') {
+    setup.formation = decision.value
+    setup.positions.clear()
+  }
+  else if (decision.type === 'LINE') setup.tactics.line = decision.value
+  else if (decision.type === 'PRESS') setup.tactics.press = decision.value
+  else if (decision.type === 'WIDTH') setup.tactics.width = decision.value
+  else if (decision.type === 'SUB') {
+    // 나간 선수와 들어온 선수 모두 지시·자유 배치 없이 교체된다.
+    setup.orders.delete(decision.out)
+    setup.orders.delete(decision.in)
+    setup.positions.delete(decision.out)
+    setup.positions.delete(decision.in)
+  }
+  else if (decision.type === 'ORDER') {
+    if (decision.order === 'NONE') setup.orders.delete(decision.target)
+    else setup.orders.set(decision.target, decision.order)
+    if (movesLine(decision.order)) setup.positions.delete(decision.target)
+  }
+  else if (decision.type === 'POSITION') {
+    if (decision.position) setup.positions.set(decision.target, { ...decision.position })
+    else setup.positions.delete(decision.target)
+    if (movesLine(setup.orders.get(decision.target) ?? 'NONE')) {
+      setup.orders.delete(decision.target)
+    }
+  }
+}
+
+function setupAfter(start: Setup, decisions: readonly Decision[]): Setup {
+  const setup = cloneSetup(start)
+  for (const decision of decisions) applySetupDecision(setup, decision)
+  return setup
+}
+
+/**
+ * 그 시점까지의 설정.
+ *
+ * 각 반은 그 반이 **실제로 시작한 상태**에서 출발해 그 반의 결정만 재생한다.
+ * 전반 종료 상태를 이미 물려받은 후반에 전반 결정을 다시 적용하거나,
+ * 판마다 달라지는 시작 전술을 `problem.initialTactics` 로 추정하지 않는다.
+ */
+function setupAt(legs: Leg[], timeline: Timed<Decision>[], g: number): Setup {
+  const legIndex = Math.min(
+    legs.length - 1,
+    Math.max(0, Math.floor(Math.max(0, g) / TOTAL_TICKS)),
+  )
+  const leg = legs[legIndex]
+  const setup = cloneSetup(leg.start)
 
   for (const item of timeline) {
+    if (item.leg !== leg) continue
     if (item.g > g) break
-    const decision = item.value
-    if (decision.type === 'FORMATION') {
-      setup.formation = decision.value
-      setup.positions.clear()
-    }
-    else if (decision.type === 'LINE') setup.tactics.line = decision.value
-    else if (decision.type === 'PRESS') setup.tactics.press = decision.value
-    else if (decision.type === 'WIDTH') setup.tactics.width = decision.value
-    else if (decision.type === 'ORDER') setup.orders.set(decision.target, decision.order)
-    else if (decision.type === 'POSITION') {
-      if (decision.position) setup.positions.set(decision.target, decision.position)
-      else setup.positions.delete(decision.target)
-    }
+    applySetupDecision(setup, item.value)
   }
   return setup
 }
@@ -286,12 +357,12 @@ function goalFinding(
   item: Timed<MatchEventLog>,
   side: 'FOR' | 'AGAINST',
   index: number,
-  problem: Problem,
   totals: Stats,
+  legs: Leg[],
   timeline: Timed<Decision>[],
   showHalf: boolean,
 ): CoachFinding {
-  const setup = setupAt(problem, timeline, item.g)
+  const setup = setupAt(legs, timeline, item.g)
   const causes = causeOf(item.value)
   const labels = causes.map(causeLabel)
   const time = stamp(item.leg, item.tick, showHalf)
@@ -459,9 +530,9 @@ function reachesRecommendation(
     setup.tactics.press === problem.recommendation.tactics.press &&
     setup.tactics.width === problem.recommendation.tactics.width
 
-  if (matches(setupAt(problem, timeline, -1))) return { g: 0, leg: legs[0], tick: 0 }
+  if (matches(setupAt(legs, timeline, -1))) return { g: 0, leg: legs[0], tick: 0 }
   for (const item of timeline) {
-    if (matches(setupAt(problem, timeline, item.g))) {
+    if (matches(setupAt(legs, timeline, item.g))) {
       return { g: item.g, leg: item.leg, tick: item.tick }
     }
   }
@@ -724,11 +795,11 @@ function decisionFindings(
   if (halves) result.push(halves)
 
   const reached = reachesRecommendation(problem, timeline, legs)
-  const finalSetup = setupAt(problem, timeline, totalTicks)
+  const finalSetup = setupAt(legs, timeline, totalTicks)
   if (reached !== null) {
     const reachedTime = stamp(reached.leg, reached.tick, showHalf)
     const evidence = [
-      `도달 설정: ${setupText(setupAt(problem, timeline, reached.g))}`,
+      `도달 설정: ${setupText(setupAt(legs, timeline, reached.g))}`,
       '같은 국면을 1,200번 검증해 고른 권장안과 비교했습니다.',
     ]
     result.push({
@@ -958,20 +1029,30 @@ export function buildCoachReport(
    * 없으면 예전과 완전히 같은 한 반짜리 보고서가 나온다.
    */
   firstHalf: CoachFirstHalf | null = null,
+  /** 실제로 첫 반을 시작한 상태. 없으면 옛 호출부처럼 국면 기본값을 쓴다. */
+  initial: MatchState | null = null,
 ): CoachReport {
   const sorted = (list: Decision[]) => [...list].sort((a, b) => a.tick - b.tick)
+  const inherited = initial ? setupFromState(initial) : setupFromProblem(problem)
+  const firstDecisions = firstHalf ? sorted(firstHalf.decisions) : []
+  const secondStart = firstHalf
+    ? initial
+      ? setupFromState(carryToNextHalf(firstHalf.final))
+      : setupAfter(inherited, firstDecisions)
+    : inherited
   const legs: Leg[] = firstHalf
     ? [
         // 전반이 재개하는 분은 국면이 아니라 반이 정한다. 숫자는 matchClock 만 안다
         {
           half: 1,
           kickoff: kickoffMinute(1),
-          decisions: sorted(firstHalf.decisions),
+          start: inherited,
+          decisions: firstDecisions,
           final: firstHalf.final,
         },
-        { half: 2, kickoff, decisions: sorted(decisions), final },
+        { half: 2, kickoff, start: secondStart, decisions: sorted(decisions), final },
       ]
-    : [{ half: 2, kickoff, decisions: sorted(decisions), final }]
+    : [{ half: 2, kickoff, start: inherited, decisions: sorted(decisions), final }]
   const showHalf = legs.length > 1
 
   const timeline: Timed<Decision>[] = legs.flatMap((leg, index) =>
@@ -990,11 +1071,11 @@ export function buildCoachReport(
 
   const rankedFor: RankedFinding[] = forEvents.map((item, index) => ({
     g: item.g,
-    finding: goalFinding(item, 'FOR', index, problem, totals, timeline, showHalf),
+    finding: goalFinding(item, 'FOR', index, totals, legs, timeline, showHalf),
   }))
   const rankedAgainst: RankedFinding[] = againstEvents.map((item, index) => ({
     g: item.g,
-    finding: goalFinding(item, 'AGAINST', index, problem, totals, timeline, showHalf),
+    finding: goalFinding(item, 'AGAINST', index, totals, legs, timeline, showHalf),
   }))
 
   const goalsFor =

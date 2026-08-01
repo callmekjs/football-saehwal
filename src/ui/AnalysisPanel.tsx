@@ -226,8 +226,28 @@ export function AnalysisPanel({
    * 의존성을 `matchKey` 하나로 줄이는 대신, 실제로 쓰는 값은 여기서 꺼낸다.
    * 그래야 낡은 렌더의 값을 붙잡는 일이 없다.
    */
-  const latest = useRef({ problem, snapshot, kickoff, firstHalf, opponent, onDelta })
-  latest.current = { problem, snapshot, kickoff, firstHalf, opponent, onDelta }
+  const latest = useRef({
+    problem,
+    snapshot,
+    kickoff,
+    firstHalf,
+    opponent,
+    initialState,
+    finalState,
+    firstHalfState,
+    onDelta,
+  })
+  latest.current = {
+    problem,
+    snapshot,
+    kickoff,
+    firstHalf,
+    opponent,
+    initialState,
+    finalState,
+    firstHalfState,
+    onDelta,
+  }
 
   /** 분석을 **끝낸** 판. 같은 판이면 두 번 돌지 않는다 */
   const analyzed = useRef<string | null>(null)
@@ -253,6 +273,11 @@ export function AnalysisPanel({
           now.kickoff,
           now.firstHalf,
           now.opponent,
+          {
+            initial: now.initialState,
+            final: now.finalState,
+            firstHalf: now.firstHalfState,
+          },
         )
         if (cancelled) return
         finished = true
