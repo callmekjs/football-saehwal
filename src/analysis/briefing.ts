@@ -4,6 +4,7 @@ import { AWAY_XI, BENCH, effectivePos, getPlayer } from '../sim/squad'
 import { homeCaptainNumber } from '../captain'
 import { opponentInfo } from './opponents'
 import { withJosa } from './josa'
+import { immediateObjective } from './objectiveStatus'
 import { LEVEL_WORD, presetOf } from './presets'
 import type {
   CaptainEffect,
@@ -209,6 +210,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
 
   // ── 1. 몇 대 몇이고 무엇을 해야 하는가. 이것만은 항상 첫 줄이다 ──
   const [us, them] = state.score
+  const immediate = immediateObjective(problem.objective, state.score)
   const standing =
     us > them
       ? `지금 ${us} 대 ${withJosa(them, '로으로')} 앞서고 있습니다.`
@@ -217,8 +219,13 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
           // '뒤지고 있습니다' 를 쓴다
           `지금 ${us} 대 ${withJosa(them, '로으로')} 뒤지고 있습니다.`
         : `지금 ${us} 대 ${withJosa(them, '로으로')} 동점입니다.`
-  const goal = chasing ? '최소 동점까지 따라가야 합니다.' : '이대로 끝까지 지켜야 합니다.'
-  say(0, 'score', '상황', `${standing} ${goal}`, us < them ? 'ALERT' : 'FACT')
+  say(
+    0,
+    'score',
+    '상황',
+    `${standing} ${immediate.briefing}`,
+    immediate.met ? 'FACT' : 'ALERT',
+  )
 
   // ── 2. 인원. 한 명이 없으면 다른 어떤 말보다 먼저다 ──
   if (state.homeCount < 11) {

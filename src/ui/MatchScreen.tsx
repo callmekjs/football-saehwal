@@ -15,6 +15,7 @@ import type { FormationId } from '../sim/formations'
 import { AnalysisPanel } from './AnalysisPanel'
 import { PRESETS, presetOf } from '../analysis/presets'
 import { buildBriefing, type Briefing } from '../analysis/briefing'
+import { immediateObjective } from '../analysis/objectiveStatus'
 import { buildHalftime } from '../analysis/halftime'
 import { scoreboardScore } from './scoreboard'
 import { isMuted, setMuted, whistle } from './sound'
@@ -810,9 +811,6 @@ export function MatchScreen({
   const [substitutedOut, setSubstitutedOut] = useState<ReadonlySet<string>>(
     () => new Set(),
   )
-  const objective =
-    problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
-
   /**
    * 무엇을 눌렀는지 확인시켜 주는 한 줄. **화면 전용이다.**
    *
@@ -944,6 +942,8 @@ export function MatchScreen({
   const [scene, setScene] = useState<[number, number]>(problem.score)
   useEffect(() => setScene(problem.score), [problem])
   const shown = scoreboardScore(phase === 'DONE', state.score, scene)
+  // 점수판과 같은 공개 점수를 읽는다. 예약 골을 장면보다 먼저 누설하지 않는다.
+  const objective = immediateObjective(problem.objective, shown).label
 
   /**
    * 상대 성향과 대형은 보이는 점수보다 먼저 답을 말하면 안 된다.

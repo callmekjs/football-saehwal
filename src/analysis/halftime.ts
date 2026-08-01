@@ -2,6 +2,7 @@ import { getPlayer } from '../sim/squad'
 import { HALFTIME_RECOVERY } from '../sim/constants'
 import { homeCaptainNumber } from '../captain'
 import { withJosa } from './josa'
+import { immediateObjective } from './objectiveStatus'
 import type { MatchState, Problem } from '../sim/types'
 
 /**
@@ -80,6 +81,7 @@ function captainOf(state: MatchState): number {
  */
 export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   const [us, them] = state.score
+  const immediate = immediateObjective(problem.objective, state.score)
   const lines: HalftimeLine[] = []
   const say = (id: string, text: string, tone: HalftimeTone = 'FACT') =>
     lines.push({ id, text, tone })
@@ -96,13 +98,13 @@ export function buildHalftime(problem: Problem, state: MatchState): Halftime {
   const chasing = problem.objective.type === 'EQUALIZE'
   if (chasing) {
     if (us >= them) say('goal', '따라붙었습니다. 이 상태로 끝내면 됩니다.', 'GOOD')
-    else say('goal', `아직 ${them - us}골이 모자랍니다. 후반 45분이 남았습니다.`, 'BAD')
+    else say('goal', `아직 ${immediate.goalsNeeded}골이 모자랍니다. 후반 45분이 남았습니다.`, 'BAD')
   } else {
     // 두 반의 길이는 같다. 후반이 더 무거운 것은 시간이 아니라 다리다
     if (us > them) say('goal', '리드는 지켰습니다. 다만 후반이 더 힘듭니다.', 'GOOD')
-    else if (us === them) say('goal', '리드를 놓쳤습니다. 다시 앞서야 합니다.', 'BAD')
+    else if (us === them) say('goal', `리드를 놓쳤습니다. ${immediate.briefing}`, 'BAD')
     // 지키는 국면은 앞서야 통과다. 동점으로는 모자라서 한 골을 더 센다
-    else say('goal', `역전당했습니다. ${them - us + 1}골이 필요합니다.`, 'BAD')
+    else say('goal', `역전당했습니다. ${immediate.goalsNeeded}골이 필요합니다.`, 'BAD')
   }
 
   // ── 슈팅 대비. 경기를 누가 쥐고 있었나 ──

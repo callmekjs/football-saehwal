@@ -26,7 +26,7 @@ import { FORMATIONS } from './sim/formations'
 import { OUR_TEAM } from './sim/constants'
 import { HOME_SQUAD, rollRoster } from './sim/squad'
 import { toProblem } from './sim/problems'
-import type { Level, OpponentId, Position, Problem } from './sim/types'
+import type { Level, MatchState, OpponentId, Position, Problem } from './sim/types'
 import { attributeLabel } from './ui/playerData'
 import { MatchScreen } from './ui/MatchScreen'
 import { TitleScreen, type HomeSection } from './ui/TitleScreen'
@@ -72,10 +72,15 @@ function goalLabel(problem: Problem): '리드 지키기' | '동점 이상' {
   return problem.objective.type === 'SURVIVE' ? '리드 지키기' : '동점 이상'
 }
 
-function situationNote(problem: Problem): string {
-  if (problem.awayCount < 11) return '상대 10명'
-  if (problem.unavailable.length > 0) return '우리 10명'
-  if (problem.booked.length > 0) return `경고 ${problem.booked.length}명`
+function bookedCount(state: MatchState): number {
+  return state.players.filter((player) => player.onPitch && !player.out && player.booked).length
+}
+
+function situationNote(state: MatchState): string {
+  if (state.awayCount < 11) return '상대 10명'
+  if (state.homeCount < 11) return '우리 10명'
+  const booked = bookedCount(state)
+  if (booked > 0) return `경고 ${booked}명`
   return '전원 정상'
 }
 
@@ -393,12 +398,15 @@ function OpponentPicker({
 
 function SituationCard({
   entry,
+  state,
   n,
   selected,
   opponent,
   onPick,
 }: {
   entry: Entry
+  /** 이 카드를 골랐을 때 실제로 생성될 다음 판 */
+  state: MatchState
   n: number
   selected: boolean
   /** 오늘 고른 상대. 통과율은 이 상대 기준으로 보여준다 */
@@ -435,7 +443,7 @@ function SituationCard({
       </span>
       <strong>{problem.title}</strong>
       <span className="kickoff-situation-meta">
-        교체 {problem.subsLeft}장 · {situationNote(problem)}
+        교체 {state.subsLeft}장 · {situationNote(state)}
       </span>
       {/*
         다섯 장이 숫자만 다른 같은 카드로 보였다. 물려받은 대형과 통과율
@@ -643,17 +651,23 @@ export function App() {
    * 나온다. 문제는 분포가 아니라 **버튼이 그 주사위를 안 굴린 것**이었다.
    */
   const rerollOffset = rosterSeed * 104729
-  const previewProblem = useMemo(
-    () => ({
-      ...selectedEntry.problem,
-      seed: selectedEntry.problem.seed + (attempt + 1) * 7919 + rerollOffset,
-    }),
-    [attempt, rerollOffset, selectedEntry],
+  const previewStates = useMemo(
+    () =>
+      new Map(
+        entries.map(({ problem }) => {
+          const previewProblem = {
+            ...problem,
+            seed: problem.seed + (attempt + 1) * 7919 + rerollOffset,
+          }
+          return [
+            problem.id,
+            createState(previewProblem, opponent, starters ?? undefined, roster),
+          ] as const
+        }),
+      ),
+    [attempt, entries, opponent, rerollOffset, roster, starters],
   )
-  const previewState = useMemo(
-    () => createState(previewProblem, opponent, starters ?? undefined, roster),
-    [opponent, previewProblem, roster, starters],
-  )
+  const previewState = previewStates.get(selectedEntry.problem.id)!
   /**
    * 지금 치르고 있는 판. **같은 판이면 같은 객체여야 한다.**
    *
@@ -728,7 +742,7 @@ export function App() {
           problemSummary: selectedEntry.summary,
           goal: goalLabel(selectedEntry.problem),
           subsLeft: selectedEntry.problem.subsLeft,
-          bookedCount: selectedEntry.problem.booked.length,
+          bookedCount: bookedCount(previewState),
           board: titleBoard(previewState, selectedEntry.problem.initialFormation),
         }}
         onStart={() => {
@@ -897,8 +911,8 @@ export function App() {
                     </li>
                   </ul>
                   <p className="kickoff-setup-state">
-                    {11 - selectedProblem.unavailable.length}명 · 경고{' '}
-                    {selectedProblem.booked.length}명 · 교체 {selectedProblem.subsLeft}장
+                    {previewState.homeCount}명 · 경고 {bookedCount(previewState)}명 · 교체{' '}
+                    {previewState.subsLeft}장
                   </p>
                 </div>
               </div>
@@ -994,6 +1008,7 @@ export function App() {
                 <SituationCard
                   key={entry.problem.id}
                   entry={entry}
+                  state={previewStates.get(entry.problem.id)!}
                   n={index + 1}
                   selected={index === selectedIndex}
                   opponent={opponent}
