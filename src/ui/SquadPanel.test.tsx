@@ -7,7 +7,14 @@ import { AWAY_SHAPE_BY_MOOD, awaySlots } from '../sim/awayShape'
 import { positionFactors } from '../sim/tactics'
 import { getPlayer } from '../sim/squad'
 import { homeCaptainNumber, awayCaptainNumber } from '../captain'
-import { AwayPanel, PlayerDataCard, SquadPanel, awaySummary } from './SquadPanel'
+import {
+  AwayPanel,
+  PlayerDataCard,
+  SquadPanel,
+  awaySummary,
+  playerAlert,
+  playerExitLabel,
+} from './SquadPanel'
 
 const stateOf = (id: string) =>
   createState(PROBLEMS.find((problem) => problem.id === id)!)
@@ -90,6 +97,39 @@ describe('우리 팀 배치판', () => {
     // 완장을 찬 선수가 실제로 화면에 주장으로 적히는지만 본다
     const captain = homeCaptainNumber(stateOf('p02').players)
     expect(html).toContain(`aria-label="${captain}번 주장,`)
+  })
+
+  it('강한 압박 아래 경고 선수는 실제 퇴장 전까지 퇴장 위험으로 표시한다', () => {
+    const base = stateOf('p03')
+    const booked = base.players.find((player) => player.onPitch && player.booked)!
+    const state = { ...base, tactics: { ...base.tactics, press: 2 as const } }
+    const html = renderToStaticMarkup(
+      <SquadPanel
+        state={state}
+        locked={false}
+        onOrder={() => null}
+        onPosition={() => null}
+        onFormation={() => undefined}
+      />,
+    )
+
+    expect(playerAlert(booked, state.tactics.press)?.tag).toBe('퇴장 위험')
+    expect(html).toContain('퇴장 위험')
+    expect(html).not.toMatch(/<span class="squad-tag">퇴장<\/span>/)
+  })
+
+  it('완료형 퇴장은 실제 SEND_OFF 기록이 있는 이탈 선수에게만 쓴다', () => {
+    const base = stateOf('p03')
+    const player = base.players.find((entry) => entry.onPitch && entry.booked)!
+    const removed = { ...player, onPitch: false, out: true }
+    const log = [{ tick: 1, kind: 'SEND_OFF' as const, target: player.id }]
+    const actuallySentOff = log.some(
+      (event) => event.kind === 'SEND_OFF' && event.target === player.id,
+    )
+
+    expect(playerExitLabel(removed, actuallySentOff, false)).toBe('퇴장')
+    expect(playerExitLabel(removed, false, false)).toBe('경기 이탈')
+    expect(playerExitLabel({ ...removed, out: false }, false, true)).toBe('교체됨')
   })
 })
 

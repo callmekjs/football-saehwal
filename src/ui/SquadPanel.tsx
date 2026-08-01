@@ -103,10 +103,13 @@ const ORDER_TAG: Record<Exclude<PlayerOrder, 'NONE'>, string> = {
  * 75초 동안 열한 명의 체력과 경고를 눈으로 훑을 시간이 없다. 급소를 카드가
  * 스스로 말하면 읽는 비용이 0이 된다.
  */
-function alertOf(s: PlayerState, press: Level): { tag: string; why: string } | null {
+export function playerAlert(s: PlayerState, press: Level): { tag: string; why: string } | null {
   if (s.stamina < 25) return { tag: '위험', why: '체력이 바닥나 부상 위험이 큽니다' }
   if (s.booked && press === 2) {
-    return { tag: '퇴장', why: '이미 경고를 받았는데 계속 세게 압박하고 있습니다. 퇴장 위험이 큽니다' }
+    return {
+      tag: '퇴장 위험',
+      why: '이미 경고를 받았는데 계속 세게 압박하고 있습니다. 한 장 더 받으면 퇴장입니다',
+    }
   }
   if (s.stamina < 35) return { tag: '피로', why: '많이 지쳤습니다' }
   if (s.booked) return { tag: '경고', why: '경고를 한 장 받았습니다' }
@@ -118,6 +121,23 @@ const AVAILABILITY_LABEL = {
   BENCH: '벤치',
   OUT: '경기 이탈',
 } as const
+
+/**
+ * 배치판에서 빠진 선수의 완료 상태.
+ *
+ * `out` 하나에는 부상·퇴장·국면 시작부터의 결장이 함께 들어간다. 따라서
+ * 실제 `SEND_OFF` 기록이 있는 선수에게만 완료형 「퇴장」을 쓴다.
+ */
+export function playerExitLabel(
+  state: PlayerState,
+  sentOff: boolean,
+  substitutedOut: boolean,
+): string {
+  if (sentOff) return '퇴장'
+  if (state.out) return '경기 이탈'
+  if (substitutedOut) return '교체됨'
+  return '선발 제외'
+}
 
 /**
  * 선수 한 명의 실제 데이터.
@@ -328,7 +348,14 @@ export function SquadPanel({
   /** 나갈 선수를 골랐다. 막히면 사유를 돌려준다 */
   onSubOut?: (out: string) => string | null
 }) {
-  const [picked, setPicked] = useState<string | null>(null)
+  /**
+   * 지금 상세를 연 선수의 **ID**.
+   *
+   * 경기 틱은 `PlayerState` 객체를 계속 새것으로 바꾼다. 객체 자체를 선택값으로
+   * 잡으면 다음 틱에 같은 선수여도 선택이 끊긴다. ID만 기억하고 매 렌더의
+   * `onPitch`에서 현재 상태를 다시 찾는다.
+   */
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const seats = useRef<{
     key: string
@@ -355,22 +382,15 @@ export function SquadPanel({
     return () => clearTimeout(t)
   }, [note])
 
-  // 선수 데이터를 읽을 시간은 주되 지시 모드에 갇히지는 않게 한다.
-  useEffect(() => {
-    if (!picked) return
-    const t = setTimeout(() => setPicked(null), 7000)
-    return () => clearTimeout(t)
-  }, [picked])
-
   // 교체할 선수를 고르는 중에는 열려 있던 선수 상세를 닫는다. 지금 이 판은
   // 「누구를 뺄 것인가」를 묻는 곳이고, 두 물음이 한 자리에 겹치면 안 된다
   useEffect(() => {
-    if (subIn) setPicked(null)
+    if (subIn) setSelectedPlayerId(null)
   }, [subIn])
 
   useEffect(() => {
     if (!locked) return
-    setPicked(null)
+    setSelectedPlayerId(null)
     pointerCleanupRef.current?.()
     pointerCleanupRef.current = null
     const pr = pressRef.current
@@ -456,7 +476,9 @@ export function SquadPanel({
   ).placed.map(({ player: s, slot }) => ({ s, slot }))
 
   const active = onPitch.filter((s) => s.order !== 'NONE')
-  const cur = picked ? onPitch.find((s) => s.id === picked) : null
+  const cur = selectedPlayerId
+    ? onPitch.find((s) => s.id === selectedPlayerId) ?? null
+    : null
   const orders = Object.keys(ORDER_LABELS) as Array<Exclude<PlayerOrder, 'NONE'>>
   const shape: Record<Position, number> = { GK: 0, DF: 0, MF: 0, FW: 0 }
   for (const slot of slots) shape[slot.pos] += 1
@@ -515,6 +537,7 @@ export function SquadPanel({
     const err = onPosition(id, target.position)
     const zone = positionZone(target.position)
     setNote(err ?? `${numOf(id)}번 — ${zone.depth} · ${zone.lane}`)
+    if (!err) setSelectedPlayerId(null)
   }
 
   /**
@@ -724,7 +747,7 @@ export function SquadPanel({
     const err = onPosition(id, next)
     const zone = positionZone(next)
     setNote(err ?? `${numOf(id)}번 — ${zone.depth} · ${zone.lane}`)
-    if (!err) setPicked(null)
+    if (!err) setSelectedPlayerId(null)
   }
 
   return (
@@ -818,7 +841,7 @@ export function SquadPanel({
             const p = getPlayer(s.id)
             const currentRole = effectivePos(s)
             const isCaptain = p.num === captain
-            const warn = alertOf(s, state.tactics.press)
+            const warn = playerAlert(s, state.tactics.press)
             const tag =
               s.order !== 'NONE'
                 ? ORDER_TAG[s.order]
@@ -848,7 +871,7 @@ export function SquadPanel({
                 data-captain={isCaptain ? 'on' : undefined}
                 data-immovable={p.pos === 'GK' ? 'on' : undefined}
                 data-drag={held ? (drag.blocked ? 'bad' : 'on') : undefined}
-                aria-pressed={picked === s.id}
+                aria-pressed={selectedPlayerId === s.id}
                 aria-label={
                   isCaptain
                     ? `${p.num}번 주장, ${currentRole}, 체력 ${Math.round(s.stamina)}`
@@ -883,7 +906,7 @@ export function SquadPanel({
                     setNote(err ?? `${p.num}번 → ${numOf(subIn)}번`)
                     return
                   }
-                  setPicked(picked === s.id ? null : s.id)
+                  setSelectedPlayerId(selectedPlayerId === s.id ? null : s.id)
                 }}
               >
                 {isCaptain && (
@@ -927,7 +950,7 @@ export function SquadPanel({
             {getPlayer(cur.id).pos === 'GK' ? (
               <div className="player-data-only">
                 <span>골키퍼는 위치·행동 지시를 바꿀 수 없습니다.</span>
-                <button className="chip" onClick={() => setPicked(null)}>
+                <button className="chip" onClick={() => setSelectedPlayerId(null)}>
                   닫기
                 </button>
               </div>
@@ -960,7 +983,7 @@ export function SquadPanel({
                     onClick={() => {
                       const err = onPosition(cur.id, null)
                       setNote(err ?? `${getPlayer(cur.id).num}번 — 기본 자리`)
-                      if (!err) setPicked(null)
+                      if (!err) setSelectedPlayerId(null)
                     }}
                   >
                     기본 자리
@@ -982,13 +1005,13 @@ export function SquadPanel({
                               ? `${getPlayer(cur.id).num}번 지시 해제`
                               : `${getPlayer(cur.id).num}번 — ${ORDER_LABELS[o].name}`),
                         )
-                        setPicked(null)
+                        if (!err) setSelectedPlayerId(null)
                       }}
                     >
                       {ORDER_LABELS[o].name}
                     </button>
                   ))}
-                  <button className="chip" onClick={() => setPicked(null)}>
+                  <button className="chip" onClick={() => setSelectedPlayerId(null)}>
                     취소
                   </button>
                 </div>

@@ -5,6 +5,7 @@ import {
   ORDER_LABELS,
   PlayerDataCard,
   SquadPanel,
+  playerExitLabel,
 } from './SquadPanel'
 import { BENCH, effectivePos, getPlayer, meanStamina } from '../sim/squad'
 import { homeCaptainNumber } from '../captain'
@@ -413,6 +414,11 @@ function Bench({
   const inactiveStarters = state.players.filter(
     (s) => !s.onPitch && !BENCH.some((player) => player.id === s.id),
   )
+  const sentOff = new Set(
+    state.log
+      .filter((event) => event.kind === 'SEND_OFF' && event.target)
+      .map((event) => event.target as string),
+  )
   const pickedState = picked
     ? state.players.find((player) => player.id === picked) ?? null
     : null
@@ -500,7 +506,7 @@ function Bench({
                   >
                     <span className="bench-num">{player.num}</span>
                     <span className="bench-sub">
-                      {s.out ? '경기 이탈' : substitutedOut.has(s.id) ? '교체됨' : '선발 제외'}
+                      {playerExitLabel(s, sentOff.has(s.id), substitutedOut.has(s.id))}
                     </span>
                   </button>
                 )
