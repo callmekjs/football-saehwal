@@ -356,6 +356,11 @@ Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴�
 
 진행 현황은 **[`docs/progress.md`](docs/progress.md)** 에 있다. 스무 단계 체크리스트와 현재 위치가 맨 위에 있다.
 
+**지금 무엇이 고장나 있는지는 [`docs/defects.md`](docs/defects.md) 하나만
+보면 된다.** 열린 결함·사람이 정할 것·이미 고친 것·**다시 시도하면 안 되는
+것**이 한 곳에 있다. 결함을 고쳤으면 **같은 커밋에서 그 파일의 줄도
+옮긴다** — 안 옮기면 다음 사람이 끝난 일을 다시 조사한다.
+
 - 설계 명세 — [`docs/design.md`](docs/design.md)
 - 무엇을 왜 그렇게 정했는지 — [`docs/worklog.md`](docs/worklog.md)
 - Claude Code 시작 요약 — [`docs/CLAUDE_HANDOFF.md`](docs/CLAUDE_HANDOFF.md)
