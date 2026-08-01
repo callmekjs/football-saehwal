@@ -14,6 +14,7 @@
  * 그린 야간 경기장이며 외부 파일을 한 개도 부르지 않는다.
  */
 
+import type { MouseEvent } from 'react'
 import { TitlePitch } from './TitlePitch'
 import type { TitleBoard } from './titleBoard'
 
@@ -41,7 +42,8 @@ export interface TitlePreview {
 }
 
 export interface TitleScreenProps {
-  onStart: () => void
+  /** 클릭 좌표를 넘겨 화면 전환 뒤 같은 더블클릭이 관통하지 않게 한다 */
+  onStart: (event: MouseEvent<HTMLButtonElement>) => void
   /** 기본 선택 그대로 급수 타임에 들어가는 짧은 길 */
   onQuickStart: () => void
   onGo: (section: HomeSection) => void

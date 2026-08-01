@@ -61,10 +61,47 @@ export function mount(node: ReactNode): Mounted {
  * 한다(`bubbles: true`). 이걸 빠뜨리면 눌렀는데 아무 일도 안 일어나서,
  * 하필 지금 고치려는 고장과 똑같이 보인다.
  */
-export function click(el: Element): void {
+export function click(el: Element, init: MouseEventInit = {}): void {
   act(() => {
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    el.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, ...init }),
+    )
   })
+}
+
+/**
+ * 첫 click 뒤 DOM이 바뀌는 자리의 실제 더블클릭 순서.
+ *
+ * 브라우저는 첫 click이 화면을 바꿔도 같은 좌표에 mousedown → mouseup →
+ * click → dblclick을 계속 보낸다. 두 번째 표적은 첫 click 뒤에야 생기므로
+ * 콜백으로 다시 찾는다.
+ */
+export function doubleClickThrough(
+  first: Element,
+  afterFirst: () => Element,
+  init: MouseEventInit = {},
+): Element {
+  const sendClick = (target: Element, detail: number) => {
+    const options = { bubbles: true, cancelable: true, ...init, detail }
+    target.dispatchEvent(new MouseEvent('mousedown', options))
+    target.dispatchEvent(new MouseEvent('mouseup', options))
+    target.dispatchEvent(new MouseEvent('click', options))
+  }
+
+  act(() => sendClick(first, 1))
+  const second = afterFirst()
+  act(() => {
+    sendClick(second, 2)
+    second.dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        cancelable: true,
+        ...init,
+        detail: 2,
+      }),
+    )
+  })
+  return second
 }
 
 /** 가짜 시계를 그만큼 흘린다. 효과가 붙인 타이머까지 함께 돈다 */

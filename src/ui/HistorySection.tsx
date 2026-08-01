@@ -42,7 +42,7 @@
  * 저장소의 규칙이고, 예시 한 줄은 실제 기록으로 오해된다. 대신 **앞으로
  * 남을 칸의 이름과 뜻**만 적는다.
  */
-import type { CSSProperties } from 'react'
+import { type CSSProperties, useState } from 'react'
 import {
   deltaTrend,
   lastLesson,
@@ -354,6 +354,7 @@ export function HistorySection({
   /** 빈 화면에서 바로 국면을 고르러 간다 */
   onGoSituation?: () => void
 }) {
+  const [confirmingClear, setConfirmingClear] = useState(false)
   const { played, passed, rate } = historySummary(records)
   // 시각은 화면에서만 쓰는 값이라 엔진과 무관하다
   const at = now ?? Date.now()
@@ -512,11 +513,45 @@ export function HistorySection({
             ))}
           </ul>
 
-          {onClear && (
-            <button type="button" className="chip history-clear" onClick={onClear}>
-              기록 지우기
-            </button>
-          )}
+          {onClear &&
+            (confirmingClear ? (
+              <div
+                className="history-clear-confirm"
+                role="alertdialog"
+                aria-labelledby="history-clear-question"
+              >
+                <p id="history-clear-question">
+                  <b>모든 기록을 지울까요?</b>
+                  <small>지우면 되돌릴 수 없습니다.</small>
+                </p>
+                <button
+                  type="button"
+                  className="chip history-clear-cancel"
+                  autoFocus
+                  onClick={() => setConfirmingClear(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className="chip history-clear-confirm-button"
+                  onClick={() => {
+                    onClear()
+                    setConfirmingClear(false)
+                  }}
+                >
+                  모두 지우기
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="chip history-clear"
+                onClick={() => setConfirmingClear(true)}
+              >
+                기록 지우기
+              </button>
+            ))}
         </>
       )}
 

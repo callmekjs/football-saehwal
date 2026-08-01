@@ -97,6 +97,11 @@ describe('급수 타임 · 배치판 카드로 교체하기', () => {
     expect(benchTitle(view.container)).toContain(`교체 카드 ${before - 1}장`)
     // 두 단계가 끝났으니 「나갈 선수 선택」도 닫힌다
     expect(benchTitle(view.container)).not.toContain('나갈 선수 선택')
+    // 성공 반환값 null을 실패 기본값으로 덮어쓰지 않는다
+    expect(view.container.querySelector('.squad-note')?.textContent?.trim()).toBe(
+      '5번 → 15번',
+    )
+    expect(view.container.textContent).not.toContain('교체할 수 없습니다')
 
     view.unmount()
   })
@@ -157,6 +162,9 @@ describe('급수 타임 · 배치판 카드로 교체하기', () => {
     expect(benchTitle(view.container)).toContain(`교체 카드 ${before}장`)
     // 눌렀는데 아무 말이 없는 것이 원래 고장이었다. 이유를 말해야 한다
     expect(view.container.querySelector('.squad-note')?.textContent ?? '').toContain('골키퍼')
+    expect(view.container.querySelector('.squad-note')?.textContent ?? '').not.toContain(
+      '교체할 수 없습니다',
+    )
 
     view.unmount()
   })
@@ -191,6 +199,10 @@ describe('급수 타임 · 배치판 카드로 교체하기', () => {
 
     expect(boardCard(view.container, 15)).toBeDefined()
     expect(benchTitle(view.container)).toContain(`교체 카드 ${before - 1}장`)
+    expect(view.container.querySelector('.bench-note')?.textContent?.trim()).toBe(
+      '5번 → 15번',
+    )
+    expect(view.container.textContent).not.toContain('교체할 수 없습니다')
 
     view.unmount()
   })

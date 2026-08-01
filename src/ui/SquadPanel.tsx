@@ -902,7 +902,10 @@ export function SquadPanel({
                   // 들어올 선수를 이미 골랐으면 이 클릭은 **나갈 선수**다.
                   // 골키퍼도 여기서 걸린다 — 자리는 못 옮겨도 교체는 된다
                   if (subIn) {
-                    const err = onSubOut?.(s.id) ?? '교체할 수 없습니다'
+                    // 성공은 `null`이다. 선택 콜백이 없는 경우와 성공을
+                    // `??`로 한데 묶으면, 실제 교체가 끝난 뒤에도 실패
+                    // 문구가 함께 뜬다.
+                    const err = onSubOut ? onSubOut(s.id) : '교체할 수 없습니다'
                     setNote(err ?? `${p.num}번 → ${numOf(subIn)}번`)
                     return
                   }

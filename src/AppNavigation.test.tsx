@@ -10,7 +10,30 @@ import { App } from './App'
 import { buildBriefing } from './analysis/briefing'
 import { createState } from './sim/engine'
 import { PROBLEMS } from './sim/problems'
-import { click, find, mount } from './ui/domHarness'
+import { addRecord, readHistory, type MatchRecord } from './ui/matchHistory'
+import { click, doubleClickThrough, find, mount } from './ui/domHarness'
+
+const RECORD: MatchRecord = {
+  at: 1_000,
+  problemId: 'p01',
+  problemTitle: '길이 막혔다',
+  opponentId: 'USA',
+  opponentName: '미국',
+  half: 2,
+  score: [1, 0],
+  passed: true,
+  decisions: 2,
+  delta: 0.1,
+}
+
+function squadPlayer(root: ParentNode, num: number): HTMLElement {
+  const hit = [...root.querySelectorAll<HTMLElement>('button.squad-pick-main')].find(
+    (button) =>
+      button.querySelector('.squad-pick-id b')?.textContent?.trim() === String(num),
+  )
+  if (!hit) throw new Error(`${num}번 선수 카드를 찾을 수 없다`)
+  return hit
+}
 
 describe('첫 화면 시작 길', () => {
   beforeEach(() => {
@@ -47,6 +70,54 @@ describe('첫 화면 시작 길', () => {
       'squad',
     )
     expect(view.container.querySelector('.step-bar')).not.toBeNull()
+
+    view.unmount()
+  })
+
+  it('PLAY 더블클릭의 두 번째 클릭이 새 선수단 카드로 관통하지 않는다', () => {
+    const view = mount(<App />)
+    const play = find(view.container, 'button.title-play', 'PLAY')
+
+    // 첫 click이 선수단을 즉시 연 직후, 같은 화면 좌표의 두 번째 click과
+    // dblclick이 새로 생긴 7번 카드에 도착하는 실제 브라우저 순서다.
+    const seven = doubleClickThrough(
+      play,
+      () => squadPlayer(view.container, 7),
+      { clientX: 248, clientY: 412 },
+    )
+
+    expect(view.container.querySelector('.kickoff-home')).not.toBeNull()
+    expect(seven.getAttribute('aria-pressed')).toBe('false')
+
+    // Enter·Space의 활성화 click(detail 0)은 빗장에 걸리지 않는다.
+    click(seven)
+    expect(squadPlayer(view.container, 7).getAttribute('aria-pressed')).toBe('true')
+
+    view.unmount()
+  })
+
+  it('기록 지우기는 취소할 수 있고 최종 확인 뒤에만 로컬 기록을 없앤다', () => {
+    addRecord(RECORD)
+    const view = mount(<App />)
+    click(find(view.container, 'button.title-history', '지난 기록'))
+    expect(readHistory()).toHaveLength(1)
+
+    click(find(view.container, 'button.history-clear', '기록 지우기'))
+    expect(readHistory()).toHaveLength(1)
+    expect(view.container.querySelector('[role="alertdialog"]')).not.toBeNull()
+    expect(document.activeElement?.classList.contains('history-clear-cancel')).toBe(true)
+
+    click(find(view.container, 'button.history-clear-cancel', '취소'))
+    expect(readHistory()).toHaveLength(1)
+    expect(view.container.querySelector('[role="alertdialog"]')).toBeNull()
+
+    click(find(view.container, 'button.history-clear', '기록 지우기'))
+    click(find(view.container, 'button.history-clear-confirm-button', '모두 지우기'))
+    expect(readHistory()).toHaveLength(0)
+    expect(view.container.querySelector('.history-list')).toBeNull()
+    expect(view.container.querySelector('.history-empty')?.textContent).toContain(
+      '아직 기록이 없습니다',
+    )
 
     view.unmount()
   })

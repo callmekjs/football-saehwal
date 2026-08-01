@@ -1,4 +1,9 @@
-import { useMemo, useState } from 'react'
+import {
+  type MouseEvent as ReactMouseEvent,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import raw from './data/problems.json' with { type: 'json' }
 import { noActionRate, referenceNoActionRate } from './analysis/balanceBaseline'
 import {
@@ -515,6 +520,23 @@ const NAV_STEPS: ReadonlyArray<{ id: HomeSection; n: string; label: string; hint
 const FLOW: readonly HomeSection[] = ['squad', 'opponent', 'situation']
 
 /**
+ * 첫 화면 버튼이 사라진 자리에 더블클릭의 두 번째 클릭이 도착하는 것을
+ * 막는 짧은 포인터 기록.
+ *
+ * 화면 전환은 첫 클릭에서 즉시 끝난다. 새 화면 전체를 잠그지도 않고,
+ * 키보드 활성화(`detail === 0`)도 막지 않는다. 첫 클릭과 같은 자리에서
+ * 더블클릭 시간 안에 이어진 포인터 클릭만 삼킨다.
+ */
+interface EntryPointerGuard {
+  x: number
+  y: number
+  at: number
+}
+
+const ENTRY_POINTER_GUARD_MS = 700
+const ENTRY_POINTER_GUARD_RADIUS = 24
+
+/**
  * 지금 몇 걸음째인지 보여주는 줄.
  *
  * 전에는 왼쪽에 세로 안내가 있었다. 사용자가 정했다 — *"이 부분 필요없어
@@ -627,6 +649,7 @@ export function App() {
   const [starters, setStarters] = useState<ReadonlySet<string> | null>(null)
   /** 명단 다시 뽑기 씨앗. 0 이면 손으로 적어둔 기본 명단이다 */
   const [rosterSeed, setRosterSeed] = useState(0)
+  const entryPointerGuard = useRef<EntryPointerGuard | null>(null)
   const roster = useMemo(
     () => (rosterSeed === 0 ? undefined : rollRoster(rosterSeed)),
     [rosterSeed],
@@ -694,6 +717,29 @@ export function App() {
     [attempt, picked, rerollOffset],
   )
 
+  /** 새 선수단 화면에 관통한 더블클릭의 두 번째 click만 막는다 */
+  const guardEnteredPointerClick = (event: ReactMouseEvent<HTMLElement>) => {
+    const guard = entryPointerGuard.current
+    // Enter·Space가 만드는 click은 좌표가 없고 detail이 0이다.
+    if (!guard || event.detail === 0) return
+
+    const elapsed = event.timeStamp - guard.at
+    const distance = Math.hypot(event.clientX - guard.x, event.clientY - guard.y)
+    if (
+      elapsed >= 0 &&
+      elapsed <= ENTRY_POINTER_GUARD_MS &&
+      distance <= ENTRY_POINTER_GUARD_RADIUS
+    ) {
+      event.preventDefault()
+      event.stopPropagation()
+      entryPointerGuard.current = null
+      return
+    }
+
+    // 시간이 지났거나 포인터가 다른 곳으로 옮겨졌다면 정상 입력이다.
+    entryPointerGuard.current = null
+  }
+
   if (picked && pickedProblem) {
     const problem = pickedProblem
     return (
@@ -745,7 +791,11 @@ export function App() {
           bookedCount: bookedCount(previewState),
           board: titleBoard(previewState, selectedEntry.problem.initialFormation),
         }}
-        onStart={() => {
+        onStart={(event) => {
+          entryPointerGuard.current =
+            event.detail > 0
+              ? { x: event.clientX, y: event.clientY, at: event.timeStamp }
+              : null
           // 선수부터 보고 고를 수 있게 우리 팀으로 들어간다.
           // 사용자가 정했다 — "바로 시작하면 1번으로 가서 선수들을 고를 수
           // 있게 해줘."
@@ -772,7 +822,7 @@ export function App() {
   const [homeScore, awayScore] = selectedProblem.score
 
   return (
-    <div className="kickoff-home">
+    <div className="kickoff-home" onClickCapture={guardEnteredPointerClick}>
       <header className="kickoff-header">
         <button
           type="button"
