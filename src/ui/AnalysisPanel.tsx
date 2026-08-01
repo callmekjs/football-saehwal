@@ -333,28 +333,17 @@ export function AnalysisPanel({
           </div>
         </header>
 
-        <ol className="story-route" aria-label="상황 타파 복기">
-          <li className="story-stage crisis">
+        <ol className="story-route story-core" aria-label="결과와 핵심 판단">
+          <li className="story-stage outcome">
             <span className="story-index">01</span>
-            <small>처음 위기</small>
-            <strong className="story-stage-score">
-              {story.crisis.startScore[0]} : {story.crisis.startScore[1]}
-            </strong>
-            <p>{story.crisis.summary}</p>
-            <div className="crisis-signals" aria-label="실제 시작 조건">
-              <span>선수 {story.crisis.homeCount}:{story.crisis.awayCount}</span>
-              <span>경고 {story.crisis.bookedCount}</span>
-              <span>체력 {Math.round(story.crisis.meanStamina)}</span>
-              <span>대형 {story.crisis.inheritedSetup}</span>
-              {story.crisis.inheritedOrders > 0 && (
-                <span>물려받은 지시 {story.crisis.inheritedOrders}</span>
-              )}
-            </div>
+            <small>목표 결과</small>
+            <strong>{passed ? '타파 성공' : '타파 실패'}</strong>
+            <p>{story.crisis.objective}</p>
+            <span className="outcome-mark">{passed ? '✓' : '×'}</span>
           </li>
-
           <li className="story-stage response">
             <span className="story-index">02</span>
-            <small>내 판단</small>
+            <small>내 핵심 판단</small>
             {firstBeat ? (
               <>
                 <time>{firstBeat.time}</time>
@@ -371,43 +360,57 @@ export function AnalysisPanel({
               <strong className="no-response">개입 없음</strong>
             )}
           </li>
-
-          <li className="story-stage flow">
-            <span className="story-index">03</span>
-            <small>실제 경기 흐름</small>
-            {story.flow.integrity === 'UNAVAILABLE' ? (
-              <strong className="no-response">남은 기록 없음</strong>
-            ) : story.flow.events.length === 0 ? (
-              <strong className="no-response">점수 변화 없음</strong>
-            ) : (
-              <div className="event-line">
-                {story.flow.events.slice(-4).map((event) => (
-                  <span
-                    key={event.key}
-                    className="event-node"
-                    data-kind={event.kind}
-                    data-shift={event.objectiveShift?.toLowerCase()}
-                  >
-                    <i>{eventIcon(event)}</i>
-                    <time>{event.time}</time>
-                    <b>{event.score ? `${event.score[0]}:${event.score[1]}` : event.label}</b>
-                    {event.objectiveShift && (
-                      <em>{event.objectiveShift === 'ENTERED' ? '목표선 진입' : '목표선 이탈'}</em>
-                    )}
-                  </span>
-                ))}
-              </div>
-            )}
-          </li>
-
-          <li className="story-stage outcome">
-            <span className="story-index">04</span>
-            <small>목표 결과</small>
-            <strong>{passed ? '타파 성공' : '타파 실패'}</strong>
-            <p>{story.crisis.objective}</p>
-            <span className="outcome-mark">{passed ? '✓' : '×'}</span>
-          </li>
         </ol>
+
+        <details className="result-context analysis-evidence">
+          <summary>처음 위기와 실제 경기 흐름 자세히 보기</summary>
+          <ol className="story-route story-context" aria-label="처음 위기와 실제 경기 흐름">
+            <li className="story-stage crisis">
+              <span className="story-index">03</span>
+              <small>처음 위기</small>
+              <strong className="story-stage-score">
+                {story.crisis.startScore[0]} : {story.crisis.startScore[1]}
+              </strong>
+              <p>{story.crisis.summary}</p>
+              <div className="crisis-signals" aria-label="실제 시작 조건">
+                <span>선수 {story.crisis.homeCount}:{story.crisis.awayCount}</span>
+                <span>경고 {story.crisis.bookedCount}</span>
+                <span>체력 {Math.round(story.crisis.meanStamina)}</span>
+                <span>대형 {story.crisis.inheritedSetup}</span>
+                {story.crisis.inheritedOrders > 0 && (
+                  <span>물려받은 지시 {story.crisis.inheritedOrders}</span>
+                )}
+              </div>
+            </li>
+            <li className="story-stage flow">
+              <span className="story-index">04</span>
+              <small>실제 경기 흐름</small>
+              {story.flow.integrity === 'UNAVAILABLE' ? (
+                <strong className="no-response">남은 기록 없음</strong>
+              ) : story.flow.events.length === 0 ? (
+                <strong className="no-response">점수 변화 없음</strong>
+              ) : (
+                <div className="event-line">
+                  {story.flow.events.slice(-4).map((event) => (
+                    <span
+                      key={event.key}
+                      className="event-node"
+                      data-kind={event.kind}
+                      data-shift={event.objectiveShift?.toLowerCase()}
+                    >
+                      <i>{eventIcon(event)}</i>
+                      <time>{event.time}</time>
+                      <b>{event.score ? `${event.score[0]}:${event.score[1]}` : event.label}</b>
+                      {event.objectiveShift && (
+                        <em>{event.objectiveShift === 'ENTERED' ? '목표선 진입' : '목표선 이탈'}</em>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </li>
+          </ol>
+        </details>
 
         <div className="survival-actions">
           <button className="replay-primary" onClick={onReplay}>
@@ -431,59 +434,21 @@ export function AnalysisPanel({
         {error && <span className="analysis-error">{error}</span>}
         {analysis && oneMove && noop && user && (
           <>
-            <section className="decision-proof">
+            <section className="decision-summary">
               <header>
-                <div>
-                  <span>같은 조건으로 {ANALYSIS_RUNS}판 비교 · 경기 전체 판단</span>
-                  <h3>이 판단은 정말 통했나?</h3>
-                </div>
-                <strong data-tone={oneMove.tone}>
-                  {oneMove.deltaText}
-                  <small>방치 대비</small>
-                </strong>
+                <span>핵심 판단</span>
+                <h3>이 판단은 정말 통했나?</h3>
               </header>
-              <div className="probability-rings">
-                {analysis.rows.map((item) => (
-                  <article key={item.key} data-row={item.key}>
-                    <div
-                      className="probability-ring"
-                      style={{ '--rate': `${item.rate * 360}deg` } as CSSProperties}
-                      role="progressbar"
-                      aria-label={`${item.label} 성공 가능성`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={Math.round(item.rate * 100)}
-                    >
-                      <strong>{percent(item.rate)}</strong>
-                    </div>
-                    <span>{item.label}</span>
-                  </article>
-                ))}
-              </div>
+              <strong data-tone={oneMove.tone}>
+                {oneMove.deltaText}
+                <small>방치 대비</small>
+              </strong>
               <p>{verdict(analysis.userDelta)}</p>
-            </section>
-
-            <section className="flow-proof">
-              <header>
-                <span>한 경기 결과와 나눠 본 150판 평균</span>
-                <h3>{problem.objective.type === 'EQUALIZE' ? '공격은 살아났나?' : '위험은 줄었나?'}</h3>
-              </header>
-              <div className="flow-metrics">
-                {metrics.map((metric) => (
-                  <MetricBars
-                    key={metric.label}
-                    label={metric.label}
-                    noop={metric.noop}
-                    user={metric.user}
-                    lowerIsBetter={metric.lower}
-                  />
-                ))}
-              </div>
             </section>
 
             <section className="next-solution">
               <header>
-                <span>05 · 같은 위기를 다시 만난다면</span>
+                <span>다음 한 수 · 같은 위기를 다시 만난다면</span>
                 <h3>다음에는 이렇게 시작하세요</h3>
               </header>
               <div className="solution-board" aria-label="권장 설정">
@@ -508,6 +473,61 @@ export function AnalysisPanel({
                 </span>
               </div>
             </section>
+
+            <details className="comparison-details analysis-evidence">
+              <summary>150판 성공률과 세부 평균 자세히 보기</summary>
+              <div className="comparison-details-body">
+                <section className="decision-proof">
+                  <header>
+                    <div>
+                      <span>같은 조건으로 {ANALYSIS_RUNS}판 비교 · 경기 전체 판단</span>
+                      <h3>이 판단은 정말 통했나?</h3>
+                    </div>
+                    <strong data-tone={oneMove.tone}>
+                      {oneMove.deltaText}
+                      <small>방치 대비</small>
+                    </strong>
+                  </header>
+                  <div className="probability-rings">
+                    {analysis.rows.map((item) => (
+                      <article key={item.key} data-row={item.key}>
+                        <div
+                          className="probability-ring"
+                          style={{ '--rate': `${item.rate * 360}deg` } as CSSProperties}
+                          role="progressbar"
+                          aria-label={`${item.label} 성공 가능성`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(item.rate * 100)}
+                        >
+                          <strong>{percent(item.rate)}</strong>
+                        </div>
+                        <span>{item.label}</span>
+                      </article>
+                    ))}
+                  </div>
+                  <p>{verdict(analysis.userDelta)}</p>
+                </section>
+
+                <section className="flow-proof">
+                  <header>
+                    <span>한 경기 결과와 나눠 본 150판 평균</span>
+                    <h3>{problem.objective.type === 'EQUALIZE' ? '공격은 살아났나?' : '위험은 줄었나?'}</h3>
+                  </header>
+                  <div className="flow-metrics">
+                    {metrics.map((metric) => (
+                      <MetricBars
+                        key={metric.label}
+                        label={metric.label}
+                        noop={metric.noop}
+                        user={metric.user}
+                        lowerIsBetter={metric.lower}
+                      />
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </details>
 
             <details className="coach-details analysis-evidence">
               <summary>왜 이런 결과가 나왔는지 자세히 보기</summary>

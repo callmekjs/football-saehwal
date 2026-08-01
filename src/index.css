@@ -654,6 +654,14 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.match-break i {
+  padding-left: 7px;
+  border-left: 1px solid color-mix(in srgb, currentColor 32%, transparent);
+  color: var(--dim-2);
+  font-size: 10px;
+  font-style: normal;
+}
+
 .match-break[data-tone='warn'] {
   border-color: var(--warn);
   background: color-mix(in srgb, var(--warn) 16%, transparent);
@@ -719,6 +727,8 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.match-brief-risk { grid-column: span 2; }
 
 .control-tabs {
   display: grid;
@@ -5015,6 +5025,21 @@ button {
   list-style: none;
 }
 
+.story-route.story-core,
+.story-route.story-context {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.result-context {
+  margin: 1px 0 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--panel-deep) 90%, transparent);
+}
+
+.result-context > summary { min-height: 48px; }
+.result-context[open] > summary { border-bottom: 1px solid var(--line-3); }
+
 .story-stage {
   position: relative;
   min-width: 0;
@@ -5600,6 +5625,54 @@ button {
   background: var(--panel);
 }
 
+.decision-summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.55fr) auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-3);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.decision-summary header { min-width: 0; }
+.decision-summary header > span {
+  color: var(--dim-3);
+  font-family: var(--label);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+}
+.decision-summary h3 { margin: 2px 0 0; font-size: 22px; }
+.decision-summary > strong {
+  display: grid;
+  color: var(--accent);
+  font-family: var(--num);
+  font-size: 26px;
+  line-height: 1;
+  text-align: center;
+}
+.decision-summary > strong[data-tone='negative'] { color: var(--away); }
+.decision-summary > strong[data-tone='neutral'] { color: var(--warn); }
+.decision-summary > strong small {
+  margin-top: 4px;
+  color: var(--dim-3);
+  font-family: var(--body);
+  font-size: 8px;
+}
+.decision-summary > p {
+  margin: 0;
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.comparison-details-body {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
 .analysis-evidence > summary {
   min-height: 54px;
   padding-inline: 16px;
@@ -5635,7 +5708,8 @@ button {
 
   .decision-proof,
   .flow-proof,
-  .next-solution {
+  .next-solution,
+  .decision-summary {
     grid-template-columns: 1fr;
   }
 }
@@ -5672,6 +5746,11 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .story-route.story-core,
+  .story-route.story-context {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .story-stage {
     min-height: 176px;
     padding: 16px 14px;
@@ -5689,7 +5768,8 @@ button {
 
   .decision-proof,
   .flow-proof,
-  .next-solution {
+  .next-solution,
+  .decision-summary {
     padding: 14px;
   }
 
@@ -5901,6 +5981,16 @@ button {
   color: var(--text-3);
   font-size: 15px;
   line-height: 1.8;
+}
+
+/* 첫 행동 전에 읽을 실제 목표·위험·남은 교체. 전술판 아래 중복은 없앴다. */
+.title-priority {
+  max-width: 680px;
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(11, 19, 27, 0.72);
 }
 
 .title-actions {
@@ -6153,6 +6243,7 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border-top: 1px solid var(--border);
 }
+.title-card-facts.title-priority { border-top: 1px solid var(--border); }
 .title-card-facts > div { padding: 12px 16px; min-width: 0; }
 .title-card-facts > div + div { border-left: 1px solid var(--border); }
 .title-card-facts dt {
@@ -7008,6 +7099,31 @@ button {
 .lesson-gaps b { color: var(--dim-2); font-size: 12px; font-weight: 500; }
 .lesson-gaps i { color: var(--dim-3); font-style: normal; font-size: 11px; }
 .lesson-gaps strong { color: var(--warn); font-size: 12px; }
+
+.lesson-details {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.lesson-details > summary {
+  min-height: 48px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  color: var(--text-4);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lesson-details[open] > summary { border-bottom: 1px solid var(--border); }
+
+.lesson-details-body {
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
 
 /* ── 전술 버릇 ── */
 .habit-board ul {

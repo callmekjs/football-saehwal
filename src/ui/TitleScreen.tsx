@@ -123,6 +123,29 @@ export function TitleScreen({
             상황 하나를 넘겨받아, 흐르는 경기 안에서 풀어내는 시뮬레이션입니다.
           </p>
 
+          {/*
+            첫 행동 전에 필요한 세 가지를 전술판 아래에 숨기지 않는다.
+
+            전에는 같은 값이 오른쪽 카드 맨 아래에 있어, 한 칸으로 접히는
+            브라우저에서는 첫 800px 안에 목표·위험·교체가 하나도 남지 않았다.
+            값을 새로 만들지 않고 실제 국면 카드에서 이 자리로 옮긴다.
+          */}
+          <dl className="title-card-facts title-priority">
+            <div>
+              <dt>가장 큰 위험</dt>
+              <dd>{preview.problemTitle}</dd>
+              <p>{preview.problemSummary}</p>
+            </div>
+            <div>
+              <dt>목표</dt>
+              <dd data-goal="on">{preview.goal}</dd>
+              <p>
+                남은 교체 {preview.subsLeft}장 ·{' '}
+                {preview.bookedCount > 0 ? `경고 ${preview.bookedCount}명` : '경고 없음'}
+              </p>
+            </div>
+          </dl>
+
           <div className="title-actions">
             <button type="button" className="title-play" onClick={onStart}>
               <b>경기 준비</b>
@@ -184,22 +207,6 @@ export function TitleScreen({
               </p>
             </div>
           </div>
-
-          <dl className="title-card-facts">
-            <div>
-              <dt>상황</dt>
-              <dd>{preview.problemTitle}</dd>
-              <p>{preview.problemSummary}</p>
-            </div>
-            <div>
-              <dt>목표</dt>
-              <dd data-goal="on">{preview.goal}</dd>
-              <p>
-                교체 카드 {preview.subsLeft}장 ·{' '}
-                {preview.bookedCount > 0 ? `경고 ${preview.bookedCount}명` : '경고 없음'}
-              </p>
-            </div>
-          </dl>
         </aside>
       </main>
 

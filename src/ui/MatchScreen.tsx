@@ -1082,6 +1082,11 @@ export function MatchScreen({
           <span>
             현재 설정<b>{setup}</b>
           </span>
+          {phase === 'READY' && (
+            <span>
+              가장 큰 위험<b>{urgencyOf(state).text}</b>
+            </span>
+          )}
         </div>
         {/*
           급수 타임 동안에는 이 자리에 남은 시간이 붙는다.
@@ -1095,6 +1100,7 @@ export function MatchScreen({
         {phase === 'READY' ? (
           <span className="match-break" data-tone={breakTone(breakLeft).toLowerCase()}>
             급수 <b>{formatBreak(breakLeft)}</b>
+            <i>남은 교체 {state.subsLeft}장</i>
           </span>
         ) : (
           <span className="match-subs">교체 카드 {state.subsLeft}장</span>
@@ -1126,6 +1132,18 @@ export function MatchScreen({
           <span>현재 설정</span>
           <strong>{setup}</strong>
         </div>
+        {phase === 'READY' && (
+          <>
+            <div className="match-brief-risk">
+              <span>가장 큰 위험</span>
+              <strong>{urgencyOf(state).text}</strong>
+            </div>
+            <div>
+              <span>남은 교체</span>
+              <strong>{state.subsLeft}장</strong>
+            </div>
+          </>
+        )}
       </div>
 
       {/*

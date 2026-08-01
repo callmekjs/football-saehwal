@@ -51,11 +51,22 @@ describe('첫 화면 시작 길', () => {
   it('바로 킥오프 한 번으로 기본 경기의 급수 타임에 들어간다', () => {
     const view = mount(<App />)
 
+    const priority = view.container.querySelector('.title-priority')?.textContent ?? ''
+    expect(priority).toContain('가장 큰 위험')
+    expect(priority).toContain('목표')
+    expect(priority).toContain('남은 교체')
+
     click(find(view.container, 'button.title-quick', '바로 킥오프'))
 
     expect(view.container.querySelector('.match-screen')).not.toBeNull()
     expect(view.container.querySelector('.break-note')).not.toBeNull()
     expect(find(view.container, 'button.kickoff-button', '경기 재개')).toBeDefined()
+
+    const readyText = view.container.querySelector('.match-screen')?.textContent ?? ''
+    expect(readyText).toContain('목표')
+    expect(readyText).toContain('가장 큰 위험')
+    expect(readyText).toContain('남은 교체')
+    expect(readyText).toContain('급수')
 
     view.unmount()
   })

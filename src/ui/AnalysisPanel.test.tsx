@@ -136,6 +136,39 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
     view.unmount()
   })
 
+  it('결과·핵심 판단·다음 한 수를 먼저 읽고 기존 근거는 펼쳐 볼 수 있다', () => {
+    const view = mount(<Report onSave={() => {}} />)
+    wait(10)
+
+    const core = [...view.container.querySelectorAll('.story-core > .story-stage')]
+    expect(core).toHaveLength(2)
+    expect(core[0].textContent).toContain('목표 결과')
+    expect(core[1].textContent).toContain('내 핵심 판단')
+
+    const next = view.container.querySelector('.next-solution')?.textContent ?? ''
+    expect(next).toContain('다음 한 수')
+    expect(next).toContain('대형')
+    expect(next).toContain('라인')
+    expect(next).toContain('압박')
+    expect(next).toContain('폭')
+
+    const context = view.container.querySelector<HTMLDetailsElement>('.result-context')
+    expect(context?.open).toBe(false)
+    expect(context?.querySelector('summary')?.textContent).toContain('자세히 보기')
+    expect(context?.textContent).toContain('처음 위기')
+    expect(context?.textContent).toContain('실제 경기 흐름')
+
+    const comparison = view.container.querySelector<HTMLDetailsElement>('.comparison-details')
+    expect(comparison?.open).toBe(false)
+    expect(comparison?.querySelector('summary')?.textContent).toContain('150판')
+    expect(comparison?.textContent).toContain('무개입')
+    expect(comparison?.textContent).toContain('나의 판단')
+    expect(comparison?.textContent).toContain('권장 전술')
+    expect(comparison?.textContent).toContain('상대 슈팅')
+
+    view.unmount()
+  })
+
   it('3분을 방치해도 기록은 한 건이고 150판 비교는 한 번만 돈다', () => {
     const saves: Array<number | null> = []
     const view = mount(<Report onSave={(delta) => saves.push(delta)} />)

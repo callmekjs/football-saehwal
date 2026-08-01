@@ -150,6 +150,21 @@ function LessonRowCard({ row }: { row: LessonRow }) {
 }
 
 function LessonBoard({ lesson }: { lesson: Lesson }) {
+  // 긴 문단을 그대로 복제하지 않고, 이미 한국어 에이전트가 다듬은 문장 중
+  // 거래관계와 다음 행동 한 문장만 꺼낸다. 원문 전체는 상세 안에 보존한다.
+  const sentences = lesson.paragraphs.flatMap(
+    (paragraph) => paragraph.match(/[^.!?]+[.!?]?/g)?.map((line) => line.trim()) ?? [],
+  )
+  const tradeoff =
+    sentences.find((line) => line.includes('맞바뀌어')) ??
+    sentences.find((line) => line.includes('평균') && line.includes('반대로')) ??
+    sentences.find((line) => line.includes('권장안'))
+  const nextMove = [...sentences].reverse().find((line) => line.includes('다음'))
+  const keyParagraphs = [tradeoff, nextMove].filter(
+    (paragraph): paragraph is string => Boolean(paragraph),
+  )
+  const detailedParagraphs = lesson.paragraphs
+
   return (
     <section className="lesson-board" aria-labelledby="lesson-title">
       <header>
@@ -192,18 +207,12 @@ function LessonBoard({ lesson }: { lesson: Lesson }) {
           <TripleBar values={lesson.rates} format={percent} scale={1} />
         </div>
 
-        <div className="lesson-text">
-          {lesson.paragraphs.map((paragraph, index) => (
+        <div className="lesson-text lesson-key-text" aria-label="핵심 거래관계와 다음 출발점">
+          {keyParagraphs.map((paragraph, index) => (
             <p key={`${index}-${paragraph.slice(0, 12)}`}>{paragraph}</p>
           ))}
         </div>
       </div>
-
-      <ul className="lesson-rows">
-        {lesson.rows.map((row) => (
-          <LessonRowCard key={row.key} row={row} />
-        ))}
-      </ul>
 
       {lesson.gaps.length > 0 && (
         <div className="lesson-gaps">
@@ -220,6 +229,24 @@ function LessonBoard({ lesson }: { lesson: Lesson }) {
           </ul>
         </div>
       )}
+
+      <details className="lesson-details">
+        <summary>150판 근거와 여섯 세부 평균 자세히 보기</summary>
+        <div className="lesson-details-body">
+          {detailedParagraphs.length > 0 && (
+            <div className="lesson-text">
+              {detailedParagraphs.map((paragraph, index) => (
+                <p key={`${index}-${paragraph.slice(0, 12)}`}>{paragraph}</p>
+              ))}
+            </div>
+          )}
+          <ul className="lesson-rows">
+            {lesson.rows.map((row) => (
+              <LessonRowCard key={row.key} row={row} />
+            ))}
+          </ul>
+        </div>
+      </details>
     </section>
   )
 }
