@@ -4,6 +4,8 @@ import { createState } from '../sim/engine'
 import { FORMATION_IDS } from '../sim/formations'
 import { PROBLEMS } from '../sim/problems'
 import { AWAY_SHAPE_BY_MOOD, awaySlots } from '../sim/awayShape'
+import { positionFactors } from '../sim/tactics'
+import { getPlayer } from '../sim/squad'
 import { homeCaptainNumber, awayCaptainNumber } from '../captain'
 import { AwayPanel, SquadPanel, awaySummary } from './SquadPanel'
 
@@ -148,5 +150,86 @@ describe('상대 배치판', () => {
       seen.add(`${s.away.formation}|${s.away.booked.join('.')}|${s.away.injured}|${s.away.stamina}`)
     }
     expect(seen.size, '마흔 시드에서 서로 다른 상대').toBeGreaterThan(20)
+  })
+})
+
+describe('배치가 확률에 주는 효과를 화면이 말한다', () => {
+  /**
+   * 사용자가 물었다 — *"포지션을 바꾸면 이게 실제로 어떤 영향을 준다
+   * (예, 골 넣을 확률이 22% 올라갔다) 이런게 실제로 나오나?"*
+   *
+   * 나오지 않았다. 계산에는 들어가는데(`applyPositions` 가 상대 배후
+   * 침투·오픈플레이와 우리 공격 폭에 곱한다) 화면에는 「7번 — 중원 ·
+   * 오른쪽」이라는 **자리 이름**만 떴다. 효과가 있는데 감독이 그걸 알
+   * 방법이 없었다.
+   */
+  const placed = (spots: Array<{ id: string; x: number; y: number }>) => {
+    const base = stateOf('p02')
+    return {
+      ...base,
+      players: base.players.map((p) => {
+        const at = spots.find((s) => s.id === p.id)
+        return at ? { ...p, position: { x: at.x, y: at.y } } : p
+      }),
+    }
+  }
+
+  const render = (state: ReturnType<typeof stateOf>) =>
+    renderToStaticMarkup(
+      <SquadPanel
+        state={state}
+        locked={false}
+        onOrder={() => null}
+        onPosition={() => null}
+        onFormation={() => undefined}
+      />,
+    )
+
+  it('아무도 안 옮겼으면 효과 줄을 만들지 않는다', () => {
+    // 배치가 0명이면 계수가 정확히 항등이다. 「+0.0%」를 띄우면 무언가
+    // 걸려 있는 것처럼 읽힌다
+    expect(render(stateOf('p02'))).not.toContain('지금 배치')
+  })
+
+  it('화면에 뜨는 숫자가 엔진이 쓰는 값과 같다', () => {
+    /**
+     * ★ **화면이 자기 계산을 따로 가지면 안 된다.** 언젠가 한쪽만
+     * 바뀌어 「+7.8%」라고 써 놓고 실제로는 다르게 계산되는 화면이 된다.
+     * 그래서 엔진과 같은 `positionFactors` 를 부르는지 값으로 확인한다.
+     */
+    const onPitch = stateOf('p02').players.filter((p) => p.onPitch && !p.out)
+    const forward = onPitch.filter((p) => getPlayer(p.id).pos === 'FW').slice(0, 2)
+    expect(forward.length, '공격수 표본').toBe(2)
+
+    const state = placed(forward.map((p, i) => ({ id: p.id, x: 95, y: i === 0 ? 4 : 64 })))
+    const factors = positionFactors(state.players)
+    expect(factors, '배치 계수').not.toBeNull()
+
+    const pct = `${((factors!.attack - 1) * 100).toFixed(1)}%`
+    const html = render(state)
+    expect(html).toContain('지금 배치')
+    expect(html, `엔진 값 ${pct} 가 화면에 있어야 한다`).toContain(pct)
+  })
+
+  it('앞으로 벌리면 공격과 위험이 **함께** 오른다', () => {
+    // 이 게임의 핵심 거래다. 하나만 움직이면 전진이 공짜가 된다
+    const onPitch = stateOf('p02').players.filter((p) => p.onPitch && !p.out)
+    const fw = onPitch.find((p) => getPlayer(p.id).pos === 'FW')!
+
+    const up = positionFactors(placed([{ id: fw.id, x: 95, y: 4 }]).players)!
+    const back = positionFactors(placed([{ id: fw.id, x: 15, y: 34 }]).players)!
+
+    expect(up.attack).toBeGreaterThan(1)
+    expect(up.risk).toBeGreaterThan(1)
+    expect(back.attack).toBeLessThan(1)
+    expect(back.risk).toBeLessThan(1)
+    // 공짜가 없다 — 공격 이득과 수비 위험이 같은 크기로 움직인다
+    expect(up.attack).toBeCloseTo(up.risk, 10)
+    expect(back.attack).toBeCloseTo(back.risk, 10)
+
+    // 화면도 둘 다 말한다. 하나만 보여주면 거래가 사라진다
+    const html = render(placed([{ id: fw.id, x: 95, y: 4 }]))
+    expect(html).toContain('우리 공격')
+    expect(html).toContain('상대 역습 위험')
   })
 })

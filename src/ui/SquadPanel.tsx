@@ -10,6 +10,13 @@ import {
 import { awaySlots } from '../sim/awayShape'
 import { effectivePos, formationRoleOf, getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkPosition } from '../sim/engine'
+/**
+ * 배치가 확률에 주는 효과를 **엔진과 같은 함수**로 읽는다.
+ *
+ * 순수 함수라 난수를 쓰지 않고 경기 결과에 닿지 않는다. 화면이 자기
+ * 계산을 따로 갖게 두면 언젠가 한쪽만 바뀌어 거짓말하는 숫자가 된다.
+ */
+import { positionFactors } from '../sim/tactics'
 import { awayCaptainNumber, homeCaptainNumber } from '../captain'
 import {
   POSITION_CHOICES,
@@ -618,6 +625,44 @@ export function SquadPanel({
   /** 드래그 중에는 지시 줄이 지금 무슨 일이 일어날지 말한다 */
   const liveHint = drag ? dropHint(drag.target, drag.blocked, numOf(drag.id)) : null
 
+  /**
+   * 지금 배치가 **확률에 실제로 주는 효과.**
+   *
+   * 사용자가 물었다 — *"포지션을 바꾸면 이게 실제로 어떤 영향을 준다
+   * 이런게 실제로 나오나?"* 나오지 않았다. 계산에는 들어가는데
+   * (`applyPositions` 가 상대 배후 침투·오픈플레이와 우리 공격 폭에
+   * 곱한다) 화면에는 「7번 — 중원 · 오른쪽」이라는 자리 이름만 떴다.
+   * 효과가 있는데 감독이 그걸 알 방법이 없었다.
+   *
+   * ★ **엔진이 쓰는 그 함수를 그대로 부른다.** 화면에 숫자를 따로 적으면
+   * 언젠가 한쪽만 바뀌어 「+7.8%」라고 써 놓고 실제로는 다르게 계산되는
+   * 화면이 된다. 여기서 보이는 값은 정의상 실제 값이다.
+   *
+   * **난수를 한 톨도 쓰지 않는다.** 이미 정해진 상태를 읽어 보여줄 뿐이라
+   * 경기 결과·확률·저장된 시드에 닿지 않는다.
+   */
+  const effectOf = (override?: { id: string; position: PlayerPosition | null }) => {
+    const players = override
+      ? state.players.map((p) =>
+          p.id === override.id ? { ...p, position: override.position } : p,
+        )
+      : state.players
+    return positionFactors(players)
+  }
+
+  /** 끌고 있으면 **놓을 자리로** 미리 계산한다. 놓기 전에 대가가 보여야 한다 */
+  const liveEffect =
+    drag && drag.target.kind === 'PLACE' && !drag.blocked
+      ? effectOf({ id: drag.id, position: drag.target.position })
+      : effectOf()
+
+  /** `+7.8%` · `-9.0%` · `0.0%` */
+  const asPercent = (multiplier: number) => {
+    const pct = (multiplier - 1) * 100
+    const shown = Math.abs(pct) < 0.05 ? 0 : pct
+    return `${shown > 0 ? '+' : shown < 0 ? '−' : ''}${Math.abs(shown).toFixed(1)}%`
+  }
+
   const liveZone =
     drag?.target.kind === 'PLACE' ? positionZone(drag.target.position) : null
 
@@ -683,6 +728,29 @@ export function SquadPanel({
         <b>{getFormation(state.formation).label}</b> · 수비 {shape.DF}명 · 중원 {shape.MF}명
         · 공격 {shape.FW}명 · 누르면 데이터·지시, 원하는 곳에 놓기
       </p>
+
+      {/*
+        배치가 확률에 주는 효과. **끌고 있는 동안에는 놓을 자리로 미리 본다.**
+
+        올리면 공격만 느는 것이 아니라 뒤도 같이 열린다는 것이 이 게임의
+        핵심 거래인데, 숫자가 없으면 그 거래가 화면에서 사라진다. 두 값을
+        나란히 두어 **공짜가 아니라는 것**이 한눈에 보이게 한다.
+      */}
+      {liveEffect && (
+        <p
+          className="squad-effect"
+          data-live={drag && !drag.blocked ? 'on' : undefined}
+          role="status"
+        >
+          <span>{drag && !drag.blocked ? '여기 놓으면' : '지금 배치'}</span>
+          <b data-tone={liveEffect.attack >= 1 ? 'up' : 'down'}>
+            우리 공격 {asPercent(liveEffect.attack)}
+          </b>
+          <b data-tone={liveEffect.risk >= 1 ? 'bad' : 'good'}>
+            상대 역습 위험 {asPercent(liveEffect.risk)}
+          </b>
+        </p>
+      )}
 
       <div className="squad-shape" data-dragging={drag ? 'on' : undefined}>
         <div className="squad-field" ref={fieldRef}>

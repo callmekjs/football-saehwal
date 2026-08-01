@@ -1462,6 +1462,50 @@ button {
   font-weight: 650;
 }
 
+/*
+  배치가 확률에 주는 효과.
+
+  두 값을 **나란히** 둔다. 올리면 공격만 느는 것이 아니라 뒤도 같이
+  열린다는 것이 이 게임의 핵심 거래인데, 하나만 크게 보이면 그 거래가
+  화면에서 사라진다. 좁은 화면에서는 줄바꿈해 들어간다.
+*/
+.squad-effect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 0 6px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.squad-effect > span {
+  color: var(--dim);
+  letter-spacing: 0.02em;
+}
+
+.squad-effect b {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 우리 공격이 늘면 좋고 줄면 아쉽다 */
+.squad-effect b[data-tone='up'] { color: var(--accent); }
+.squad-effect b[data-tone='down'] { color: var(--muted); }
+/* 상대 역습 위험은 반대다 — 늘면 나쁘고 줄면 좋다 */
+.squad-effect b[data-tone='bad'] { color: var(--away); }
+.squad-effect b[data-tone='good'] { color: var(--accent); }
+
+/* 끌고 있는 동안에는 놓기 전의 예고다. 눈에 띄어야 한다 */
+.squad-effect[data-live='on'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+}
+
 .squad-order-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
