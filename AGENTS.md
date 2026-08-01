@@ -84,7 +84,7 @@ npx tsx -e "import('./src/sim/engine.ts').then(()=>console.log('OK'))"
 ## 2. 바꾸기 전에 확인해야 하는 것
 
 ```bash
-npm test        # 695개. 전부 통과해야 한다
+npm test        # 701개. 전부 통과해야 한다
 npx tsc --noEmit # 타입 오류 0
 npm run sim     # 다섯 국면 전부 "합격"
 ```
@@ -194,7 +194,7 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 파일도 함께 추가한다. 역할·범위·금지선·검증 기준을 두 실행 파일에 복사하지
 않는다. 그래야 한쪽만 수정되어 서로 다른 에이전트가 되는 일을 막을 수 있다.
 
-**여섯 에이전트 모두 이 구조를 따른다.** `game-agent` 와 `qa-agent` 는 이
+**아홉 에이전트 모두 이 구조를 따른다.** `game-agent` 와 `qa-agent` 는 이
 규칙보다 먼저 만들어져 한동안 Claude Code 전용이었고, 지침이 실행 파일
 안에 직접 들어 있었다. 2026-07-29에 공통 원본으로 옮기고 Codex 실행
 파일을 추가해 맞췄다.
@@ -207,6 +207,9 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 | Coach | `docs/agents/coach-agent.md` | `coach-agent` | `coach_agent` | 분석 영역만 |
 | QA | `docs/agents/qa-agent.md` | `qa-agent` | `qa_agent` | **안 고친다** |
 | 한국어 | `docs/agents/korean-agent.md` | `korean-agent` | `korean_agent` | 글만 |
+| 플레이테스트·매니아 | `docs/agents/playtest-agent.md` | `playtest-fan` | `playtest_fan` | **보고서만** |
+| 플레이테스트·보통 | `docs/agents/playtest-agent.md` | `playtest-casual` | `playtest_casual` | **보고서만** |
+| 플레이테스트·비관심 | `docs/agents/playtest-agent.md` | `playtest-newcomer` | `playtest_newcomer` | **보고서만** |
 
 **같이 돌려도 되는 조합**
 
@@ -224,11 +227,16 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 매기는 동안 심사 대상이 움직이면 그 점수가 무엇에 대한 점수인지 알 수 없다.
 **판정을 받을 때는 작업 트리를 깨끗이 하고 부른다.**
 
+세 플레이테스터도 소스 코드를 고치지 않지만 **수정 에이전트와 동시에 돌리지
+않는다.** 플레이 도중 화면이 바뀌면 보고서의 기준이 사라진다. 세 명끼리는
+서로 다른 포트와 보고서 파일을 쓰므로 동시에 돌려도 된다. 세 보고서를
+커밋해 트리를 깨끗이 만든 뒤 `final_eval`을 부른다.
+
 ---
 
 ## 4.4.1 최종 평가 · 배포 관문 에이전트
 
-다섯 전문 에이전트를 총괄하고 배포 가부를 판정하는 자리다. Codex 에서는
+여덟 전문 에이전트를 총괄하고 배포 가부를 판정하는 자리다. Codex 에서는
 **`final_eval`** (`.codex/agents/final-eval.toml`), Claude Code 에서는
 **`final-eval`** (`.claude/agents/final-eval.md`)를 쓴다. 두 실행 파일은
 공통 원본 `docs/agents/final-eval.md`를 반드시 읽는다.
@@ -237,14 +245,16 @@ Code의 `.claude/agents/*.md`는 각 플랫폼이 에이전트를 찾는 실행 
 받아야 Vercel 에 배포한다.** 지금 GitHub Pages 는 작업용이고 Vercel 은
 사람들에게 보여주는 자리다.
 
-하는 일이 셋이다.
+하는 일이 넷이다.
 
-1. **직접 실행한다.** 브라우저를 열어 한 판을 끝까지 해본다. 코드를 읽는
+1. **세 플레이테스트 보고서를 읽는다.** 매니아·보통·비관심 사용자의 발견을
+   값어치 순으로 정리한다
+2. **직접 실행한다.** 브라우저를 열어 한 판을 끝까지 해본다. 코드를 읽는
    것으로 대신하지 않는다
-2. **문제를 찾으면 담당 에이전트에게 줄 프롬프트를 써 준다.** 이것이 주된
+3. **문제를 찾으면 담당 에이전트에게 줄 프롬프트를 써 준다.** 이것이 주된
    산출물이다 — 「게임 에이전트가 고쳐야 함」 같은 지목이 아니라 **그대로
    복사해 붙일 수 있는 지시문**이다
-3. **100점 만점으로 채점한다.** 80점 이상이면 Vercel 배포를 돕는다
+4. **100점 만점으로 채점한다.** 80점 이상이면 Vercel 배포를 돕는다
 
 **코드를 고치지 않는다.** QA 와 같은 규칙이다 — 심사하는 사람이 고치면
 자기가 고친 것을 자기가 심사하게 된다. **배포 버튼도 대신 누르지 않는다.**
@@ -352,6 +362,27 @@ Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴�
 **`npm run sim` 은 돌릴 필요가 없다.** 글만 고쳤다면 확률에 닿을 수 없다.
 돌려야 할 것 같으면 글이 아닌 것을 고친 것이므로 그 변경을 되돌린다.
 
+## 4.9 세 페르소나 플레이테스트 에이전트
+
+실제 사용자가 링크를 받은 것처럼 자유롭게 눌러 보는 역할이다. 공통 원본은
+`docs/agents/playtest-agent.md` 하나이며, 세 실행 파일이 각자 다른 페르소나를
+선택한다.
+
+| 관점 | Codex | Claude Code | 보고서 |
+|---|---|---|---|
+| 축구 매니아 | `playtest_fan` | `playtest-fan` | `docs/playtests/fan.md` |
+| 관심이 중간 | `playtest_casual` | `playtest-casual` | `docs/playtests/casual.md` |
+| 관심이 전혀 없음 | `playtest_newcomer` | `playtest-newcomer` | `docs/playtests/newcomer.md` |
+
+세 명은 브라우저 안에서 버튼 연타·잘못된 순서·드래그·교체·새로고침·뒤로가기·
+탭 전환·375px 전환을 자유롭게 시도한다. 최소 한 경기를 결과와 감독 보고서까지
+끝낸다. 소스 코드는 고치지 않고 각자 보고서 파일만 쓴다.
+
+세 보고서가 끝나면 루트 에이전트가 보고서만 커밋해 작업 트리를 깨끗하게
+만든다. 그다음 `final_eval`이 보고서를 읽고 차단·중대 항목을 직접 재현한다.
+`final_eval`의 "수정"은 직접 편집이 아니라 담당 에이전트에게 복사용 프롬프트를
+보내고, 수정 뒤 다시 플레이·재평가하는 절차다.
+
 ## 5. 지금 상태와 다음 할 일
 
 진행 현황은 **[`docs/progress.md`](docs/progress.md)** 에 있다. 스무 단계 체크리스트와 현재 위치가 맨 위에 있다.
@@ -373,8 +404,8 @@ Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴�
 
 ```bash
 npm run dev     # 개발 서버
-npm test        # 테스트 695개
+npm test        # 테스트 701개
 npm run sim     # 밸런스 검증 (시드 1200개 x 27조합 x 5국면, 난이도 「보통」)
-npm run sim -- --difficulty=ALL   # 쉬움·보통·어려움 셋 다 (10~12분)
+npm run sim -- --team=ALL   # 상대 13팀 전부 (45~80분)
 npm run build   # 프로덕션 빌드 (타입 검사 포함)
 ```
