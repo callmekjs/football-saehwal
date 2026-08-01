@@ -17,7 +17,7 @@
 |---|---|
 | GitHub 저장소 | ✅ |
 | **배포 URL** | ✅ <https://callmekjs.github.io/football-saehwal/> |
-| 시연영상 | ⏸ **사용자가 "중요하지 않다"고 정했다** · 대본은 `docs/demo-video.md` 에 있다 |
+| **시연영상** | ❌ **공식 규칙상 (필수)** · 없으면 결격 위험 · 대본은 `docs/demo-video.md` 에 있다 |
 
 ### 8/1 밤 — 골대 근처에서 뒤로 빼지 않는다
 
