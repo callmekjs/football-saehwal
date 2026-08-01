@@ -5938,6 +5938,29 @@ button {
   box-shadow: 0 14px 40px rgba(75, 189, 132, 0.4);
 }
 
+/* 기본값으로 급수 타임까지 들어가는 짧은 길. PLAY의 준비 흐름은 남긴다 */
+.title-quick {
+  min-height: 44px;
+  padding: 8px 16px;
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  border: 1px solid rgba(134, 233, 182, 0.48);
+  border-radius: 8px;
+  background: rgba(19, 29, 40, 0.72);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.title-quick b { color: var(--accent-hi); font-size: 14px; }
+.title-quick small { color: var(--dim-2); font-size: 10px; }
+.title-quick:hover,
+.title-quick:focus-visible {
+  border-color: var(--accent);
+  background: rgba(100, 212, 155, 0.1);
+}
+
 .title-fineprint {
   margin: 0;
   display: grid;
@@ -6204,7 +6227,8 @@ button {
 
 @media (max-width: 560px) {
   .title-actions { flex-direction: column; align-items: stretch; }
-  .title-play { justify-content: center; }
+  .title-play { justify-content: center; text-align: center; }
+  .title-quick { text-align: center; }
   .title-steps article + article { border-left: 0; border-top: 1px solid var(--border); }
 }
 

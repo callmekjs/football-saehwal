@@ -738,6 +738,12 @@ export function App() {
           setSection('squad')
           setEntered(true)
         }}
+        onQuickStart={() => {
+          // 처음 보는 사람을 기본 상대·국면·후반의 급수 타임까지 바로
+          // 데려간다. PLAY의 01→02→03 감독 준비 흐름은 그대로 남긴다.
+          setPicked({ entry: selectedEntry, half: selectedHalf })
+          setAttempt((n) => n + 1)
+        }}
         onGo={(next: HomeSection) => {
           // 첫 화면에서 고른 그 페이지로 바로 간다
           setSection(next)

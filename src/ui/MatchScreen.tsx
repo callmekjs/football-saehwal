@@ -366,6 +366,7 @@ function Bench({
   locked,
   half,
   running,
+  substitutedOut,
   picked,
   onPick,
   onSub,
@@ -382,6 +383,8 @@ function Bench({
    * 밖으로 밀려난다. 지금 필요한 것은 체력이지 코너킥 능력이 아니다.
    */
   running: boolean
+  /** 이 판에서 실제 교체로 나간 선수. 반이 바뀌어도 유지된다 */
+  substitutedOut: ReadonlySet<string>
   /**
    * 지금 고른 선수. **위에서 내려온다.**
    *
@@ -409,20 +412,6 @@ function Bench({
   const captain = homeCaptainNumber(state.players)
   const inactiveStarters = state.players.filter(
     (s) => !s.onPitch && !BENCH.some((player) => player.id === s.id),
-  )
-  /**
-   * 이 칸에는 두 종류가 섞인다.
-   *
-   * 하나는 **뛰다가 나간 선수**이고, 다른 하나는 감독이 **처음부터 선발에서
-   * 뺀 선수**다. 둘 다 「교체됨」이라고 부르면, 교체 카드를 쓴 적이 없는
-   * 감독이 자기가 두 장을 썼다고 읽는다. 축구에서 교체는 뛰던 사람이 나가는
-   * 일이다.
-   *
-   * 실제로 교체가 있었는지는 경기 기록이 안다.
-   */
-  const substitutedOut = new Set(
-    // 교체 기록은 들어온 선수를 `target`, 나간 선수를 `detail` 에 담는다
-    state.log.flatMap((event) => (event.kind === 'SUB' && event.detail ? [event.detail] : [])),
   )
   const pickedState = picked
     ? state.players.find((player) => player.id === picked) ?? null
@@ -804,6 +793,17 @@ export function MatchScreen({
    * 두 패널이 같은 것을 보게 위로 올렸다.
    */
   const [benchPick, setBenchPick] = useState<string | null>(null)
+  /**
+   * 실제 교체로 나간 선수.
+   *
+   * 급수 타임 교체는 즉시 반영돼 `SUB` 경기 기록을 남기지 않고, 후반으로
+   * 넘어가면 현재 반의 기록도 새로 시작한다. 따라서 기록을 다시 훑어 딱지를
+   * 정하면 같은 선수가 「교체됨」에서 「선발 제외」로 뒤집힌다. 성공한 교체
+   * 자체를 여기서 기억하면 두 경우 모두 같은 사실을 유지한다.
+   */
+  const [substitutedOut, setSubstitutedOut] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
@@ -865,6 +865,11 @@ export function MatchScreen({
     (out: string, inId: string): string | null => {
       const reason = substitute(out, inId)
       if (!reason) {
+        setSubstitutedOut((current) => {
+          const next = new Set(current)
+          next.add(out)
+          return next
+        })
         show(subToast(getPlayer(out).num, getPlayer(inId).num))
         setBenchPick(null)
       }
@@ -1160,6 +1165,7 @@ export function MatchScreen({
               locked={phase === 'DONE'}
               half={half}
               running={phase === 'RUNNING'}
+              substitutedOut={substitutedOut}
               picked={benchPick}
               onPick={setBenchPick}
               onSub={substituteLoud}
@@ -1353,7 +1359,10 @@ export function MatchScreen({
                     onClick={() => {
                       setActiveTab('TACTICS')
                       if (onReplay) onReplay()
-                      else reset()
+                      else {
+                        setSubstitutedOut(new Set())
+                        reset()
+                      }
                     }}
                   >
                     같은 판 다시
@@ -1364,7 +1373,10 @@ export function MatchScreen({
                     onClick={() => {
                       setActiveTab('TACTICS')
                       if (onRetry) onRetry()
-                      else reset()
+                      else {
+                        setSubstitutedOut(new Set())
+                        reset()
+                      }
                     }}
                   >
                     새 판

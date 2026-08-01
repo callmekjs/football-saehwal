@@ -42,6 +42,8 @@ export interface TitlePreview {
 
 export interface TitleScreenProps {
   onStart: () => void
+  /** 기본 선택 그대로 급수 타임에 들어가는 짧은 길 */
+  onQuickStart: () => void
   onGo: (section: HomeSection) => void
   historyCount: number
   preview: TitlePreview
@@ -66,7 +68,13 @@ const STEPS = [
   },
 ] as const
 
-export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScreenProps) {
+export function TitleScreen({
+  onStart,
+  onQuickStart,
+  onGo,
+  historyCount,
+  preview,
+}: TitleScreenProps) {
   const added = preview.endMinute - preview.regulationMinute
   // 재개하는 분이 그 반의 어디쯤인지. 진행 막대가 이 값을 쓴다
   const elapsed = ((preview.kickoffMinute - (preview.regulationMinute - 45)) / 45) * 100
@@ -117,6 +125,10 @@ export function TitleScreen({ onStart, onGo, historyCount, preview }: TitleScree
             <button type="button" className="title-play" onClick={onStart}>
               <b>PLAY</b>
               <small>선수단을 보고 국면을 고른 뒤 시작합니다</small>
+            </button>
+            <button type="button" className="title-quick" onClick={onQuickStart}>
+              <b>바로 킥오프</b>
+              <small>기본값으로 급수 타임 입장</small>
             </button>
             <p className="title-fineprint">
               설치 없이 브라우저에서 바로

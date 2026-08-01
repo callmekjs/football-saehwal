@@ -13,7 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MatchScreen } from './MatchScreen'
-import { click, mount } from './domHarness'
+import { advance, click, find, mount } from './domHarness'
 import { createState } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
 
@@ -57,9 +57,14 @@ describe('급수 타임 · 배치판 카드로 교체하기', () => {
    */
   beforeEach(() => {
     vi.useFakeTimers()
+    // 이 검사는 화면 연출이 아니라 75초 경기 시계 뒤의 라벨을 본다.
+    // 캔버스 프레임까지 4,500번 돌리면 jsdom의 미구현 경고가 결과를 덮는다.
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
@@ -83,12 +88,37 @@ describe('급수 타임 · 배치판 카드로 교체하기', () => {
     // ③ 경기장에는 15번이 있고 ④ 5번은 빠져 벤치 쪽 줄로 내려간다
     expect(boardCard(view.container, 15)).toBeDefined()
     expect(boardCard(view.container, 5)).toBeUndefined()
-    expect(benchChip(view.container, 5)).toBeDefined()
+    const replaced = benchChip(view.container, 5)
+    expect(replaced).toBeDefined()
+    // 0틱 교체는 경기 기록을 남기지 않아도 실제 교체라는 사실은 같다
+    expect(replaced?.querySelector('.bench-sub')?.textContent).toBe('교체됨')
 
     // ⑤ 교체 카드가 한 장 줄었다
     expect(benchTitle(view.container)).toContain(`교체 카드 ${before - 1}장`)
     // 두 단계가 끝났으니 「나갈 선수 선택」도 닫힌다
     expect(benchTitle(view.container)).not.toContain('나갈 선수 선택')
+
+    view.unmount()
+  })
+
+  it('전반 급수 타임에 교체한 선수는 후반에도 교체됨으로 남는다', () => {
+    const view = mount(
+      <MatchScreen problem={PROBLEM} startHalf={1} onExit={() => undefined} />,
+    )
+
+    // 전반 0틱 교체. 이 순간에는 SUB 경기 기록이 없다
+    click(benchChip(view.container, 15)!)
+    click(boardCard(view.container, 5)!)
+    expect(benchChip(view.container, 5)?.textContent).toContain('교체됨')
+
+    // 전반을 끝내고 후반 급수 타임으로 넘어간다. 이 전환은 현재 반의
+    // 결정 이력을 비우므로, 기록만 보고 딱지를 정하면 여기서 뒤집혔다
+    click(find(view.container, 'button.kickoff-button', '경기 재개'))
+    advance(() => vi.advanceTimersByTime(75_100))
+    click(find(view.container, 'button.kickoff-button', '후반 시작'))
+
+    expect(benchChip(view.container, 5)?.textContent).toContain('교체됨')
+    expect(benchChip(view.container, 5)?.textContent).not.toContain('선발 제외')
 
     view.unmount()
   })
