@@ -1456,6 +1456,12 @@ button {
 
 .squad-orders-head.drag[data-bad='on'] { color: var(--away); }
 
+/* 교체할 선수를 고르는 중. 지금 이 판이 무엇을 묻는지 판 아래에서도 말한다 */
+.squad-orders-head.sub-wait {
+  color: var(--accent);
+  font-weight: 650;
+}
+
 .squad-order-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

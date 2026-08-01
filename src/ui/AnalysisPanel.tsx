@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   ANALYSIS_RUNS,
   compareDecisions,
@@ -195,37 +195,95 @@ export function AnalysisPanel({
       })
     : null
 
+  /**
+   * 이 분석이 **어느 판의 것인가**를 값 하나로 적는다.
+   *
+   * 전에는 `problem` 객체를 그대로 의존성에 넣었다. 부르는 쪽이 그 객체를
+   * 매 렌더 새로 만들면(실제로 `App.tsx` 가 그랬다) 참조가 매번 달라져
+   * 효과가 다시 돌았고, 그 효과가 150판을 다시 돌린 뒤 `onDelta` 로 기록을
+   * 저장해 부모를 다시 그리게 만들어 **끝이 없었다.**
+   *
+   * 참조가 아니라 값으로 물으면 그 고리가 성립하지 않는다. 같은 판이면
+   * 부모가 몇 번을 다시 그리든 이 문자열은 같다.
+   */
+  const matchKey = useMemo(
+    () =>
+      [
+        problem.id,
+        problem.seed,
+        opponent,
+        kickoff,
+        kickoffHalf,
+        snapshot.length,
+        firstHalf?.length ?? -1,
+      ].join('#'),
+    [firstHalf, kickoff, kickoffHalf, opponent, problem.id, problem.seed, snapshot],
+  )
+
+  /**
+   * 효과 안에서 읽을 지금 값.
+   *
+   * 의존성을 `matchKey` 하나로 줄이는 대신, 실제로 쓰는 값은 여기서 꺼낸다.
+   * 그래야 낡은 렌더의 값을 붙잡는 일이 없다.
+   */
+  const latest = useRef({ problem, snapshot, kickoff, firstHalf, opponent, onDelta })
+  latest.current = { problem, snapshot, kickoff, firstHalf, opponent, onDelta }
+
+  /** 분석을 **끝낸** 판. 같은 판이면 두 번 돌지 않는다 */
+  const analyzed = useRef<string | null>(null)
+  /** 기록에 결과를 넘긴 판. `onDelta` 는 한 판에 한 번이다 */
+  const delivered = useRef<string | null>(null)
+
   useEffect(() => {
+    if (analyzed.current === matchKey) return
+    analyzed.current = matchKey
+
     let cancelled = false
+    let finished = false
     setAnalysis(null)
     setError(null)
 
     const timer = window.setTimeout(() => {
+      const now = latest.current
       try {
         const next = compareDecisions(
-          problem,
-          snapshot,
+          now.problem,
+          now.snapshot,
           ANALYSIS_RUNS,
-          kickoff,
-          firstHalf,
-          opponent,
+          now.kickoff,
+          now.firstHalf,
+          now.opponent,
         )
         if (cancelled) return
+        finished = true
         setAnalysis(next)
         // 150판 비교가 끝났다. 기록에 방치 대비 차이와 세 갈래 평균을 채워 넣게 알린다
-        onDelta?.(next.userDelta, toRecordCompare(next.rows))
+        if (delivered.current !== matchKey) {
+          delivered.current = matchKey
+          now.onDelta?.(next.userDelta, toRecordCompare(next.rows))
+        }
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
+        if (cancelled) return
+        finished = true
+        setError(reason instanceof Error ? reason.message : '분석할 수 없습니다')
       }
     }, 0)
 
     return () => {
       cancelled = true
       window.clearTimeout(timer)
+      /**
+       * 끝나기 전에 떼어졌으면 **다시 붙을 때 한 번 더 돌아야 한다.**
+       *
+       * 실제 앱은 `StrictMode` 안에서 돈다. 붙자마자 한 번 떼었다 다시
+       * 붙이므로, 「붙는 순간」으로 막으면 두 번째에 걸려 분석이 아예 안
+       * 돌고 화면이 영원히 「검증 중…」에 머문다.
+       */
+      if (!finished) analyzed.current = null
     }
-    // onDelta 는 매 렌더 새로 만들어질 수 있다. 분석이 끝날 때 한 번이면 된다
+    // 값은 `latest` 에서 꺼낸다. 다시 돌 이유는 판이 바뀌는 것 하나뿐이다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opponent, firstHalf, kickoff, problem, snapshot])
+  }, [matchKey])
 
   const firstBeat = story.response.beats[0] ?? null
   const noop = analysis?.rows.find((row) => row.key === 'noop')

@@ -654,11 +654,34 @@ export function App() {
     () => createState(previewProblem, opponent, starters ?? undefined, roster),
     [opponent, previewProblem, roster, starters],
   )
-  if (picked) {
-    const problem = {
-      ...picked.entry.problem,
-      seed: picked.entry.problem.seed + attempt * 7919 + rerollOffset,
-    }
+  /**
+   * 지금 치르고 있는 판. **같은 판이면 같은 객체여야 한다.**
+   *
+   * 전에는 `if (picked)` 안에서 매 렌더 새로 만들었다. 그 객체는
+   * `MatchScreen` 을 지나 `AnalysisPanel` 의 효과 의존성까지 내려가는데,
+   * 참조가 매번 달라지므로 효과가 매번 다시 돌았다. 그 효과가 150판을
+   * 다시 돌리고 `onDelta → onFinish → setHistory` 로 여기 상태를 바꾸면
+   * App 이 다시 그려지고, 그러면 또 새 객체가 만들어졌다.
+   *
+   * 실측으로 60초에 한 바퀴였다. 보고서를 띄워 둔 탭이 같은 판을 영원히
+   * 저장하면서 CPU 를 물었다(3분에 기록 1 → 4건).
+   *
+   * 훅은 이른 반환보다 위에 있어야 하므로 `picked` 가 없을 때는 `null` 을
+   * 만든다. 값 자체는 예전과 한 톨도 다르지 않다.
+   */
+  const pickedProblem = useMemo(
+    () =>
+      picked
+        ? {
+            ...picked.entry.problem,
+            seed: picked.entry.problem.seed + attempt * 7919 + rerollOffset,
+          }
+        : null,
+    [attempt, picked, rerollOffset],
+  )
+
+  if (picked && pickedProblem) {
+    const problem = pickedProblem
     return (
       <MatchScreen
         key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${replay}#${opponent}`}

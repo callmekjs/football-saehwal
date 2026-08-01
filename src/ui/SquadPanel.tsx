@@ -266,6 +266,8 @@ export function SquadPanel({
   onOrder,
   onPosition,
   onFormation,
+  subIn = null,
+  onSubOut,
 }: {
   state: MatchState
   /** 끝난 경기에는 지시할 수 없다 */
@@ -273,6 +275,17 @@ export function SquadPanel({
   onOrder: (target: string, order: PlayerOrder) => string | null
   onPosition: (target: string, position: PlayerPosition | null) => string | null
   onFormation: (f: FormationId) => void
+  /**
+   * 벤치에서 이미 고른 **들어올 선수**. 없으면 `null`.
+   *
+   * 값이 있는 동안 이 판의 카드는 「나갈 선수」를 고르는 곳이 된다.
+   * 「나갈 선수 선택」이라는 문구가 이 판 바로 위에 뜨는데, 처음 보는
+   * 사람은 화면에서 가장 크고 위에 있는 이 카드를 먼저 누른다. 그때
+   * 선수 상세만 열리면 눌러도 아무 일이 없는 화면이 된다.
+   */
+  subIn?: string | null
+  /** 나갈 선수를 골랐다. 막히면 사유를 돌려준다 */
+  onSubOut?: (out: string) => string | null
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -307,6 +320,12 @@ export function SquadPanel({
     const t = setTimeout(() => setPicked(null), 7000)
     return () => clearTimeout(t)
   }, [picked])
+
+  // 교체할 선수를 고르는 중에는 열려 있던 선수 상세를 닫는다. 지금 이 판은
+  // 「누구를 뺄 것인가」를 묻는 곳이고, 두 물음이 한 자리에 겹치면 안 된다
+  useEffect(() => {
+    if (subIn) setPicked(null)
+  }, [subIn])
 
   useEffect(() => {
     if (!locked) return
@@ -543,10 +562,13 @@ export function SquadPanel({
   const startPress = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
     // 손가락은 지금 그대로 탭 두 단계를 쓴다. 카드 위에서 페이지가 안
     // 내려가면 좁은 화면에서 되던 것이 안 되게 된다
+    // 교체할 선수를 고르는 중에는 끌지 않는다. 손이 조금만 흔들려도 클릭이
+    // 자리 옮기기로 바뀌어 삼켜지므로, 그러면 눌러도 교체가 안 된다
     if (
       e.pointerType !== 'mouse' ||
       e.button !== 0 ||
       locked ||
+      subIn !== null ||
       getPlayer(id).pos === 'GK'
     ) return
     clearPointerListeners()
@@ -752,6 +774,13 @@ export function SquadPanel({
                     clickGuard.current = false
                     return
                   }
+                  // 들어올 선수를 이미 골랐으면 이 클릭은 **나갈 선수**다.
+                  // 골키퍼도 여기서 걸린다 — 자리는 못 옮겨도 교체는 된다
+                  if (subIn) {
+                    const err = onSubOut?.(s.id) ?? '교체할 수 없습니다'
+                    setNote(err ?? `${p.num}번 → ${numOf(subIn)}번`)
+                    return
+                  }
                   setPicked(picked === s.id ? null : s.id)
                 }}
               >
@@ -780,6 +809,11 @@ export function SquadPanel({
         {liveHint ? (
           <span className="squad-orders-head drag" data-bad={drag?.blocked ? 'on' : undefined}>
             {liveHint}
+          </span>
+        ) : subIn ? (
+          // 지금 이 판이 무엇을 묻고 있는지 판 아래에서도 한 번 말한다
+          <span className="squad-orders-head sub-wait">
+            {numOf(subIn)}번이 들어옵니다 · 나갈 선수를 누르세요
           </span>
         ) : cur ? (
           <>

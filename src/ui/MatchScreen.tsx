@@ -365,6 +365,8 @@ function Bench({
   state,
   locked,
   half,
+  picked,
+  onPick,
   onSub,
 }: {
   state: MatchState
@@ -372,10 +374,18 @@ function Bench({
   locked: boolean
   /** 전반이 끝난 것과 경기가 끝난 것은 다른 말이다 */
   half: Half
+  /**
+   * 지금 고른 선수. **위에서 내려온다.**
+   *
+   * 전에는 이 패널 안에만 있었다. 그래서 옆의 배치판은 감독이 누구를
+   * 들여보내려는지 알 수 없었고, 배치판 카드를 눌러도 교체가 되지 않았다.
+   */
+  picked: string | null
+  onPick: (id: string | null) => void
   onSub: (out: string, inId: string) => string | null
 }) {
-  const [picked, setPicked] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const setPicked = onPick
 
   useEffect(() => {
     if (!note) return
@@ -384,8 +394,8 @@ function Bench({
   }, [note])
 
   useEffect(() => {
-    if (locked) setPicked(null)
-  }, [locked])
+    if (locked) onPick(null)
+  }, [locked, onPick])
 
   const onPitch = state.players.filter((s) => s.onPitch && !s.out)
   const captain = homeCaptainNumber(state.players)
@@ -767,6 +777,24 @@ export function MatchScreen({
     initialSnapshot.current = { key: snapshotKey, state }
   }
   const [activeTab, setActiveTab] = useState<ControlTab>('TACTICS')
+  /**
+   * 150판 비교 결과를 기록에 이미 넘겼는가.
+   *
+   * `AnalysisPanel` 안에도 같은 빗장이 있지만 여기에도 둔다. 이 한 줄이
+   * 기록을 늘리는 마지막 문이라, 위쪽에서 무엇이 새더라도 여기서 멈춘다.
+   * 경기가 끝나는 순간의 한 건(`FinishReporter`)은 이 빗장과 무관하다 —
+   * 그 둘을 `upsert` 로 합치는 것은 의도된 설계다.
+   */
+  const deltaReported = useRef(false)
+  /**
+   * 교체로 **들어올** 선수.
+   *
+   * 전에는 벤치 패널 안에만 있었다. 그래서 벤치에서 선수를 고른 뒤 화면에서
+   * 가장 크고 위에 있는 배치판 카드를 눌러도 배치판은 그 사실을 몰랐고,
+   * 「나갈 선수 선택」이라고 적힌 바로 아래에서 선수 상세만 열렸다.
+   * 두 패널이 같은 것을 보게 위로 올렸다.
+   */
+  const [benchPick, setBenchPick] = useState<string | null>(null)
   const objective =
     problem.objective.type === 'SURVIVE' ? '리드를 지켜라' : '동점 이상을 만들어라'
 
@@ -827,10 +855,38 @@ export function MatchScreen({
   const substituteLoud = useCallback(
     (out: string, inId: string): string | null => {
       const reason = substitute(out, inId)
-      if (!reason) show(subToast(getPlayer(out).num, getPlayer(inId).num))
+      if (!reason) {
+        show(subToast(getPlayer(out).num, getPlayer(inId).num))
+        setBenchPick(null)
+      }
       return reason
     },
     [substitute, show],
+  )
+
+  /**
+   * 지금 「나갈 선수」를 기다리고 있는가, 기다린다면 누가 들어오는가.
+   *
+   * 벤치에서 고른 선수가 실제로 들어올 수 있을 때만 값이 있다. 이 값이
+   * 있는 동안 배치판 카드를 누르면 상세를 여는 대신 그 선수가 나간다.
+   * 교체는 그대로 **두 단계**다 — 들어올 선수 한 번, 나갈 선수 한 번.
+   */
+  const benchPickState = benchPick
+    ? state.players.find((player) => player.id === benchPick) ?? null
+    : null
+  const subIn =
+    benchPickState &&
+    !benchPickState.onPitch &&
+    !benchPickState.out &&
+    state.subsLeft > 0 &&
+    phase !== 'DONE'
+      ? benchPickState.id
+      : null
+
+  /** 배치판에서 고른 「나갈 선수」. 벤치 줄에서 고르는 것과 같은 곳에 도착한다 */
+  const substituteOut = useCallback(
+    (out: string): string | null => (subIn ? substituteLoud(out, subIn) : '들어올 선수를 먼저 고르세요'),
+    [subIn, substituteLoud],
   )
 
   /**
@@ -1084,10 +1140,19 @@ export function MatchScreen({
               onOrder={setOrder}
               onPosition={setPosition}
               onFormation={setFormationLoud}
+              subIn={subIn}
+              onSubOut={substituteOut}
             />
           </div>
           <div className="pane" data-pane="SQUAD">
-            <Bench state={state} locked={phase === 'DONE'} half={half} onSub={substituteLoud} />
+            <Bench
+              state={state}
+              locked={phase === 'DONE'}
+              half={half}
+              picked={benchPick}
+              onPick={setBenchPick}
+              onSub={substituteLoud}
+            />
           </div>
         </div>
 
@@ -1339,7 +1404,10 @@ export function MatchScreen({
             firstHalf={firstHalf ? firstHalf.decisions : null}
             firstHalfState={firstHalf ? firstHalf.state : null}
             opponent={opponent}
-            onDelta={(delta, compare) =>
+            onDelta={(delta, compare) => {
+              // 한 판에 한 번. 이 문이 열려 있으면 기록이 60초마다 한 건씩 는다
+              if (deltaReported.current) return
+              deltaReported.current = true
               onFinish?.({
                 problem,
                 final: state,
@@ -1351,14 +1419,17 @@ export function MatchScreen({
                 ...(compare ? { compare } : {}),
                 at: Date.now(),
               })
-            }
+            }}
             onReplay={() => {
               setActiveTab('TACTICS')
+              // 판을 다시 하면 그 판의 결과를 다시 넘길 수 있어야 한다
+              deltaReported.current = false
               if (onReplay) onReplay()
               else reset()
             }}
             onRetry={() => {
               setActiveTab('TACTICS')
+              deltaReported.current = false
               if (onRetry) onRetry()
               else reset()
             }}
