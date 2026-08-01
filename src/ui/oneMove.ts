@@ -188,7 +188,7 @@ export function buildOneMove(
       impactLabel: '방치 대비',
       deltaText,
       tone,
-      note: '별도로 내린 결정이 없어 존재하지 않은 한 수를 만들지 않았습니다.',
+      note: '경기 중에 바꾼 것이 없어 판단 효과를 따로 계산하지 않았습니다.',
     }
   }
 
@@ -202,7 +202,7 @@ export function buildOneMove(
     const time = observed?.time ?? concrete?.time ?? timing?.time ?? null
     return {
       kind: 'single',
-      label: '관찰된 결정',
+      label: '실제로 내린 결정',
       time,
       decision:
         observed?.decision ??
@@ -225,12 +225,12 @@ export function buildOneMove(
 
   return {
     kind: 'representative',
-    label: observed || concrete ? '대표 관찰 결정' : '대표 판정',
+    label: observed || concrete ? '대표로 짚은 결정' : '대표 판단',
     time,
     decision,
     impactLabel: '전체 판단 묶음 · 방치 대비',
     deltaText,
     tone,
-    note: `대표로 뽑은 ${observed || concrete ? '관찰 결정' : '판정'}입니다. ${deltaText}는 이 한 수 하나의 효과가 아니라 모든 판단을 함께 재현한 결과입니다.`,
+    note: `위에는 ${observed || concrete ? '실제로 내린 결정' : '보고서의 판단'} 하나만 대표로 보여 줍니다. ${deltaText}는 이 한 수만의 효과가 아니라 모든 판단을 함께 재현한 결과입니다.`,
   }
 }

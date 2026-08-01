@@ -321,12 +321,12 @@ export function AnalysisPanel({
       <section className="survival-hero">
         <header className="survival-hero-head">
           <div>
-            <span className="survival-kicker">MISSION DEBRIEF · 실제 경기 기록</span>
+            <span className="survival-kicker">경기 복기 · 실제 경기 기록</span>
             <h2>{story.outcome.title}</h2>
             <p>{problem.title}</p>
           </div>
           <div className="survival-score" aria-label={`최종 점수 ${finalState.score[0]} 대 ${finalState.score[1]}`}>
-            <small>FINAL</small>
+            <small>최종</small>
             <strong>{finalState.score[0]}</strong>
             <i>:</i>
             <strong>{finalState.score[1]}</strong>
@@ -434,7 +434,7 @@ export function AnalysisPanel({
             <section className="decision-proof">
               <header>
                 <div>
-                  <span>같은 조건 {ANALYSIS_RUNS}판 · 전체 판단 묶음</span>
+                  <span>같은 조건으로 {ANALYSIS_RUNS}판 비교 · 경기 전체 판단</span>
                   <h3>이 판단은 정말 통했나?</h3>
                 </div>
                 <strong data-tone={oneMove.tone}>
@@ -465,7 +465,7 @@ export function AnalysisPanel({
 
             <section className="flow-proof">
               <header>
-                <span>한 경기 장면이 아닌 150판 평균</span>
+                <span>한 경기 결과와 나눠 본 150판 평균</span>
                 <h3>{problem.objective.type === 'EQUALIZE' ? '공격은 살아났나?' : '위험은 줄었나?'}</h3>
               </header>
               <div className="flow-metrics">
@@ -483,8 +483,8 @@ export function AnalysisPanel({
 
             <section className="next-solution">
               <header>
-                <span>05 · 같은 위기의 해법</span>
-                <h3>다시 한다면 이렇게 시작</h3>
+                <span>05 · 같은 위기를 다시 만난다면</span>
+                <h3>다음에는 이렇게 시작하세요</h3>
               </header>
               <div className="solution-board" aria-label="권장 설정">
                 <span>
@@ -513,7 +513,7 @@ export function AnalysisPanel({
               <summary>왜 이런 결과가 나왔는지 자세히 보기</summary>
               <div className="evidence-body">
                 <section className="coach-overview">
-                  <span>감독 보고서 · 경기 기록으로 분석</span>
+                  <span>감독 보고서 · 실제 경기 기록 분석</span>
                   <h3>{analysis.coach.headline}</h3>
                   <ul>
                     {analysis.coach.summary.map((line) => (

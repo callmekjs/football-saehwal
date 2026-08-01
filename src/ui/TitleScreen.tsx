@@ -56,7 +56,7 @@ const STEPS = [
   {
     n: '01',
     title: '상황을 물려받는다',
-    body: '스코어·남은 시간·교체 카드·경고까지 정해진 채로 시작합니다. 처음부터 쌓아 올리는 경기가 아니라, 이미 기울어진 판을 물려받습니다.',
+    body: '점수·남은 시간·교체 카드·경고까지 정해진 채로 시작합니다. 처음부터 쌓아 올리는 경기가 아니라, 이미 기울어진 판을 물려받습니다.',
   },
   {
     n: '02',
@@ -66,7 +66,7 @@ const STEPS = [
   {
     n: '03',
     title: '결과와 판단을 따로 받는다',
-    body: '축구는 확률 게임입니다. 옳게 판단하고도 무너질 수 있어서, 승패와 감독 평점을 따로 매깁니다. 무너지고도 명장일 수 있습니다.',
+    body: '축구에서는 옳게 판단하고도 무너질 수 있습니다. 그래서 승패와 감독 평점을 따로 매깁니다. 무너지고도 명장일 수 있습니다.',
   },
 ] as const
 
@@ -125,15 +125,15 @@ export function TitleScreen({
 
           <div className="title-actions">
             <button type="button" className="title-play" onClick={onStart}>
-              <b>PLAY</b>
+              <b>경기 준비</b>
               <small>선수단을 보고 국면을 고른 뒤 시작합니다</small>
             </button>
             <button type="button" className="title-quick" onClick={onQuickStart}>
               <b>바로 킥오프</b>
-              <small>기본값으로 급수 타임 입장</small>
+              <small>기본 설정으로 급수 타임에 들어갑니다</small>
             </button>
             <p className="title-fineprint">
-              설치 없이 브라우저에서 바로
+              설치 없이 브라우저에서 바로 시작합니다
               <span>실존 구단·선수를 쓰지 않습니다</span>
             </p>
           </div>

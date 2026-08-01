@@ -252,7 +252,7 @@ function rowsOf(compare: RecordCompare, goal: Goal): LessonRow[] {
       ? shownUser - shownRecommendation
       : shownRecommendation - shownUser
     const near = Math.max(0.02, 0.05 * Math.max(noop, user, recommendation))
-    const verb = item.lower ? '낮춥니다' : '올립니다'
+    const comparison = item.lower ? '낮았습니다' : '높았습니다'
 
     const note =
       displayedGain === 0 || Math.abs(gain) < near
@@ -261,11 +261,11 @@ function rowsOf(compare: RecordCompare, goal: Goal): LessonRow[] {
             item.digits,
           )}).`
         : gain > 0
-          ? `권장 전술은 이 값을 ${digitsOf(recommendation, item.digits)}까지 ${verb}. 당신은 ${digitsOf(
+          ? `권장 전술의 값은 ${digitsOf(recommendation, item.digits)}로, 내 판단의 ${digitsOf(
               user,
               item.digits,
-            )}에 머물렀고, 그 차이가 남은 몫입니다.`
-          : `이 항목은 당신이 권장 전술보다 좋았습니다(${digitsOf(
+            )}보다 ${comparison}. 이 차이가 아직 남아 있습니다.`
+          : `이 항목은 내 판단이 권장 전술보다 좋았습니다(${digitsOf(
               user,
               item.digits,
             )} 대 ${digitsOf(recommendation, item.digits)}).`
@@ -348,7 +348,7 @@ function explainRecommendationEdge(
   return (
     `${edge} ${comparison} ` +
     '성공률은 최종 점수로 목표를 이룬 판 수이고, 아래 수치는 모든 판을 합친 평균이라 ' +
-    '어느 한 골 차 경기에서 득실이 어떻게 짝을 이뤘는지는 보여주지 않습니다. ' +
+    '각 경기에서 득점과 실점이 어떤 조합으로 나왔는지는 보여주지 않습니다. ' +
     '따라서 이 평균만으로 성공률 차이의 원인을 하나로 단정하거나 권장안이 전반적으로 더 낫다고 말할 수는 없습니다.'
   )
 }
@@ -401,10 +401,10 @@ export function lastLesson(
         : `권장 전술과 거의 같은 수준이었습니다`
 
   const paragraphs: string[] = [
-    '회색은 앞 감독의 지시를 그대로 뒀을 때, 초록은 당신이 실제로 만든 설정, ' +
+    '회색은 앞 감독의 지시를 그대로 뒀을 때, 초록은 내가 실제로 만든 설정, ' +
       `노랑은 같은 국면을 1,200판 검증해 고른 권장 설정입니다. 셋 다 똑같은 ${runs}경기를 ` +
-      '돌렸기 때문에 달라진 것은 운이 아니라 판단뿐입니다. 이 성공률과 평균은 방금 끝난 ' +
-      '한 경기의 스코어가 아니라 반복 비교이며, 한 경기의 타파·실패와는 따로 봐야 합니다.',
+      '돌렸으므로 운은 같고 판단만 다릅니다. 이 성공률과 평균은 방금 끝난 한 경기의 점수가 ' +
+      '아니라 반복 비교에서 나온 값입니다. 한 경기의 타파·실패와는 따로 봐야 합니다.',
   ]
 
   paragraphs.push(
@@ -415,16 +415,16 @@ export function lastLesson(
           compare.rates.noop,
         )}). 판단을 잰 값이 아니라 손대지 않았을 때의 기준선입니다.`
       : userDelta >= SAME_RATE
-        ? `당신의 판단은 방치보다 ${abs(userDelta)} 높았습니다(${percent(
+        ? `내 판단은 방치보다 ${abs(userDelta)} 높았습니다(${percent(
             compare.rates.noop,
-          )} → ${percent(compare.rates.user)}). 손을 댄 것 자체는 옳았습니다.`
+          )} → ${percent(compare.rates.user)}). 바꾼 방향은 옳았습니다.`
         : userDelta <= -SAME_RATE
-          ? `당신의 판단은 방치보다 ${abs(userDelta)} 낮았습니다(${percent(
+          ? `내 판단은 방치보다 ${abs(userDelta)} 낮았습니다(${percent(
               compare.rates.noop,
             )} → ${percent(compare.rates.user)}). 바꾼 방향이 이 국면과 맞지 않았습니다.`
-          : `당신의 판단과 방치는 성공 가능성이 거의 같았습니다(${percent(
+          : `내 판단과 방치는 성공 가능성이 거의 같았습니다(${percent(
               compare.rates.noop,
-            )} 대 ${percent(compare.rates.user)}). 바꾸긴 했지만 결과 분포는 움직이지 않았습니다.`,
+            )} 대 ${percent(compare.rates.user)}). 바꿨지만 성공 가능성은 거의 달라지지 않았습니다.`,
   )
 
   // 어느 칸에서 가장 많이 뒤졌나. 단위가 서로 달라 비율로 견준다
@@ -461,7 +461,7 @@ export function lastLesson(
     paragraphs.push(
       `권장 설정과 성공 가능성이 사실상 같았습니다(${percent(
         compare.rates.user,
-      )} 대 ${percent(compare.rates.recommendation)}). 이 판에서 설정으로 더 짜낼 몫은 거의 없었습니다.`,
+      )} 대 ${percent(compare.rates.recommendation)}). 이 판에서는 설정을 더 바꿔도 얻을 수 있는 이점이 거의 없었습니다.`,
     )
   }
 
@@ -477,13 +477,13 @@ export function lastLesson(
       gaps.length > 0
         ? `종료 시점 실제 설정: ${setupText(mine)}. 권장 설정: ${setupText(
             recommended,
-          )}. 성공률은 이 종료 설정 하나가 아니라 경기 중 판단 전체를 실제 시각대로 되풀이한 값입니다. 다음에 같은 국면을 만나면 ${gaps
+          )}. 성공률은 마지막 설정만 비교한 값이 아닙니다. 경기 중 판단 전체를 실제로 내린 시각에 맞춰 되풀이했습니다. 다음에 같은 국면을 만나면 ${gaps
             .map((gap) => `${gap.label} ${gap.mine} → ${gap.recommended}`)
             .join(', ')}부터 맞추고 시작하세요.`
         : `종료 시점 실제 설정과 권장 설정은 같습니다: ${setupText(mine)}. ` +
-          '성공률은 이 종료 설정 하나가 아니라 경기 중 판단 전체를 실제 시각대로 되풀이한 값입니다. ' +
-          '남은 차이는 무엇을 골랐는가가 아니라 ' +
-          '언제 맞췄는가에서 옵니다. 다음에는 킥오프 직후에 네 가지를 한꺼번에 거세요.',
+          '성공률은 마지막 설정만 비교한 값이 아닙니다. 경기 중 판단 전체를 실제로 내린 시각에 맞춰 되풀이했습니다. ' +
+          '남은 차이는 무엇을 골랐느냐보다 언제 맞췄느냐에서 생겼습니다. ' +
+          '다음에는 킥오프 직후에 네 가지를 한꺼번에 거세요.',
     )
   }
 

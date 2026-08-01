@@ -696,8 +696,8 @@ function decisionFindings(
           ? '방치보다 위험한 선택이었다'
           : '방치와 통계적으로 큰 차이가 없었다',
     explanation: !intervened
-      ? '경기 중에 바꾼 것이 하나도 없어 나의 판단 쪽 150판이 무개입 150판과 똑같은 경기입니다. 여기서 0%p가 나오는 것은 판단의 효과가 아니라 견줄 것이 없다는 뜻입니다.'
-      : `같은 150판을 다시 돌려 한 경기의 운을 걷어냈습니다. 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
+      ? '경기 중에 아무것도 바꾸지 않아 「내 판단」 150판과 무개입 150판이 완전히 같습니다. 여기서 0%p가 나오는 것은 판단의 효과가 아니라 견줄 것이 없다는 뜻입니다.'
+      : `한 경기의 운을 빼고 보려고 같은 조건으로 150판을 다시 돌렸습니다. 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
           metrics.userDelta,
         )}였습니다.`,
     evidence: impactEvidence,
@@ -1088,12 +1088,16 @@ export function buildCoachReport(
       : [noGoalFinding('AGAINST', problem, totals)]
   const decisionReview = decisionFindings(problem, final, legs, timeline, metrics, showHalf)
 
-  const resultWord =
+  const resultSucceeded =
     problem.objective.type === 'SURVIVE'
       ? final.score[0] > final.score[1]
+      : final.score[0] >= final.score[1]
+  const resultWord =
+    problem.objective.type === 'SURVIVE'
+      ? resultSucceeded
         ? '리드를 지켰습니다'
         : '리드를 지키지 못했습니다'
-      : final.score[0] >= final.score[1]
+      : resultSucceeded
         ? '동점 이상을 만들었습니다'
         : '따라잡지 못했습니다'
   /**
@@ -1106,9 +1110,13 @@ export function buildCoachReport(
   const judgmentWord = !intervened
     ? '경기 중에 바꾼 것이 없어 방치와 같은 결과입니다.'
     : metrics.userDelta >= 0.04
-      ? '다만 판단 자체는 방치보다 나았습니다.'
+      ? resultSucceeded
+        ? '판단도 방치보다 나았습니다.'
+        : '다만 판단은 방치보다 나았습니다.'
       : metrics.userDelta <= -0.04
-        ? '결과와 별개로 판단은 방치보다 위험했습니다.'
+        ? resultSucceeded
+          ? '다만 판단은 방치보다 위험했습니다.'
+          : '판단도 방치보다 위험했습니다.'
         : '판단은 방치와 통계적으로 비슷했습니다.'
 
   // 반별 득점·실점. 점수는 후반으로 이어지므로 하프타임 점수로 갈라야 한다
@@ -1126,7 +1134,7 @@ export function buildCoachReport(
     : ''
 
   return {
-    headline: `${final.score[0]}-${final.score[1]}, ${resultWord}. ${judgmentWord}`,
+    headline: `${final.score[0]}-${final.score[1]}. ${resultWord}. ${judgmentWord}`,
     summary: [
       `우리 공격 ${totals.homeAttempt}회 → 슈팅 ${totals.homeShot}회 → 득점 ${scored}골${splitFor}`,
       `상대 공격 ${totals.awayAttempt}회 → 슈팅 ${totals.awayShot}회 → 실점 ${conceded}골${splitAgainst}`,

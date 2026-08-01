@@ -124,6 +124,18 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
     vi.useRealTimers()
   })
 
+  it('상세 보고서의 첫 표제를 한국어로 읽힌다', () => {
+    const view = mount(<Report onSave={() => {}} />)
+    const hero = view.container.querySelector('.survival-hero')?.textContent ?? ''
+
+    expect(hero).toContain('경기 복기 · 실제 경기 기록')
+    expect(hero).toContain('최종')
+    expect(hero).not.toContain('MISSION DEBRIEF')
+    expect(hero).not.toContain('FINAL')
+
+    view.unmount()
+  })
+
   it('3분을 방치해도 기록은 한 건이고 150판 비교는 한 번만 돈다', () => {
     const saves: Array<number | null> = []
     const view = mount(<Report onSave={(delta) => saves.push(delta)} />)

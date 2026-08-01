@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  *
  * 첫 화면의 두 시작 길을 실제로 누른다. 「바로 킥오프」는 기본 선택으로
- * 급수 타임까지 한 번에 가고, PLAY의 01→02→03 준비 흐름은 그대로 남아야
+ * 급수 타임까지 한 번에 가고, 「경기 준비」의 01→02→03 흐름은 그대로 남아야
  * 한다.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -60,10 +60,10 @@ describe('첫 화면 시작 길', () => {
     view.unmount()
   })
 
-  it('PLAY는 선수단부터 보는 기존 준비 흐름을 그대로 연다', () => {
+  it('경기 준비는 선수단부터 보는 기존 준비 흐름을 그대로 연다', () => {
     const view = mount(<App />)
 
-    click(find(view.container, 'button.title-play', 'PLAY'))
+    click(find(view.container, 'button.title-play', '경기 준비'))
 
     expect(view.container.querySelector('.kickoff-home')).not.toBeNull()
     expect(view.container.querySelector('.kickoff-layout')?.getAttribute('data-section')).toBe(
@@ -74,9 +74,9 @@ describe('첫 화면 시작 길', () => {
     view.unmount()
   })
 
-  it('PLAY 더블클릭의 두 번째 클릭이 새 선수단 카드로 관통하지 않는다', () => {
+  it('경기 준비 더블클릭의 두 번째 클릭이 새 선수단 카드로 관통하지 않는다', () => {
     const view = mount(<App />)
-    const play = find(view.container, 'button.title-play', 'PLAY')
+    const play = find(view.container, 'button.title-play', '경기 준비')
 
     // 첫 click이 선수단을 즉시 연 직후, 같은 화면 좌표의 두 번째 click과
     // dblclick이 새로 생긴 7번 카드에 도착하는 실제 브라우저 순서다.
@@ -101,6 +101,12 @@ describe('첫 화면 시작 길', () => {
     const view = mount(<App />)
     click(find(view.container, 'button.title-history', '지난 기록'))
     expect(readHistory()).toHaveLength(1)
+    expect(view.container.querySelector('.history-note')?.textContent).toContain('판단 횟수')
+    expect(view.container.querySelector('.history-note')?.textContent).not.toContain('판단 n회')
+    expect(view.container.textContent).toContain('오늘의 경기')
+    expect(view.container.textContent).toContain('경기 안내')
+    expect(view.container.textContent).not.toContain('MATCH DAY')
+    expect(view.container.textContent).not.toContain('SAEHWAL FEED')
 
     click(find(view.container, 'button.history-clear', '기록 지우기'))
     expect(readHistory()).toHaveLength(1)
@@ -124,7 +130,7 @@ describe('첫 화면 시작 길', () => {
 
   it('첫 화면과 국면 카드의 경고 수가 실제 급수 타임 상태와 같다', () => {
     const problem = PROBLEMS.find((item) => item.id === 'p02')!
-    // 첫 시도에서 App이 미리 만드는 판과 같은 씨앗이다. KICK OFF를 누르면
+    // 첫 시도에서 App이 미리 만드는 판과 같은 씨앗이다. 「경기 시작」을 누르면
     // attempt가 1이 되어 이 상태가 그대로 실제 경기 상태가 된다.
     const nextProblem = { ...problem, seed: problem.seed + 7919 }
     const expectedState = createState(nextProblem)
@@ -144,14 +150,14 @@ describe('첫 화면 시작 길', () => {
       `경고 ${expectedCount}명`,
     )
 
-    click(find(view.container, 'button.title-play', 'PLAY'))
+    click(find(view.container, 'button.title-play', '경기 준비'))
     click(find(view.container, 'button.step-next', '다음 · 상대 선택'))
     click(find(view.container, 'button.step-next', '다음 · 국면 선택'))
 
     const selectedCard = view.container.querySelector('.kickoff-situation[data-selected="true"]')
     expect(selectedCard?.textContent).toContain(`경고 ${expectedCount}명`)
 
-    click(find(view.container, 'button.kickoff-button-main', 'KICK OFF'))
+    click(find(view.container, 'button.kickoff-button-main', '경기 시작'))
     expect(view.container.querySelector('.captain-brief')?.textContent).toContain(bookedLine!.text)
 
     view.unmount()

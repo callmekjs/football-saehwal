@@ -1344,7 +1344,7 @@ export function MatchScreen({
                 <span>
                   {problem.title} · {objective}
                 </span>
-                <small>아래 감독 보고서에서 무엇이 결과를 갈랐는지 볼 수 있습니다.</small>
+                <small>승부가 갈린 이유는 아래 감독 보고서에 정리했습니다.</small>
                 {/*
                   ★ **같은 판 다시 — 이 게임이 사활인 이유다.**
 
@@ -1372,7 +1372,7 @@ export function MatchScreen({
                     }}
                   >
                     같은 판 다시
-                    <small>똑같은 조건 · 판단만 바꿔봅니다</small>
+                    <small>같은 조건에서 판단만 바꿉니다</small>
                   </button>
                   <button
                     className="kickoff-button ghost"

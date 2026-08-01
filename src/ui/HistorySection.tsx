@@ -67,9 +67,9 @@ const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`
 /** 앞으로 한 줄에 남을 칸들. 빈 화면이 이것을 미리 읽어준다 */
 const COLUMNS: ReadonlyArray<{ name: string; what: string }> = [
   { name: '국면 · 상대', what: '어떤 위기를 누구를 상대로 풀었는지' },
-  { name: '스코어', what: '그 판이 끝났을 때의 점수' },
-  { name: '타파 · 실패', what: '승패가 아니라 그 국면의 목표를 이뤘는지' },
-  { name: '판단 n회', what: '그 경기에서 내린 결정 수' },
+  { name: '최종 점수', what: '그 판이 끝났을 때의 점수' },
+  { name: '타파 성공 · 실패', what: '승패가 아니라 그 국면의 목표를 이뤘는지' },
+  { name: '판단 횟수', what: '그 경기에서 내린 결정 수' },
   { name: '±%p', what: '아무 개입도 없었을 때와의 성공 가능성 차이' },
 ]
 
@@ -154,7 +154,7 @@ function LessonBoard({ lesson }: { lesson: Lesson }) {
     <section className="lesson-board" aria-labelledby="lesson-title">
       <header>
         <span>
-          가장 최근 판 · {lesson.problemTitle} · {lesson.opponentName} 상대 · 같은 조건 150판
+          최근 경기 · {lesson.problemTitle} · {lesson.opponentName} 상대 · 같은 조건으로 150판 비교
         </span>
         <h3 id="lesson-title">{lesson.headline}</h3>
       </header>
@@ -229,7 +229,7 @@ function HabitBoard({ habits }: { habits: LeverHabit[] }) {
   return (
     <section className="habit-board" aria-labelledby="habit-title">
       <header>
-        <span>설정이 남은 {total}판을 모아서</span>
+        <span>설정을 확인할 수 있는 최근 {total}판</span>
         <h3 id="habit-title">내 전술 버릇</h3>
       </header>
       <ul>
@@ -330,8 +330,8 @@ function TrendBoard({ trend }: { trend: Trend }) {
       <p className="trend-legend">
         기둥은 <b>판단</b>의 값입니다. 가운데 점은 그 한 판의 <b>결과</b>로,
         가득 찬 점이 타파 성공입니다. 기둥이 위인데 점이 비어 있는 칸은 좋은
-        판단이 나쁜 결과를 만난 판입니다. 그런 칸이 있다는 것이 이 시뮬레이션이
-        정직하다는 뜻입니다.
+        판단에도 결과가 따르지 않은 판입니다. 이처럼 판단이 좋아도 경기 결과는
+        나쁠 수 있습니다.
       </p>
     </section>
   )
@@ -474,7 +474,7 @@ export function HistorySection({
           </div>
 
           <div className="history-schema">
-            <h3>한 줄에 남는 것</h3>
+            <h3>경기를 마치면 남는 기록</h3>
             <dl>
               {COLUMNS.map((column) => (
                 <div key={column.name}>
@@ -556,7 +556,7 @@ export function HistorySection({
       )}
 
       <p className="history-note">
-        <b>판단 n회</b>는 그 경기에서 내린 결정 수이고, <b>±%p</b>는 같은
+        <b>판단 횟수</b>는 그 경기에서 내린 결정 수이고, <b>±%p</b>는 같은
         150판에서 아무 개입도 하지 않았을 때와의 성공 가능성 차이입니다. 한 수
         하나의 효과가 아니라 그 경기 판단 전체의 값입니다.
       </p>

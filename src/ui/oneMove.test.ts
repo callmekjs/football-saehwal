@@ -41,7 +41,7 @@ describe('이 경기의 한 수', () => {
     expect(summary.time).toBeNull()
     expect(summary.decision).toBe('개입 없음')
     expect(summary.deltaText).toBe('0.0%p')
-    expect(summary.note).toContain('존재하지 않은 한 수를 만들지 않았습니다')
+    expect(summary.note).toContain('판단 효과를 따로 계산하지 않았습니다')
   })
 
   it('기본 후반 경기에서도 실제 결정 내용과 시각을 보여준다', () => {
@@ -60,7 +60,7 @@ describe('이 경기의 한 수', () => {
     )
 
     expect(summary.kind).toBe('single')
-    expect(summary.label).toBe('관찰된 결정')
+    expect(summary.label).toBe('실제로 내린 결정')
     expect(summary.time).toBe('80:00')
     expect(summary.decision).toBe('폭 → 좁게')
     expect(summary.impactLabel).toContain('방치 대비')
@@ -100,11 +100,11 @@ describe('이 경기의 한 수', () => {
     )
 
     expect(summary.kind).toBe('representative')
-    expect(summary.label).toBe('대표 관찰 결정')
+    expect(summary.label).toBe('대표로 짚은 결정')
     expect(summary.time).toBe('전반 25:00')
     expect(summary.decision).toBe('포메이션 → 5-4-1')
     expect(summary.impactLabel).toBe('전체 판단 묶음 · 방치 대비')
-    expect(summary.note).toContain('이 한 수 하나의 효과가 아니라')
+    expect(summary.note).toContain('이 한 수만의 효과가 아니라')
     expect(summary.note).toContain('모든 판단을 함께 재현한 결과')
   })
 

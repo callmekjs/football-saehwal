@@ -81,5 +81,13 @@ describe('화자별 한국어 문체', () => {
     it('경고는 장으로 세고 있다로 얼버무리지 않는다', () => {
       for (const text of speeches) expect(text).not.toMatch(/경고가 있습니다|경고가 있는데/)
     })
+
+    it('영어식 쉼표와 정형 문장을 주장 말투로 되돌리지 않는다', () => {
+      for (const text of speeches) {
+        expect(text).not.toMatch(/오늘 상대는 .+, \d+위/)
+        expect(text).not.toContain('현재 경기 중인 선수의 최고치는')
+        expect(text).not.toMatch(/앞 감독은 .+ 그대로 두고 나갔습니다/)
+      }
+    })
   })
 })

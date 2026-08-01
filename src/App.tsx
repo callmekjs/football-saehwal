@@ -659,7 +659,7 @@ export function App() {
   /**
    * 홈의 체력 예고와 실제로 곧 시작할 판이 같은 시드를 본다.
    *
-   * KICK OFF에서 `attempt`가 하나 늘어나므로 홈에서는 그 다음 값을 미리
+   * 「경기 시작」에서 `attempt`가 하나 늘어나므로 홈에서는 그 다음 값을 미리
    * 계산한다. 그래야 사이드바에 43이라고 보인 선수가 경기장에 들어가자마자
    * 70으로 바뀌는 일이 없다.
    */
@@ -804,7 +804,7 @@ export function App() {
         }}
         onQuickStart={() => {
           // 처음 보는 사람을 기본 상대·국면·후반의 급수 타임까지 바로
-          // 데려간다. PLAY의 01→02→03 감독 준비 흐름은 그대로 남긴다.
+          // 데려간다. 「경기 준비」의 01→02→03 흐름은 그대로 남긴다.
           setPicked({ entry: selectedEntry, half: selectedHalf })
           setAttempt((n) => n + 1)
         }}
@@ -841,7 +841,7 @@ export function App() {
           <span>감독 모드</span>
           <b>
             <i aria-hidden />
-            MATCH DAY
+            오늘의 경기
           </b>
         </div>
       </header>
@@ -1092,10 +1092,10 @@ export function App() {
               }}
             >
               <i aria-hidden />
-              <b>KICK OFF</b>
+              <b>경기 시작</b>
               <small>
-                {selectedProblem.title} · {halfLabel(selectedHalf)} · {SEGMENT_MINUTES}분을 실시간
-                75초로
+                {selectedProblem.title} · {halfLabel(selectedHalf)} · 경기 시간{' '}
+                {SEGMENT_MINUTES}분을 실제 75초 동안 진행
               </small>
             </button>
           </section>
@@ -1117,7 +1117,7 @@ export function App() {
       </div>
 
       <div className="kickoff-ticker" aria-hidden>
-        <b>SAEHWAL FEED</b>
+        <b>경기 안내</b>
         <div>
           <span>{TICKER}</span>
           <span>{TICKER}</span>

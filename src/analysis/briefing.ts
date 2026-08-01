@@ -298,7 +298,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     foe.tier === 'TOP' ? 9 : 21,
     'rank',
     '상대',
-    `오늘 상대는 ${foe.name}, ${foe.rank}위입니다. ${foe.note}`,
+    `오늘 상대인 ${withJosa(foe.name, '은는')} ${foe.rank}위입니다. ${foe.note}`,
     foe.tier === 'TOP' ? 'ALERT' : 'FACT',
   )
 
@@ -366,7 +366,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       20,
       'top-threat',
       '상대',
-      `상대 ${top.num}번이 가장 빠릅니다. 속도 ${top.speed}, 우리 뒷선 최저는 ${slow.num}번 ${slow.speed}입니다. 차이는 ${top.speed - slow.speed}입니다. ${tail}.`,
+      `상대에서는 ${top.num}번이 가장 빠르고 속도는 ${top.speed}입니다. 우리 뒷선에서 가장 느린 ${slow.num}번은 ${slow.speed}로, 차이는 ${top.speed - slow.speed}입니다. ${tail}.`,
       top.speed - slow.speed >= 10 ? 'ALERT' : 'FACT',
     )
     const next = threats.slice(1, 3).filter((p) => p.speed > slow.speed)
@@ -375,7 +375,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
         50,
         'next-threats',
         '상대',
-        `다음은 ${next.map((p) => `${p.num}번 ${p.speed}`).join(' · ')}입니다. 우리 뒷선보다 빠른 선수가 상대에 ${threats.filter((p) => p.speed > slow.speed).length}명 있습니다.`,
+        `그다음으로 빠른 선수는 ${next.map((p) => `${p.num}번 ${p.speed}`).join(' · ')}입니다. 상대에는 우리 뒷선보다 빠른 선수가 ${threats.filter((p) => p.speed > slow.speed).length}명 있습니다.`,
       )
     }
   }
@@ -387,7 +387,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       30,
       'stamina',
       '위험',
-      `체력이 낮습니다. ${staminaList(fading.slice(0, MAX_TIRED_NAMED))}. ${EVENTS.injuryThreshold} 아래로 내려가면 다칠 수 있고 교체 카드도 한 장 잃습니다.`,
+      `체력이 떨어진 선수는 ${staminaList(fading.slice(0, MAX_TIRED_NAMED))}입니다. ${EVENTS.injuryThreshold} 아래로 내려가면 다칠 수 있고 교체 카드도 한 장 잃습니다.`,
       'ALERT',
     )
   }
@@ -431,8 +431,8 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
     'inherited',
     '상황',
     preset
-      ? `앞 감독은 ${formation} · ${preset.name} 그대로 두고 나갔습니다.`
-      : `앞 감독이 남긴 건 ${formation}, ${levers}입니다. 어느 전술에도 맞지 않습니다.`,
+      ? `앞 감독이 두고 간 설정은 ${formation} · ${preset.name}입니다.`
+      : `앞 감독이 남긴 설정은 ${formation}, ${levers}입니다. 어느 전술에도 맞지 않습니다.`,
     preset ? 'FACT' : 'ALERT',
   )
 
@@ -443,7 +443,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       48,
       'finisher',
       '자원',
-      `마무리가 가장 좋은 선수는 ${finisher.num}번입니다. 수치는 ${finisher.finishing.toFixed(2)}입니다.`,
+      `${finisher.num}번의 마무리가 가장 좋습니다. 수치는 ${finisher.finishing.toFixed(2)}입니다.`,
     )
   }
 
@@ -466,7 +466,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       chasing ? 52 : 62,
       'bench-finisher',
       '자원',
-      `벤치 ${benchFinisher.num}번의 마무리는 ${benchFinisher.finishing.toFixed(2)}입니다. 현재 경기 중인 선수의 최고치는 ${finisher.finishing.toFixed(2)}입니다.`,
+      `벤치 ${benchFinisher.num}번의 마무리는 ${benchFinisher.finishing.toFixed(2)}입니다. 그라운드에 있는 선수 중 최고는 ${finisher.finishing.toFixed(2)}입니다.`,
     )
   }
 
@@ -480,7 +480,7 @@ export function buildBriefing(problem: Problem, state: MatchState): Briefing {
       66,
       'bench-fast',
       '자원',
-      `벤치에서는 ${benchFast.num}번이 가장 빠릅니다. 속도 ${benchFast.speed}, 현재 경기 중인 선수의 최고치는 ${fastestOnPitch}입니다.`,
+      `벤치에서는 ${benchFast.num}번이 가장 빠르고 속도는 ${benchFast.speed}입니다. 그라운드에 있는 선수 중 최고는 ${fastestOnPitch}입니다.`,
     )
   }
 

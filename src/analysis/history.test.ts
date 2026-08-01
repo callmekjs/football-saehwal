@@ -322,6 +322,16 @@ describe('가장 최근 판이 남긴 것', () => {
     )!
     expect(lesson.headline).toContain('거의 같은 수준')
     expect(lesson.paragraphs.join(' ')).toContain('사실상 같았습니다')
+    expect(lesson.paragraphs.join(' ')).not.toContain('더 짜낼 몫')
+  })
+
+  it('지난 기록은 독자를 당신이라고 부르거나 결과 분포가 움직인다고 말하지 않는다', () => {
+    const lesson = lastLesson([entry({ compare: compare() })], survive)!
+    const prose = lesson.paragraphs.join(' ')
+
+    expect(prose).toContain('내 판단은')
+    expect(prose).not.toContain('당신')
+    expect(prose).not.toContain('결과 분포는 움직이지 않았습니다')
   })
 
   it('설정이 갈린 항목을 다음 판의 출발점으로 적는다', () => {
@@ -350,7 +360,7 @@ describe('가장 최근 판이 남긴 것', () => {
       survive,
     )!
     expect(lesson.gaps).toHaveLength(0)
-    expect(lesson.paragraphs[lesson.paragraphs.length - 1]).toContain('언제 맞췄는가')
+    expect(lesson.paragraphs[lesson.paragraphs.length - 1]).toContain('언제 맞췄느냐')
   })
 
   it('설정 기록이 없는 옛 판도 그래프는 그린다', () => {

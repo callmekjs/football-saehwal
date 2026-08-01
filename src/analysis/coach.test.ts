@@ -266,6 +266,47 @@ describe('Coach 경기 분석', () => {
     expect(report.headline).not.toMatch(/습니다\s+\S/)
   })
 
+  it.each([
+    ['성공·개선', true, metrics.userDelta, '판단도 방치보다 나았습니다', false],
+    ['실패·개선', false, metrics.userDelta, '다만 판단은 방치보다 나았습니다', true],
+    ['성공·악화', true, -metrics.userDelta, '다만 판단은 방치보다 위험했습니다', true],
+    ['실패·악화', false, -metrics.userDelta, '판단도 방치보다 위험했습니다', false],
+    [
+      '성공·비슷',
+      true,
+      metrics.noopRate - metrics.noopRate,
+      '판단은 방치와 통계적으로 비슷했습니다',
+      false,
+    ],
+    [
+      '실패·비슷',
+      false,
+      metrics.noopRate - metrics.noopRate,
+      '판단은 방치와 통계적으로 비슷했습니다',
+      false,
+    ],
+  ] as const)('%s일 때 결과와 판단의 방향에 맞게 잇는다', (_case, passed, delta, expected, contrast) => {
+    const problem = problemAt()
+    const score: [number, number] =
+      problem.objective.type === 'SURVIVE'
+        ? passed
+          ? [2, 1]
+          : [1, 1]
+        : passed
+          ? [1, 1]
+          : [0, 1]
+    const report = buildCoachReport(
+      problem,
+      finalWith({ score }),
+      [{ tick: 20, type: 'LINE', value: 1 }],
+      { ...metrics, userDelta: delta },
+      77,
+    )
+
+    expect(report.headline).toContain(expected)
+    expect(report.headline.includes('다만 판단')).toBe(contrast)
+  })
+
   it('감독 보고서는 차분한 존댓말로 근거를 설명한다', () => {
     const final = finalWith({
       score: [1, 1],
@@ -291,6 +332,7 @@ describe('Coach 경기 분석', () => {
     expect(prose).not.toMatch(/전반적으로|되어집니다|보여집니다|득점 생산|작동했습니다/)
     expect(report.decisionReview.find((finding) => finding.id === 'decision-channels')?.label)
       .toBe('150판 비교')
+    expect(report.prescriptions.some((line) => /세요\.$/.test(line))).toBe(true)
   })
 })
 
