@@ -1847,19 +1847,23 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
      * 실제 스로인은 10~20미터, 릴리스 속도 초속 8~14미터다. 발로 찬
      * 패스는 13~26미터다. 이 구분이 없으면 스로인이 40미터 롱볼이 된다.
      */
+    /**
+     * ★ **공이 스스로 「던진 것」이라고 말한다**(`ball.kick === 'THROW'`).
+     *
+     * 전에는 "스로인 재개가 끝난 뒤 처음 나온 PASS"를 던진 공으로
+     * 짐작했다. 던진 선수가 공을 뺏기거나 다른 선수가 먼저 차면 그
+     * 짐작이 어긋나, 발로 찬 32.2미터 패스가 「스로인」으로 보고된다.
+     * 실제로 그렇게 한 번 걸렸고 원인은 스로인이 아니었다.
+     */
     const throws: Array<{ d: number; v: number }> = []
     for (const fs of MULTI) {
-      let armed = false
       for (let i = 1; i < fs.length; i++) {
-        if (fs[i - 1].restart?.kind === 'THROW_IN' && !fs[i].restart) armed = true
-        if (!armed) continue
-        if (fs[i].mode === 'PASS') {
-          throws.push({
-            d: Math.hypot(fs[i].ball.toX - fs[i].ball.fromX, fs[i].ball.toY - fs[i].ball.fromY),
-            v: fs[i].ball.v,
-          })
-          armed = false
-        } else if (fs[i].mode === 'SHOT') armed = false
+        if (fs[i].ball.kick !== 'THROW') continue
+        if (fs[i - 1].ball.kick === 'THROW') continue
+        throws.push({
+          d: Math.hypot(fs[i].ball.toX - fs[i].ball.fromX, fs[i].ball.toY - fs[i].ball.fromY),
+          v: fs[i].ball.v,
+        })
       }
     }
     expect(throws.length, '스로인 표본').toBeGreaterThan(0)
@@ -1914,6 +1918,17 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
         const scoreChanged = fs[i].shown[0] !== fs[i - 1].shown[0] ||
           fs[i].shown[1] !== fs[i - 1].shown[1]
         if (!scoreChanged) continue
+        /**
+         * **종료 휘슬은 예외다.** 그 순간에는 점수 정확성이 장면보다
+         * 우선이라 화면 점수를 시뮬 점수에 강제로 맞춘다(`visual.ts` 의
+         * `state.tick >= TOTAL_TICKS` 블록). 그때 마침 재개를 기다리고
+         * 있었다면 여기 걸리는데, 그건 고장이 아니라 정해둔 규칙이다 —
+         * 장면을 기다리다 골을 영영 안 보여주는 쪽이 훨씬 나쁘다.
+         *
+         * 이 예외가 없어서 검사가 운으로 통과하고 있었다. 열두 시드 중
+         * 재개 중에 종료를 맞은 판이 하나도 없었을 뿐이다.
+         */
+        if (fs[i].state.tick >= TOTAL_TICKS) continue
         expect(fs[i].restart, '아웃 재개 중 점수판이 바뀌었다').toBeNull()
       }
     }

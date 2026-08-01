@@ -25,6 +25,8 @@ type Op =
   | { op: 'stroke'; style: string; width: number; pts: Array<[number, number]> }
   | { op: 'fillRect'; style: string; x: number; y: number; w: number; h: number }
   | { op: 'text'; style: string; text: string; x: number; y: number }
+  /** 반지름까지 받아 적는다. 자리를 옮기는 함수로 길이를 재는 실수를 잡는다 */
+  | { op: 'arc'; x: number; y: number; r: number }
 
 function recorder() {
   const ops: Op[] = []
@@ -72,8 +74,9 @@ function recorder() {
     lineTo: (x: number, y: number) => {
       pts.push([x, y])
     },
-    arc: (x: number, y: number) => {
+    arc: (x: number, y: number, r: number) => {
       pts.push([x, y])
+      ops.push({ op: 'arc', x, y, r })
     },
     ellipse: (x: number, y: number) => {
       pts.push([x, y])
@@ -124,12 +127,12 @@ const P: Problem = {
 const W = 815
 const H = Math.round((W * 68) / 105)
 
-function render(mutate: (vm: VisualMatch) => void) {
+function render(mutate: (vm: VisualMatch) => void, flipped = false) {
   const s = createState(P)
   const vm = new VisualMatch(s, P.seed)
   mutate(vm)
   const { ctx, ops } = recorder()
-  drawPitch(ctx, vm, s, W, H)
+  drawPitch(ctx, vm, s, W, H, flipped)
   return ops
 }
 
@@ -450,5 +453,74 @@ describe('왜 공이 넘어갔는지 경기장에 뜬다', () => {
       vm.callout = { text: '오프사이드', side: '', tone: 'FOUL', life: 1.6 }
     })
     expect(texts(ops).filter((t) => t.text === '오프사이드')).toHaveLength(1)
+  })
+})
+
+describe('하프타임에 진영을 맞바꾼다', () => {
+  /**
+   * 실제 축구는 하프타임에 두 팀이 진영을 바꾼다. 전반을 뛰고 후반에
+   * 들어갔는데 같은 골대를 계속 공격하고 있으면 축구가 아니다.
+   *
+   * 시뮬레이션은 언제나 같은 방향으로 계산한다(그래야 저장된 시드가
+   * 산다). 그래서 **그리는 쪽에서만** 좌우를 뒤집는다.
+   */
+  const xs = (ops: Op[]) =>
+    ops.flatMap((o) =>
+      o.op === 'fill' || o.op === 'stroke'
+        ? o.pts.map(([x]) => x)
+        : o.op === 'arc' || o.op === 'text'
+          ? [o.x]
+          : [o.x, o.x + o.w],
+    )
+
+  /**
+   * 우리 수비라인 표시의 x. 이 판에서 **한쪽에만 있는** 것이라 뒤집혔는지
+   * 명확하게 말해준다. 경기장 선은 좌우 대칭이라 뒤집어도 그대로다.
+   */
+  const defenceLineX = (ops: Op[]) => {
+    const marks = ops.filter(
+      (o): o is Extract<Op, { op: 'stroke' }> =>
+        o.op === 'stroke' && o.style === COLORS.lineMarker && o.pts.length === 2,
+    )
+    expect(marks.length, '수비라인 표시').toBe(1)
+    return marks[0].pts[0][0]
+  }
+
+  it('바꾸면 우리 수비라인이 반대쪽으로 간다', () => {
+    // 라인 「보통」은 세계 좌표 24m 다. 뒤집으면 105 − 24 = 81m 여야 한다
+    const normal = defenceLineX(render(() => {}))
+    const swapped = defenceLineX(render(() => {}, true))
+
+    expect(normal).toBeCloseTo((W * 24) / 105, 1)
+    expect(swapped).toBeCloseTo((W * 81) / 105, 1)
+    // 두 자리가 경기장 한가운데를 사이에 두고 마주 본다
+    expect(normal + swapped).toBeCloseTo(W, 1)
+  })
+
+  it('바꿔도 그리는 것이 화면 밖으로 나가지 않는다', () => {
+    // 자리를 옮기는 함수로 길이를 재면 여기서 걸린다. 실제로 중앙 원
+    // 반지름이 `X(9.15)` 였고, 뒤집는 순간 95.85미터가 된다
+    for (const flipped of [false, true]) {
+      const ops = render(() => {}, flipped)
+      for (const x of xs(ops)) {
+        expect(x, `${flipped ? '바꾼' : '그대로'} 화면에서 x=${x.toFixed(1)}`).toBeGreaterThan(-40)
+        expect(x, `${flipped ? '바꾼' : '그대로'} 화면에서 x=${x.toFixed(1)}`).toBeLessThan(W + 40)
+      }
+    }
+  })
+
+  it('바꿔도 중앙 원의 크기가 그대로다', () => {
+    const radius = (ops: Op[]) => {
+      const mid = ops.filter(
+        (o): o is Extract<Op, { op: 'arc' }> =>
+          o.op === 'arc' && Math.abs(o.x - W / 2) < 1 && o.r > W * 0.05,
+      )
+      expect(mid.length, '중앙 원').toBeGreaterThan(0)
+      return mid[0].r
+    }
+    // 9.15m 짜리 센터서클이다. 경기장 길이가 105m 이므로 화면 폭의 8.7%
+    const r = radius(render(() => {}))
+    expect(r).toBeCloseTo((W * 9.15) / 105, 1)
+    expect(radius(render(() => {}, true))).toBeCloseTo(r, 6)
   })
 })

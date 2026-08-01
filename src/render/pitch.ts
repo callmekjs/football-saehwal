@@ -225,6 +225,10 @@ function drawField(
   h: number,
   X: (v: number) => number,
   Y: (v: number) => number,
+  /** 길이를 화면 픽셀로. **자리를 옮기는 `X` 와 다르다** */
+  L: (v: number) => number,
+  /** 세계 좌표 두 x 를 사각형의 왼쪽과 너비로. 진영이 바뀌어도 안전하다 */
+  rect: (a: number, b: number) => [number, number],
   sx: number,
   sy: number,
   line: number,
@@ -238,20 +242,23 @@ function drawField(
 
   ctx.strokeStyle = COLORS.line
   ctx.lineWidth = Math.max(1, sx * 0.25)
-  ctx.strokeRect(X(1), Y(1), X(PITCH_W - 2), Y(PITCH_H - 2))
+  const [fx, fw] = rect(1, PITCH_W - 1)
+  ctx.strokeRect(fx, Y(1), fw, Y(PITCH_H - 2))
   ctx.beginPath()
   ctx.moveTo(X(52.5), Y(1))
   ctx.lineTo(X(52.5), Y(67))
   ctx.stroke()
   ctx.beginPath()
-  ctx.arc(X(52.5), Y(34), X(9.15), 0, Math.PI * 2)
+  ctx.arc(X(52.5), Y(34), L(9.15), 0, Math.PI * 2)
   ctx.stroke()
 
   for (const side of [0, 1]) {
     const flip = side === 0 ? 1 : -1
     const base = side === 0 ? 1 : PITCH_W - 1
-    ctx.strokeRect(X(base), Y(13.85), X(16.5 * flip), Y(40.3))
-    ctx.strokeRect(X(base), Y(24.85), X(5.5 * flip), Y(18.3))
+    const [px, pw] = rect(base, base + 16.5 * flip)
+    ctx.strokeRect(px, Y(13.85), pw, Y(40.3))
+    const [gx, gw] = rect(base, base + 5.5 * flip)
+    ctx.strokeRect(gx, Y(24.85), gw, Y(18.3))
   }
 
   // 골대와 골망. 이게 없으면 슛이 어디로 들어가는지 알 수 없다
@@ -264,7 +271,8 @@ function drawField(
 
     ctx.save()
     ctx.fillStyle = 'rgba(255,255,255,0.10)'
-    ctx.fillRect(X(lineX), Y(top), X(depth * dir), Y(GOAL_HALF * 2))
+    const [nx, nw] = rect(lineX, lineX + depth * dir)
+    ctx.fillRect(nx, Y(top), nw, Y(GOAL_HALF * 2))
 
     // 골망 격자
     ctx.strokeStyle = 'rgba(255,255,255,0.30)'
@@ -644,13 +652,41 @@ export function drawPitch(
   state: MatchState,
   w: number,
   h: number,
+  /**
+   * 진영을 바꿔서 그리는가.
+   *
+   * 실제 축구는 하프타임에 두 팀이 **진영을 맞바꾼다.** 전반을 뛰고 후반에
+   * 들어갔는데 우리가 여전히 같은 골대를 공격하고 있으면 그건 축구가
+   * 아니다. 시뮬레이션은 언제나 같은 방향으로 계산하므로(그래야 저장된
+   * 시드가 산다) **그리는 쪽에서만 좌우를 뒤집는다.** 경기 결과·확률·
+   * 난수는 한 톨도 안 바뀐다.
+   *
+   * 중계 카메라는 하프타임에 자리를 옮기지 않는다. 그래서 위아래는 그대로
+   * 두고 좌우만 뒤집는다 — 화면에서 보이는 그대로다.
+   */
+  flipped = false,
 ) {
   const sx = w / PITCH_W
   const sy = h / PITCH_H
-  const X = (v: number) => v * sx
+  /** 세계 x → 화면 x. 진영이 바뀌면 여기서 한 번만 뒤집는다 */
+  const X = (v: number) => (flipped ? PITCH_W - v : v) * sx
   const Y = (v: number) => v * sy
+  /**
+   * 길이를 화면 픽셀로.
+   *
+   * **`X` 로 길이를 재면 안 된다.** 전에는 중앙 원 반지름을 `X(9.15)` 로
+   * 쓰고 있었는데, 자리를 옮기는 함수라 진영을 뒤집는 순간 반지름이
+   * 95.85미터가 된다. 자리와 길이는 다른 것이다.
+   */
+  const L = (v: number) => v * sx
+  /** 세계 좌표 두 x 를 화면 사각형의 왼쪽과 너비로. 뒤집혀도 안전하다 */
+  const rect = (a: number, b: number): [number, number] => {
+    const p = X(a)
+    const q = X(b)
+    return [Math.min(p, q), Math.abs(q - p)]
+  }
 
-  drawField(ctx, w, h, X, Y, sx, sy, state.tactics.line)
+  drawField(ctx, w, h, X, Y, L, rect, sx, sy, state.tactics.line)
 
   const r = Math.max(7, Math.min(w, h * 1.6) * 0.021)
   const b = vm.ball
@@ -739,12 +775,9 @@ export function drawPitch(
     ctx.save()
     ctx.globalAlpha = k * 0.5
     ctx.fillStyle = c.side === 'HOME' ? COLORS.home : COLORS.away
-    ctx.fillRect(
-      X(c.side === 'HOME' ? PITCH_W - 3.4 : 1),
-      Y(GOAL_MID - GOAL_HALF),
-      X(2.4),
-      Y(GOAL_HALF * 2),
-    )
+    const base = c.side === 'HOME' ? PITCH_W - 3.4 : 1
+    const [cx0, cw] = rect(base, base + 2.4)
+    ctx.fillRect(cx0, Y(GOAL_MID - GOAL_HALF), cw, Y(GOAL_HALF * 2))
     ctx.restore()
 
     ctx.save()

@@ -1168,6 +1168,16 @@ export function MatchScreen({
               seed={problem.seed}
               half={half}
               live={phase === 'RUNNING'}
+              /**
+               * 하프타임에 진영을 맞바꾼다.
+               *
+               * 사용자가 정했다 — *"전반전 급수 타임을 했으면 후반전
+               * 넘어갈때 반대진형에서 시작하는거 (실제 축구처럼)."*
+               *
+               * **전반을 실제로 뛴 판에서만이다.** 후반만 골라 시작하면
+               * 바꿀 전반이 없으므로 그대로 그린다.
+               */
+              flipped={half === 2 && firstHalf !== null}
               onScore={setScene}
             />
           </div>

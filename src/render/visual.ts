@@ -323,6 +323,20 @@ const AIR_DRAG = 0.05
 const REACH_HEIGHT = 1.9
 /** 슛 속도. 프로 선수의 슛은 초속 25~35미터다 */
 const SHOT_SPEED = 30
+/**
+ * 두 손으로 던져서 갈 수 있는 최대 거리.
+ *
+ * 보통 스로인은 10~20미터, 전문 롱스로우가 30미터 남짓이다. 사람이 두
+ * 손으로 머리 위에서 던지는 한 이 위를 넘을 수 없다.
+ *
+ * ★ **받을 사람이 멀다고 더 멀리 던지지 않는다.** `chooseThrowTarget` 은
+ * 5~20미터 안의 동료를 고르지만, 아무도 그 안에 없으면 **가장 가까운
+ * 동료**로 물러선다. 그 동료를 그대로 겨냥하면 던진 거리에 상한이
+ * 사라져 실측으로 32.2미터짜리 스로인이 나왔다 — 그건 던진 것이 아니라
+ * 찬 것이다. 그럴 때는 그 방향으로 **닿는 데까지만** 던지고, 받을 사람이
+ * 달려와서 잡는다. 실제 축구도 그렇게 한다.
+ */
+const THROW_MAX = 22
 /** 공을 발밑에 두는 거리 */
 const CONTROL_DIST = 1.3
 /** 공을 차는 순간 선수 중심과 공 사이에 허용할 수 있는 최대 거리 */
@@ -694,7 +708,16 @@ export interface VBall {
    * 화면에는 안 나오지만 검증에는 필요하다. 흘린 공과 의도한 패스를
    * 구분하지 못하면 패스 성공률 통계에 "일부러 뺏긴 공"이 섞인다.
    */
-  kick: 'PASS' | 'SPILL' | 'SHOT' | 'RESTART'
+  /**
+   * 이 공을 **어떻게** 보냈나.
+   *
+   * `THROW` 는 손으로 던진 스로인이다. 전에는 이것도 `PASS` 라서 화면도
+   * 검사도 발로 찬 패스와 구분할 방법이 없었고, 검사는 "스로인 재개가
+   * 끝난 뒤 처음 나온 PASS"를 던진 공으로 **짐작**했다. 던진 선수가 공을
+   * 뺏기거나 다른 선수가 차면 그 짐작이 어긋나 32미터짜리 「스로인」이
+   * 보고된다. 공 스스로 무엇인지 말하게 두면 짐작할 필요가 없다.
+   */
+  kick: 'PASS' | 'SPILL' | 'SHOT' | 'RESTART' | 'THROW'
 }
 
 /**
@@ -2632,9 +2655,49 @@ export class VisualMatch {
      * 공격 판단이 150판에 25회에서 6회로 사라졌다.
      */
     const frozen = !hurry && r.kind === 'FREE_KICK' && r.age < DEAD_BALL_FREEZE
+    /**
+     * 선 다음에는 **각자 자기 대형 자리로 돌아간다.**
+     *
+     * 사용자가 정했다 — *"심판이 반칙을 선언하면 모든 선수들은 멈추고
+     * 자신의 진형쪽으로 가야한다."*
+     *
+     * 전에는 서 있던 자리에서 곧바로 **공을 기준으로 한** 목표를 다시
+     * 쫓았다. 그러면 휘슬이 불렸는데도 스물두 명이 공 쪽으로 모여드는
+     * 그림이 되어, 멈춘 것은 공뿐이고 경기는 계속되는 것처럼 보인다.
+     * 실제 축구에서 반칙이 선언되면 선수들은 플레이를 놓고 자기 자리로
+     * 돌아가 대형을 다시 세운다.
+     *
+     * **이것은 얼리는 것이 아니다.** 대형이 휘슬 순간 모양 그대로 굳으면
+     * 재개 뒤에 공격이 시작될 자리가 없어진다(실측으로 우리 팀의 박스 안
+     * 판단이 36판에 7회에서 0회로 사라졌다). 자기 자리로 **돌아가는 것**은
+     * 오히려 그 반대다 — 재개 순간 대형이 제대로 서 있다.
+     *
+     * 세리머니 때 쓰는 것과 같은 방법이다. 다만 이쪽은 걸어서 간다.
+     *
+     * **휘슬이 없는 재개(스로인·골킥·코너킥)에는 걸지 않는다.** 거기서는
+     * 실제 축구에서도 선수들이 계속 자리를 잡고, 여기까지 손대면 데드볼이
+     * 경기의 흐름을 통째로 지운다.
+     */
+    const reshape = !frozen && !hurry && r.kind === 'FREE_KICK'
     for (const p of this.players) {
-      if (moving.has(p.id) || !frozen) this.movePlayer(p, step)
-      else this.stand(p, step)
+      if (moving.has(p.id)) {
+        this.movePlayer(p, step)
+        continue
+      }
+      if (frozen) {
+        this.stand(p, step)
+        continue
+      }
+      if (reshape) {
+        p.tx = p.homeX
+        p.ty = p.homeY
+        p.stx = p.homeX
+        p.sty = p.homeY
+        // 자기 자리로 돌아가는 길이다. 여기서 전력으로 뛰는 사람은 없다
+        p.effort = 'JOG'
+        p.settled = false
+      }
+      this.movePlayer(p, step)
     }
     this.separate()
 
@@ -2718,30 +2781,47 @@ export class VisualMatch {
       return
     }
     // 던진 공은 발로 찬 공만큼 정확하지 않다. 받는 선수 발밑을 노린다
-    const tx = clamp(to.x + to.vx * 0.25, 1, PITCH_W - 1)
-    const ty = clamp(to.y + to.vy * 0.25, 1, PITCH_H - 1)
-    const d = Math.hypot(tx - thrower.x, ty - thrower.y)
-    const speed = clamp(7 + d * 0.34, 8, 14)
+    const wantX = clamp(to.x + to.vx * 0.25, 1, PITCH_W - 1)
+    const wantY = clamp(to.y + to.vy * 0.25, 1, PITCH_H - 1)
 
+    // 던진 공도 100% 붙지는 않는다. 거리가 멀수록 나빠진다
+    let targetId: string | null = to.id
+    const ang = this.rng.next() * Math.PI * 2
+    const off = 1.5 + this.rng.next() * 2.5
+    let aimX = wantX
+    let aimY = wantY
+    const want = Math.hypot(wantX - thrower.x, wantY - thrower.y)
+    if (this.rng.next() >= clamp(0.95 - Math.max(0, want - 8) * 0.012, 0.7, 0.95)) {
+      aimX = clamp(wantX + Math.cos(ang) * off, -4, PITCH_W + 4)
+      aimY = clamp(wantY + Math.sin(ang) * off, -4, PITCH_H + 4)
+      targetId = null
+    }
+
+    /**
+     * ★ **팔이 닿는 데까지만 간다** — 빗나간 몫까지 포함해서다.
+     *
+     * `chooseThrowTarget` 은 5~20미터 안의 동료를 고르지만, 아무도 그 안에
+     * 없으면 **가장 가까운 동료**로 물러선다. 그 동료를 그대로 겨냥하면
+     * 던진 거리에 상한이 사라진다 — 실측으로 32.2미터짜리 스로인이 나왔고,
+     * 그건 던진 것이 아니라 찬 것이다.
+     *
+     * 상한 밖이면 그 **방향으로** 닿는 데까지만 던지고 받을 사람이 달려와
+     * 잡는다. 실제 축구의 스로인이 그렇다.
+     */
+    const aim = Math.hypot(aimX - thrower.x, aimY - thrower.y) || 1
+    const reach = Math.min(aim, THROW_MAX) / aim
+    const ax = thrower.x + (aimX - thrower.x) * reach
+    const ay = thrower.y + (aimY - thrower.y) * reach
+
+    const d = Math.hypot(ax - thrower.x, ay - thrower.y)
+    const speed = clamp(7 + d * 0.34, 8, 14)
     // 손을 떠나는 높이. 머리 위로 넘겨 던진다
     const release = 2.1
     const t = d / speed
     // 그 시간 안에 땅에 닿도록 수직 속도를 잡는다: release + vz·t − ½g·t² = 0
     const vz = clamp((GRAVITY * t * t * 0.5 - release) / Math.max(t, 0.2), 0, 7)
 
-    // 던진 공도 100% 붙지는 않는다. 거리가 멀수록 나빠진다
-    let targetId: string | null = to.id
-    const ang = this.rng.next() * Math.PI * 2
-    const off = 1.5 + this.rng.next() * 2.5
-    let ax = tx
-    let ay = ty
-    if (this.rng.next() >= clamp(0.95 - Math.max(0, d - 8) * 0.012, 0.7, 0.95)) {
-      ax = clamp(tx + Math.cos(ang) * off, -4, PITCH_W + 4)
-      ay = clamp(ty + Math.sin(ang) * off, -4, PITCH_H + 4)
-      targetId = null
-    }
-
-    this.kickBall(thrower, ax, ay, speed, vz, 'PASS', targetId, 'PASS')
+    this.kickBall(thrower, ax, ay, speed, vz, 'PASS', targetId, 'THROW')
     this.ball.z = release
   }
 

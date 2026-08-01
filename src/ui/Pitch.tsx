@@ -36,6 +36,7 @@ export function Pitch({
   seed,
   half = 2,
   live = true,
+  flipped = false,
   onScore,
 }: {
   state: MatchState
@@ -47,6 +48,14 @@ export function Pitch({
    */
   half?: Half
   live?: boolean
+  /**
+   * 진영을 바꿔 그리는가.
+   *
+   * 실제 축구는 하프타임에 두 팀이 진영을 맞바꾼다. 전반을 뛰고 이어서
+   * 후반에 들어갔을 때만 참이다 — 후반만 골라 시작한 판은 바꿀 전반이
+   * 없으므로 그대로 그린다.
+   */
+  flipped?: boolean
   /**
    * 점수판에 띄울 점수가 바뀌었을 때 부른다.
    *
@@ -61,10 +70,12 @@ export function Pitch({
   const stateRef = useRef(state)
   const liveRef = useRef(live)
   const halfRef = useRef(half)
+  const flippedRef = useRef(flipped)
   const onScoreRef = useRef(onScore)
   stateRef.current = state
   liveRef.current = live
   halfRef.current = half
+  flippedRef.current = flipped
   onScoreRef.current = onScore
 
   useLayoutEffect(() => {
@@ -135,7 +146,7 @@ export function Pitch({
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-          drawPitch(ctx, vm, stateRef.current, w, h)
+          drawPitch(ctx, vm, stateRef.current, w, h, flippedRef.current)
           // 멈춘 화면은 고장난 화면과 구분되지 않는다. 끝났다고 말해준다
           if (stateRef.current.tick >= TOTAL_TICKS) {
             ctx.save()
