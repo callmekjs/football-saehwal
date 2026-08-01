@@ -128,9 +128,25 @@ const AVAILABILITY_LABEL = {
 export function PlayerDataCard({
   state,
   isCaptain = false,
+  compact = false,
 }: {
   state: PlayerState
   isCaptain?: boolean
+  /**
+   * **경기가 흐르는 중이다.** 능력치 스물여덟 줄과 신체 정보를 접는다.
+   *
+   * 사용자가 화면을 보고 지적했다 — *"플레이 중에 선수들 스텟 나오는거
+   * 나오지 않게."* 79분에 교체할 선수를 고르는 중이었는데, 카드가 왼쪽
+   * 열을 통째로 밀어내며 마흔 줄 가까이 펼쳐졌다.
+   *
+   * 급수 타임에는 시계가 멈춰 있어 이 표를 읽을 시간이 있다. 그런데
+   * **경기 중에는 75초가 멈추지 않는다** — 개인기 8, 코너킥 8 을 읽고
+   * 있을 시간이 없고, 그러는 사이 화면에서 경기가 밀려난다.
+   *
+   * 접는 것은 **읽을 시간이 없는 것**뿐이다. 체력·속도·마무리는 지금
+   * 누구를 뺄지 정하는 값이라 그대로 둔다.
+   */
+  compact?: boolean
 }) {
   const data = playerDataOf(state)
   const moved = data.basePosition !== data.currentPosition
@@ -177,41 +193,51 @@ export function PlayerDataCard({
         능력치는 판마다 주인이 바뀐다. 같은 6번이라도 오늘은 발이 가장
         빠르고 다음 판에는 가장 느릴 수 있다. 그래서 명단이 아니라 이
         경기의 상태에서 읽는다.
+
+        **경기가 흐르는 중에는 통째로 접는다.** 위 `compact` 주석을 읽어라.
       */}
-      <div className="player-attributes">
-        {data.attributeGroups.map((group) => (
-          <section key={group.title}>
-            <h4>{group.title}</h4>
-            <dl>
-              {group.rows.map((row) => (
-                <div key={row.key} data-used={row.used ? 'on' : 'off'}>
-                  <dt>
-                    {row.label}
-                    {row.used && (
-                      <i aria-label="경기 계산에 쓰이는 값" title="경기 계산에 쓰이는 값">
-                        ●
-                      </i>
-                    )}
-                  </dt>
-                  <dd data-tone={attributeTone(row.value)}>{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ))}
-      </div>
+      {compact ? (
+        <p className="player-data-hint">
+          능력치는 급수 타임에서 봅니다 · 지금은 경기가 흐르는 중입니다
+        </p>
+      ) : (
+        <>
+          <div className="player-attributes">
+            {data.attributeGroups.map((group) => (
+              <section key={group.title}>
+                <h4>{group.title}</h4>
+                <dl>
+                  {group.rows.map((row) => (
+                    <div key={row.key} data-used={row.used ? 'on' : 'off'}>
+                      <dt>
+                        {row.label}
+                        {row.used && (
+                          <i aria-label="경기 계산에 쓰이는 값" title="경기 계산에 쓰이는 값">
+                            ●
+                          </i>
+                        )}
+                      </dt>
+                      <dd data-tone={attributeTone(row.value)}>{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+          </div>
 
-      <dl className="player-profile">
-        <div><dt>잘 쓰는 발</dt><dd>{data.profile.foot}</dd></div>
-        <div><dt>신장</dt><dd>{data.profile.height} cm</dd></div>
-        <div><dt>체중</dt><dd>{data.profile.weight} kg</dd></div>
-        <div><dt>골키퍼 등급</dt><dd>{data.profile.goalkeeping}</dd></div>
-      </dl>
+          <dl className="player-profile">
+            <div><dt>잘 쓰는 발</dt><dd>{data.profile.foot}</dd></div>
+            <div><dt>신장</dt><dd>{data.profile.height} cm</dd></div>
+            <div><dt>체중</dt><dd>{data.profile.weight} kg</dd></div>
+            <div><dt>골키퍼 등급</dt><dd>{data.profile.goalkeeping}</dd></div>
+          </dl>
 
-      <p>
-        능력치는 1~20이며 전부 창작입니다. <b>●</b> 표시가 이번 경기 계산에
-        실제로 들어가는 값이고, 누가 어떤 능력을 갖는지는 판마다 다시 정해집니다.
-      </p>
+          <p>
+            능력치는 1~20이며 전부 창작입니다. <b>●</b> 표시가 이번 경기 계산에
+            실제로 들어가는 값이고, 누가 어떤 능력을 갖는지는 판마다 다시 정해집니다.
+          </p>
+        </>
+      )}
     </section>
   )
 }
@@ -273,6 +299,7 @@ export function SquadPanel({
   onOrder,
   onPosition,
   onFormation,
+  running = false,
   subIn = null,
   onSubOut,
 }: {
@@ -282,6 +309,13 @@ export function SquadPanel({
   onOrder: (target: string, order: PlayerOrder) => string | null
   onPosition: (target: string, position: PlayerPosition | null) => string | null
   onFormation: (f: FormationId) => void
+  /**
+   * 경기가 흐르는 중인가. 선수 카드의 능력치 표를 접는다.
+   *
+   * 급수 타임에는 시계가 멈춰 있어 읽을 시간이 있지만, 75초가 흐르는
+   * 동안에는 그 표가 왼쪽 열을 통째로 밀어낸다.
+   */
+  running?: boolean
   /**
    * 벤치에서 이미 고른 **들어올 선수**. 없으면 `null`.
    *
@@ -888,6 +922,7 @@ export function SquadPanel({
             <PlayerDataCard
               state={cur}
               isCaptain={getPlayer(cur.id).num === captain}
+              compact={running}
             />
             {getPlayer(cur.id).pos === 'GK' ? (
               <div className="player-data-only">

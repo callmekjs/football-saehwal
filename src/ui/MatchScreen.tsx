@@ -365,6 +365,7 @@ function Bench({
   state,
   locked,
   half,
+  running,
   picked,
   onPick,
   onSub,
@@ -374,6 +375,13 @@ function Bench({
   locked: boolean
   /** 전반이 끝난 것과 경기가 끝난 것은 다른 말이다 */
   half: Half
+  /**
+   * 경기가 흐르는 중인가. 선수 카드의 능력치 표를 접는다.
+   *
+   * 교체할 선수를 고르는 중에 마흔 줄짜리 표가 펼쳐지면 벤치 줄이 화면
+   * 밖으로 밀려난다. 지금 필요한 것은 체력이지 코너킥 능력이 아니다.
+   */
+  running: boolean
   /**
    * 지금 고른 선수. **위에서 내려온다.**
    *
@@ -457,6 +465,7 @@ function Bench({
           <PlayerDataCard
             state={pickedState}
             isCaptain={getPlayer(pickedState.id).num === captain}
+            compact={running}
           />
         )}
         <div className="bench-row">
@@ -1140,6 +1149,7 @@ export function MatchScreen({
               onOrder={setOrder}
               onPosition={setPosition}
               onFormation={setFormationLoud}
+              running={phase === 'RUNNING'}
               subIn={subIn}
               onSubOut={substituteOut}
             />
@@ -1149,6 +1159,7 @@ export function MatchScreen({
               state={state}
               locked={phase === 'DONE'}
               half={half}
+              running={phase === 'RUNNING'}
               picked={benchPick}
               onPick={setBenchPick}
               onSub={substituteLoud}

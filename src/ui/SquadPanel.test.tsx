@@ -7,7 +7,7 @@ import { AWAY_SHAPE_BY_MOOD, awaySlots } from '../sim/awayShape'
 import { positionFactors } from '../sim/tactics'
 import { getPlayer } from '../sim/squad'
 import { homeCaptainNumber, awayCaptainNumber } from '../captain'
-import { AwayPanel, SquadPanel, awaySummary } from './SquadPanel'
+import { AwayPanel, PlayerDataCard, SquadPanel, awaySummary } from './SquadPanel'
 
 const stateOf = (id: string) =>
   createState(PROBLEMS.find((problem) => problem.id === id)!)
@@ -231,5 +231,43 @@ describe('배치가 확률에 주는 효과를 화면이 말한다', () => {
     const html = render(placed([{ id: fw.id, x: 95, y: 4 }]))
     expect(html).toContain('우리 공격')
     expect(html).toContain('상대 역습 위험')
+  })
+})
+
+describe('경기가 흐르는 중에는 능력치 표를 접는다', () => {
+  /**
+   * 사용자가 화면을 보고 지적했다 — *"플레이 중에 선수들 스텟 나오는거
+   * 나오지 않게."* 79분에 교체할 선수를 고르는 중이었는데 카드가 마흔
+   * 줄 가까이 펼쳐져 왼쪽 열을 통째로 밀어냈다. 실측으로 **936px · 44줄**
+   * 이었다 — 화면 높이(900px)보다 크다.
+   *
+   * 급수 타임에는 시계가 멈춰 있어 읽을 시간이 있다. **경기 중에는 75초가
+   * 멈추지 않는다.** 개인기 8, 코너킥 8 을 읽고 있을 시간이 없다.
+   */
+  const anyPlayer = () => stateOf('p02').players.find((p) => p.onPitch && !p.out)!
+
+  it('급수 타임에는 능력치와 신체를 다 보여준다', () => {
+    const html = renderToStaticMarkup(<PlayerDataCard state={anyPlayer()} />)
+    expect(html).toContain('player-attributes')
+    expect(html).toContain('player-profile')
+    expect(html).not.toContain('player-data-hint')
+  })
+
+  it('경기 중에는 능력치와 신체를 접는다', () => {
+    const html = renderToStaticMarkup(<PlayerDataCard state={anyPlayer()} compact />)
+    expect(html).not.toContain('player-attributes')
+    expect(html).not.toContain('player-profile')
+  })
+
+  it('접어도 지금 필요한 값은 남긴다 — 교체는 체력을 보고 정한다', () => {
+    // 통째로 감추면 경기 중에 누구를 뺄지 정할 근거가 사라진다
+    const html = renderToStaticMarkup(<PlayerDataCard state={anyPlayer()} compact />)
+    expect(html).toContain('현재 체력')
+    expect(html).toContain('속도')
+  })
+
+  it('접었다는 것을 말해 준다 — 말없이 사라지면 고장으로 읽힌다', () => {
+    const html = renderToStaticMarkup(<PlayerDataCard state={anyPlayer()} compact />)
+    expect(html).toContain('급수 타임')
   })
 })
