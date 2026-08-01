@@ -142,12 +142,21 @@ export function rollRoster(seed: number): Map<string, MatchAbility> {
   return out
 }
 
-/** 이 선수가 이번 명단에서 스타인가. 화면이 표시에 쓴다 */
-export function isStarAbility(ability: MatchAbility): boolean {
-  const values = Object.values(ability.attributes)
-  const mean = values.reduce((a, b) => a + b, 0) / values.length
-  return mean >= 16
-}
+/*
+ * `isStarAbility` 를 지웠다 — **틀린 규칙이었다.**
+ *
+ * 능력 마흔여섯 칸의 평균이 16 이상이면 스타로 되짚었는데, 포지션마다
+ * 원래 낮게 두는 칸이 달라서(공격수의 수비 칸, 수비수의 마무리 칸) 같은
+ * 배수를 받아도 그 자리들은 평균 16에 닿지 못했다. 실측으로 **실제 스타의
+ * 75.5%** 를 놓쳤다(312,000명 표본).
+ *
+ * 지금은 `src/ui/playerData.ts` 가 **그 자리의 기준값 + 흩뿌림 폭**을
+ * 넘는 칸이 다섯 개 이상인지로 본다. 배수를 안 받았으면 어떤 칸도 그
+ * 선을 넘을 수 없다는 산술적 보장이 있는 경계다.
+ *
+ * 아무도 부르지 않는데 남겨 두면 다음 사람이 찾아 쓰고 같은 결함이
+ * 되살아난다. 지운 이유를 여기 남긴다.
+ */
 
 /** "DF04" — 포지션 + 등번호 두 자리 */
 export function playerId(pos: Position, num: number): string {

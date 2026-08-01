@@ -204,6 +204,68 @@ describe('Coach 경기 분석', () => {
     expect(personnel?.title).toContain('1회')
   })
 
+  /**
+   * 개입이 0회면 「나의 판단」 150판이 무개입 150판과 **같은 경기**다.
+   * 그때 나오는 0%p 는 잰 값이 아니라 뺄 것이 없어서 나온 0이라,
+   * 판단의 성적처럼 적으면 하지도 않은 판단을 지어내는 것이 된다.
+   */
+  it('개입이 0회면 재지 못한 판단을 잰 것처럼 적지 않는다', () => {
+    const report = buildCoachReport(problemAt(), finalWith({}), [], metrics, 77)
+    const impact = report.decisionReview.find(
+      (finding) => finding.id === 'decision-impact',
+    )
+    const channels = report.decisionReview.find(
+      (finding) => finding.id === 'decision-channels',
+    )
+
+    // 개입이 없었는데 "방치보다 나았다/위험했다"로 판정하지 않는다
+    expect(impact?.title).not.toMatch(/방치보다|높였다|위험한/)
+    expect(impact?.confidence).toBe('낮음')
+    // 사용자 쪽 성공 가능성(0.62)은 잰 적이 없으므로 어디에도 적지 않는다
+    expect(JSON.stringify(impact)).not.toContain('62.0%')
+    // 화살표 비교는 양쪽이 같은 경기라 성립하지 않는다
+    expect(channels?.evidence.join(' ')).not.toContain('→')
+    expect(report.summary[3]).toContain('개입 0회')
+  })
+
+  it('개입이 있을 때만 판단을 판정하고 확신도를 올린다', () => {
+    const decisions: Decision[] = [
+      { tick: 20, type: 'LINE', value: 1 },
+      { tick: 40, type: 'WIDTH', value: 2 },
+    ]
+    const report = buildCoachReport(problemAt(), finalWith({}), decisions, metrics, 77)
+    const impact = report.decisionReview.find(
+      (finding) => finding.id === 'decision-impact',
+    )
+
+    expect(impact?.title).toContain('방치보다')
+    expect(impact?.confidence).toBe('높음')
+    expect(impact?.evidence.join(' ')).toContain('62.0%')
+  })
+
+  it('선수 개입 제목에 하지 않은 것을 적지 않는다', () => {
+    const report = buildCoachReport(
+      problemAt(),
+      finalWith({}),
+      [{ tick: 20, type: 'SUB', out: 'MF06', in: 'MF17' }],
+      metrics,
+      77,
+    )
+    const personnel = report.decisionReview.find(
+      (finding) => finding.id === 'decision-personnel',
+    )
+
+    expect(personnel?.title).toContain('교체 1회')
+    expect(personnel?.title).not.toContain('직접 배치')
+    expect(personnel?.title).not.toContain('개별 지시')
+  })
+
+  it('두 문장이 마침표 없이 붙지 않는다', () => {
+    const report = buildCoachReport(problemAt(), finalWith({}), [], metrics, 77)
+    // "…못했습니다 판단은…" 처럼 종결어미 뒤에 바로 다음 문장이 오면 안 된다
+    expect(report.headline).not.toMatch(/습니다\s+\S/)
+  })
+
   it('감독 보고서는 차분한 존댓말로 근거를 설명한다', () => {
     const final = finalWith({
       score: [1, 1],

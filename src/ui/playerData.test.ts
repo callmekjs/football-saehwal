@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createState } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
-import { getPlayer, HOME_SQUAD } from '../sim/squad'
+import { fixedNoise, getPlayer, HOME_SQUAD, rollRoster } from '../sim/squad'
+import { ROSTER } from '../sim/constants'
 import { attributeLabel, playerDataOf, summaryRowsOf } from './playerData'
-import type { Position } from '../sim/types'
+import type { MatchAbility, PlayerState, Position } from '../sim/types'
 
 describe('선수 데이터', () => {
   it('가짜 평점 없이 현재 체력과 명단 능력치를 그대로 보여준다', () => {
@@ -99,5 +100,62 @@ describe('줄에 세우는 세 칸', () => {
   it('능력치 이름표는 화면 목록에서 온다', () => {
     expect(attributeLabel('finish')).toBe('골 결정력')
     expect(attributeLabel('pace')).toBe('순간 속도')
+  })
+})
+
+/**
+ * QA-29 — 실제로 스타 배수를 받은 선수가 화면에서도 스타로 보이는가.
+ *
+ * 전에는 마흔여섯 칸의 평균이 16 이상인가로 스타를 되짚었다. 포지션마다
+ * 원래 낮게 두는 칸이 달라서 같은 배수를 받아도 수비수와 공격수는 그
+ * 기준에 닿지 않았고, **실제 스타의 75.5%가 일반 선수로 표시됐다.**
+ *
+ * 여기서 재는 것은 화면 표시와 **실제 추첨 결과**의 일치다. 추첨은
+ * `rollRoster` 와 같은 식(`fixedNoise(씨앗:선수:star) < starChance`)으로
+ * 다시 계산한다 — 화면이 쓰는 경로와 완전히 다른 경로라 서로를 검증한다.
+ */
+describe('명단 다시 뽑기의 스타 표시', () => {
+  function rolledStar(seed: number, id: string): boolean {
+    return fixedNoise(`${seed}:${id}:star`) < ROSTER.starChance
+  }
+
+  function stateOf(id: string, ability: MatchAbility): PlayerState {
+    return {
+      id,
+      onPitch: true,
+      stamina: 100,
+      booked: false,
+      out: false,
+      order: 'NONE',
+      position: null,
+      ability,
+    }
+  }
+
+  it('실제 스타는 빠짐없이 스타로 보이고 아닌 선수는 아니다', () => {
+    let real = 0
+    let missed = 0
+    let wrong = 0
+    for (let seed = 1; seed <= 400; seed++) {
+      const roster = rollRoster(seed)
+      for (const player of HOME_SQUAD) {
+        const shown = playerDataOf(stateOf(player.id, roster.get(player.id)!)).star
+        if (rolledStar(seed, player.id)) {
+          real += 1
+          if (!shown) missed += 1
+        } else if (shown) wrong += 1
+      }
+    }
+    // 7% 추첨이므로 400씨앗 × 26명이면 700명 안팎이 나온다
+    expect(real, '실제 스타 표본').toBeGreaterThan(300)
+    expect(missed, `표시 누락 ${missed}/${real}`).toBe(0)
+    expect(wrong, `헛표시 ${wrong}`).toBe(0)
+  })
+
+  it('다시 뽑지 않은 기본 명단에는 스타가 없다', () => {
+    // 기본 명단은 배수를 받은 적이 없다. 여기서 스타가 뜨면 화면이
+    // 능력치가 높은 선수를 스타로 착각하고 있다는 뜻이다
+    const state = createState(PROBLEMS[0])
+    expect(state.players.filter((player) => playerDataOf(player).star)).toHaveLength(0)
   })
 })

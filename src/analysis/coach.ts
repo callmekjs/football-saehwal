@@ -340,8 +340,11 @@ function goalFinding(
       if (setup.tactics.line === 0) {
         evidence.push('라인을 낮추면 배후 침투는 줄지만 세트피스 위험은 크게 커집니다.')
       }
+      // 우리가 골을 내준 장면이다. 「득점 시점」이라고 적으면 우리가 넣은
+      // 줄로 읽힌다. 물려받은 지시에는 골문 앞이 없으므로(`setup.ts`가
+      // 걸러낸다) 이 숫자는 사용자가 직접 건 지시만 센 것이다
       const holding = [...setup.orders.values()].filter((order) => order === 'HOLD').length
-      evidence.push(`득점 시점 골문 앞 지시 ${holding}명`)
+      evidence.push(`실점 시점 내가 건 골문 앞 지시 ${holding}명`)
     } else if (primary === 'PENALTY') {
       explanation =
         '박스 안에서 반칙해 페널티킥을 내줬고, 그대로 골로 이어졌습니다. 그때 압박을 얼마나 세게 걸고 있었는지도 함께 봐야 합니다.'
@@ -503,6 +506,20 @@ function categoryText(items: Timed<Decision>[]): string {
   return parts.join(' · ')
 }
 
+/** 선수에게 직접 손댄 것 가운데 **실제로 한 것만** 세어 제목으로 */
+function personnelTitle(items: Timed<Decision>[]): string {
+  const count = (type: Decision['type']) =>
+    items.filter((item) => item.value.type === type).length
+  const parts: string[] = []
+  const sub = count('SUB')
+  if (sub > 0) parts.push(`교체 ${sub}회`)
+  const order = count('ORDER')
+  if (order > 0) parts.push(`개별 지시 ${order}회`)
+  const position = count('POSITION')
+  if (position > 0) parts.push(`직접 배치 ${position}회`)
+  return parts.join(' · ')
+}
+
 /** 한 반에서 보여줄 근거 줄 수 상한. 직접 배치는 열한 명까지 나올 수 있다 */
 const LINES_PER_HALF = 6
 
@@ -511,12 +528,16 @@ const LINES_PER_HALF = 6
  *
  * **반이 둘일 때만 만든다.** 후반만 뛴 경기에 "후반 3회"라고만 적힌 카드가
  * 하나 더 붙으면 새로 알려주는 것 없이 화면만 길어진다.
+ *
+ * 같은 이유로 **결정이 하나도 없으면 만들지 않는다.** 그때는 바로 위의
+ * `decision-none` 이 이미 "두 반 모두 개입이 없었다"를 말하고 있어서, 이
+ * 카드는 "전반 0회 · 후반 0회"로 같은 말을 한 번 더 할 뿐이다.
  */
 function halfSplitFinding(
   legs: Leg[],
   timeline: Timed<Decision>[],
 ): CoachFinding | null {
-  if (legs.length < 2) return null
+  if (legs.length < 2 || timeline.length === 0) return null
 
   const perLeg = legs.map((leg) => ({
     leg,
@@ -572,41 +593,77 @@ function decisionFindings(
   const first = timeline[0]
   const totalTicks = legs.length * TOTAL_TICKS
 
-  const impactEvidence = [
-    `무개입 ${percent(metrics.noopRate)} · 직접 판단 ${percent(metrics.userRate)}`,
-    `권장 전술 ${percent(metrics.recommendationRate)}`,
-    ...(showHalf ? ['비교 150판도 사용자와 같이 전반·후반 두 반을 이어서 돌렸습니다.'] : []),
-  ]
+  /**
+   * 개입이 0회면 「나의 판단」 채널이 무개입 채널과 **같은 시드·같은 결정·
+   * 같은 결과**다. 두 값을 빼서 나온 0 은 잰 값이 아니다.
+   *
+   * 그래서 이 카드는 개입이 있을 때만 판단을 평가하고, 없을 때는 잴 것이
+   * 없었다고 말한다. 확신도도 같이 내려간다 — 근거가 부족해서가 아니라
+   * **비교 자체가 성립하지 않아서**다.
+   */
+  const intervened = timeline.length > 0
+  const impactEvidence = intervened
+    ? [
+        `무개입 ${percent(metrics.noopRate)} · 직접 판단 ${percent(metrics.userRate)}`,
+        `권장 전술 ${percent(metrics.recommendationRate)}`,
+        ...(showHalf ? ['비교 150판도 사용자와 같이 전반·후반 두 반을 이어서 돌렸습니다.'] : []),
+      ]
+    : [
+        `물려받은 설정 그대로 ${percent(metrics.noopRate)} · 권장 전술 ${percent(
+          metrics.recommendationRate,
+        )}`,
+        '개입이 0회라 무개입과 똑같은 150판입니다',
+      ]
   result.push({
     id: 'decision-impact',
     label: '판단의 영향',
-    title:
-      metrics.userDelta >= 0.04
+    title: !intervened
+      ? '개입이 없어 판단을 따로 잴 수 없었다'
+      : metrics.userDelta >= 0.04
         ? '방치보다 성공 가능성을 분명히 높였다'
         : metrics.userDelta <= -0.04
           ? '방치보다 위험한 선택이었다'
           : '방치와 통계적으로 큰 차이가 없었다',
-    explanation: `같은 150판을 다시 돌려 한 경기의 운을 걷어냈습니다. 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
-      metrics.userDelta,
-    )}였습니다.`,
+    explanation: !intervened
+      ? '경기 중에 바꾼 것이 하나도 없어 나의 판단 쪽 150판이 무개입 150판과 똑같은 경기입니다. 여기서 0%p가 나오는 것은 판단의 효과가 아니라 견줄 것이 없다는 뜻입니다.'
+      : `같은 150판을 다시 돌려 한 경기의 운을 걷어냈습니다. 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
+          metrics.userDelta,
+        )}였습니다.`,
     evidence: impactEvidence,
-    confidence: confidenceOf(impactEvidence, { repeated: true, compared: true }),
+    confidence: confidenceOf(impactEvidence, {
+      observed: intervened,
+      repeated: intervened && timeline.length > 1,
+      compared: intervened,
+      unavailable: !intervened,
+    }),
   })
 
   const noop = metrics.profiles.noop
   const user = metrics.profiles.user
   const concededDelta = user.goalsAgainst - noop.goalsAgainst
   const scoredDelta = user.goalsFor - noop.goalsFor
-  const channelEvidence = [
-    `평균 득점 ${noop.goalsFor.toFixed(2)}→${user.goalsFor.toFixed(2)} · 평균 실점 ${noop.goalsAgainst.toFixed(2)}→${user.goalsAgainst.toFixed(2)}`,
-    `세트피스 위험 ${noop.setPiece.toFixed(1)}→${user.setPiece.toFixed(1)} · 배후 침투 ${noop.behind.toFixed(1)}→${user.behind.toFixed(1)}`,
-    `우리 슈팅 ${noop.homeShot.toFixed(1)}→${user.homeShot.toFixed(1)} · 상대 슈팅 ${noop.awayShot.toFixed(1)}→${user.awayShot.toFixed(1)}`,
-  ]
+  /**
+   * 개입이 0회면 화살표 왼쪽과 오른쪽이 언제나 같은 숫자다. `0.17→0.17` 은
+   * 비교가 아니라 같은 값을 두 번 적은 것이라, 읽는 사람에게 "바꿨는데도
+   * 안 움직였다"로 잘못 읽힌다. 그때는 화살표를 지우고 기준선 하나만 적는다.
+   */
+  const channelEvidence = intervened
+    ? [
+        `평균 득점 ${noop.goalsFor.toFixed(2)}→${user.goalsFor.toFixed(2)} · 평균 실점 ${noop.goalsAgainst.toFixed(2)}→${user.goalsAgainst.toFixed(2)}`,
+        `세트피스 위험 ${noop.setPiece.toFixed(1)}→${user.setPiece.toFixed(1)} · 배후 침투 ${noop.behind.toFixed(1)}→${user.behind.toFixed(1)}`,
+        `우리 슈팅 ${noop.homeShot.toFixed(1)}→${user.homeShot.toFixed(1)} · 상대 슈팅 ${noop.awayShot.toFixed(1)}→${user.awayShot.toFixed(1)}`,
+      ]
+    : [
+        `평균 득점 ${noop.goalsFor.toFixed(2)} · 평균 실점 ${noop.goalsAgainst.toFixed(2)}`,
+        `세트피스 위험 ${noop.setPiece.toFixed(1)} · 배후 침투 ${noop.behind.toFixed(1)}`,
+        `우리 슈팅 ${noop.homeShot.toFixed(1)} · 상대 슈팅 ${noop.awayShot.toFixed(1)}`,
+      ]
   result.push({
     id: 'decision-channels',
     label: '150판 비교',
-    title:
-      Math.abs(concededDelta) >= Math.abs(scoredDelta)
+    title: !intervened
+      ? '물려받은 설정 그대로의 150판 평균'
+      : Math.abs(concededDelta) >= Math.abs(scoredDelta)
         ? concededDelta < -0.03
           ? '실점 위험을 줄였다'
           : concededDelta > 0.03
@@ -617,10 +674,15 @@ function decisionFindings(
           : scoredDelta < -0.03
             ? '평균 득점을 낮췄다'
             : '평균 득점은 방치와 비슷했다',
-    explanation:
-      '같은 150판에서 성공 여부와 평균 득실, 위험 장면을 함께 비교했습니다.',
+    explanation: !intervened
+      ? '바꾼 것이 없어 견줄 두 줄이 같은 경기입니다. 아래는 앞 감독의 설정 그대로 150판을 돌린 평균이며, 다음 판에서 무엇을 줄이고 늘려야 하는지 읽는 기준선입니다.'
+      : '같은 150판에서 성공 여부와 평균 득실, 위험 장면을 함께 비교했습니다.',
     evidence: channelEvidence,
-    confidence: confidenceOf(channelEvidence, { repeated: true, compared: true }),
+    confidence: confidenceOf(channelEvidence, {
+      observed: true,
+      repeated: true,
+      compared: intervened,
+    }),
   })
 
   if (!first) {
@@ -748,9 +810,11 @@ function decisionFindings(
     result.push({
       id: 'decision-personnel',
       label: '선수 개입',
-      title: `교체·개별 지시·직접 배치 ${personnel.length}회`,
+      // 하지 않은 것을 제목에 적지 않는다. 교체만 한 감독에게 「교체·개별
+      // 지시·직접 배치 1회」라고 적으면 세 가지를 다 한 것처럼 읽힌다
+      title: personnelTitle(personnel),
       explanation:
-        '교체와 지시, 직접 배치를 내린 시점 그대로 150판에 다시 적용했습니다.',
+        '선수에게 직접 손댄 것은 내린 시점 그대로 150판에 다시 적용했습니다.',
       evidence,
       confidence: confidenceOf(evidence, {
         observed: true,
@@ -779,6 +843,10 @@ function turningPointOf(
       id: 'turning-point',
       label: '경기의 전환점',
       title: `${last.time} · ${last.title}`,
+      // 이 카드는 아래의 골 카드와 같은 장면이다. 왜 그 장면이 전환점인지를
+      // 앞에 붙이지 않으면, 화면에 똑같은 문단이 연달아 두 번 나온다.
+      // 새 원인을 만들지 않는다 — 시간축에서 마지막이라는 사실만 말한다
+      explanation: `이 경기에서 점수가 마지막으로 바뀐 장면입니다. ${last.explanation}`,
     }
   }
 
@@ -806,22 +874,37 @@ function prescriptionsOf(
 ): string[] {
   if (!problem.recommendation) return ['현재 국면에는 검증된 권장 전술이 없습니다.']
   const recommendation = problem.recommendation
-  const items = [
-    `킥오프 직후 ${recommendation.formation}, 라인 ${
-      LEVEL_LABEL.line[recommendation.tactics.line]
-    }, 압박 ${LEVEL_LABEL.press[recommendation.tactics.press]}, 폭 ${withJosa(
-      LEVEL_LABEL.width[recommendation.tactics.width],
-      '로으로',
-    )} 시작하세요.`,
-  ]
-
   const reached = reachesRecommendation(problem, timeline, legs)
   const totalTicks = legs.length * TOTAL_TICKS
+  /** 이번 판에 초반부터 권장 설정을 세우고 있었나 */
+  const heldFromStart = reached !== null && reached.g <= totalTicks * 0.2
+
+  const setupPhrase = `${recommendation.formation}, 라인 ${
+    LEVEL_LABEL.line[recommendation.tactics.line]
+  }, 압박 ${LEVEL_LABEL.press[recommendation.tactics.press]}, 폭 ${
+    LEVEL_LABEL.width[recommendation.tactics.width]
+  }`
+  const items = [
+    // 이미 초반에 다 맞춘 감독에게 "다음엔 이렇게 하세요"라고 같은 것을
+    // 시키면, 잘한 판단을 못 본 보고서가 된다. 그때는 시키지 말고 확인한다
+    heldFromStart
+      ? `이번에 킥오프 직후부터 세운 ${withJosa(
+          setupPhrase,
+          '이가',
+        )} 이 국면의 검증된 답입니다. 다음에도 그대로 세우고 시작하세요.`
+      : `킥오프 직후 ${recommendation.formation}, 라인 ${
+          LEVEL_LABEL.line[recommendation.tactics.line]
+        }, 압박 ${LEVEL_LABEL.press[recommendation.tactics.press]}, 폭 ${withJosa(
+          LEVEL_LABEL.width[recommendation.tactics.width],
+          '로으로',
+        )} 시작하세요.`,
+  ]
+
   if (reached === null) {
     items.push(
       '네 가지를 하나씩 늦게 바꾸지 말고 초반에 한꺼번에 맞추세요. 그래야 효과를 볼 시간이 남습니다.',
     )
-  } else if (reached.g > totalTicks * 0.2) {
+  } else if (!heldFromStart) {
     items.push(
       `${stamp(reached.leg, reached.tick, showHalf)}에 완성한 권장 설정을 다음에는 킥오프 직후부터 적용하세요.`,
     )
@@ -932,8 +1015,16 @@ export function buildCoachReport(
       : final.score[0] >= final.score[1]
         ? '동점 이상을 만들었습니다'
         : '따라잡지 못했습니다'
-  const judgmentWord =
-    metrics.userDelta >= 0.04
+  /**
+   * 개입이 하나도 없으면 「나의 판단」 150판이 무개입 150판과 **같은 경기**다.
+   *
+   * 그때 나오는 `+0.0%p` 는 잰 값이 아니라 뺄 것이 없어서 나온 0이다. 그걸
+   * 판단의 성적처럼 적으면 하지도 않은 판단을 지어내는 것이 된다.
+   */
+  const intervened = timeline.length > 0
+  const judgmentWord = !intervened
+    ? '경기 중에 바꾼 것이 없어 방치와 같은 결과입니다.'
+    : metrics.userDelta >= 0.04
       ? '다만 판단 자체는 방치보다 나았습니다.'
       : metrics.userDelta <= -0.04
         ? '결과와 별개로 판단은 방치보다 위험했습니다.'
@@ -954,12 +1045,14 @@ export function buildCoachReport(
     : ''
 
   return {
-    headline: `${final.score[0]}-${final.score[1]}, ${resultWord} ${judgmentWord}`,
+    headline: `${final.score[0]}-${final.score[1]}, ${resultWord}. ${judgmentWord}`,
     summary: [
       `우리 공격 ${totals.homeAttempt}회 → 슈팅 ${totals.homeShot}회 → 득점 ${scored}골${splitFor}`,
       `상대 공격 ${totals.awayAttempt}회 → 슈팅 ${totals.awayShot}회 → 실점 ${conceded}골${splitAgainst}`,
       `세트피스 위험 ${totals.setPiece} · 배후 침투 ${totals.behind}회`,
-      `직접 내린 판단 ${percent(metrics.userRate)} · 방치 대비 ${point(metrics.userDelta)}`,
+      intervened
+        ? `직접 내린 판단 ${percent(metrics.userRate)} · 방치 대비 ${point(metrics.userDelta)}`
+        : `개입 0회 · 물려받은 설정 그대로 ${percent(metrics.noopRate)}`,
       `권장 전술 성공 가능성 ${percent(metrics.recommendationRate)}${foeNote(final.opponentTeam)}`,
     ],
     turningPoint: turningPointOf([...rankedFor, ...rankedAgainst], decisionReview),

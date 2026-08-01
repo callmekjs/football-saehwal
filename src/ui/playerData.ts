@@ -1,4 +1,5 @@
-import { abilityOf, effectivePos, getPlayer, isStarAbility } from '../sim/squad'
+import { ROSTER } from '../sim/constants'
+import { ATTRIBUTE_DEFAULTS, abilityOf, effectivePos, getPlayer } from '../sim/squad'
 import type { Player, PlayerAttributes, PlayerState, Position } from '../sim/types'
 
 export type PlayerAvailability = 'PLAYING' | 'BENCH' | 'OUT'
@@ -134,6 +135,43 @@ const ATTRIBUTE_LAYOUT: AttributeLayout = [
 ]
 
 /**
+ * 스타로 부르려면 기준값을 넘어선 칸이 몇 개나 있어야 하는가.
+ *
+ * 다시 뽑지 않은 기본 명단에도 기준값을 넘는 칸이 최대 두 개 있다. 속도와
+ * 마무리는 포지션 평균이 아니라 그 선수의 실제 값에서 되돌려 만들기
+ * 때문이다(`squad.ts` 의 `build`). 그 둘에 걸리지 않도록 여유를 둔다.
+ */
+const STAR_OVER_KEYS = 5
+
+/**
+ * 이번 명단에서 스타인가.
+ *
+ * ★ **평균으로 짐작하지 않는다.** 전에는 마흔여섯 칸의 평균이 16 이상인가로
+ * 스타를 되짚었다. 그런데 포지션마다 원래 낮게 두는 칸이 다르다 — 공격수의
+ * 수비 칸과 수비수의 마무리 칸은 기준값이 한 자리다. 그래서 같은 배수를
+ * 받아도 그 두 자리는 평균 16에 닿지 못했고, 실측으로 **실제 스타 21,923명
+ * 중 16,561명(75.5%)이 화면에서 일반 선수로 나왔다.** 수비수는 7,650명 중
+ * 606명, 공격수는 4,159명 중 98명만 스타로 보였다. 스타 하나로 팀의 성격이
+ * 바뀌는 것이 다시 뽑기의 목적인데, 그 결과를 명단 화면이 감추고 있었다.
+ *
+ * 지금은 **그 자리의 기준값과 비교한다.** 다시 뽑기는 포지션 기준값 둘레로
+ * ±`ROSTER.spread` 만큼만 흩뿌리므로, 배수를 받지 않은 선수는 어떤 칸도
+ * `기준값 + 흩뿌림 폭`을 넘을 수 없다. 산술로 보장되는 경계다. 실측으로도
+ * 312,000명에서 스타가 아닌 선수의 초과 칸은 0개, 스타는 최소 13개였다.
+ */
+function isStarOf(pos: Position, attributes: PlayerAttributes): boolean {
+  const base = ATTRIBUTE_DEFAULTS[pos] as Record<string, number>
+  let over = 0
+  for (const [key, value] of Object.entries(attributes)) {
+    const ceiling = base[key]
+    if (ceiling === undefined) continue
+    // 1~20 눈금에 잘리므로 상한을 넘는 칸으로는 아무것도 구분하지 못한다
+    if (value > Math.min(20, ceiling + ROSTER.spread) && ++over >= STAR_OVER_KEYS) return true
+  }
+  return false
+}
+
+/**
  * 화면에 보여줄 선수 데이터.
  *
  * 종합 평점처럼 계산하지 않는 값은 만들지 않는다. 명단과 현재 경기 상태에서
@@ -156,7 +194,7 @@ export function playerDataOf(state: PlayerState): PlayerData {
     booked: state.booked,
     hasOrder: state.order !== 'NONE',
     hasFreePosition: state.position !== null,
-    star: isStarAbility(ability),
+    star: isStarOf(player.pos, ability.attributes),
     profile: player.profile,
     attributeGroups: layoutFor(player.pos).map((group) => ({
       title: group.title,

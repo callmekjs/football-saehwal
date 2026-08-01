@@ -309,17 +309,23 @@ export function lastLesson(
   ]
 
   paragraphs.push(
-    userDelta >= SAME_RATE
-      ? `당신의 판단은 방치보다 ${abs(userDelta)} 높았습니다(${percent(
+    // 개입이 0회면 두 값이 같은 것은 당연하다. 그런데도 "바꾸긴 했지만
+    // 움직이지 않았다"고 적으면, 하지도 않은 판단을 했다고 말하는 셈이다
+    found.decisions === 0
+      ? `이 판은 경기 중에 바꾼 것이 없어 방치와 완전히 같은 경기입니다(${percent(
           compare.rates.noop,
-        )} → ${percent(compare.rates.user)}). 손을 댄 것 자체는 옳았습니다.`
-      : userDelta <= -SAME_RATE
-        ? `당신의 판단은 방치보다 ${abs(userDelta)} 낮았습니다(${percent(
+        )}). 판단을 잰 값이 아니라 손대지 않았을 때의 기준선입니다.`
+      : userDelta >= SAME_RATE
+        ? `당신의 판단은 방치보다 ${abs(userDelta)} 높았습니다(${percent(
             compare.rates.noop,
-          )} → ${percent(compare.rates.user)}). 바꾼 방향이 이 국면과 맞지 않았습니다.`
-        : `당신의 판단과 방치는 성공 가능성이 거의 같았습니다(${percent(
-            compare.rates.noop,
-          )} 대 ${percent(compare.rates.user)}). 바꾸긴 했지만 결과 분포는 움직이지 않았습니다.`,
+          )} → ${percent(compare.rates.user)}). 손을 댄 것 자체는 옳았습니다.`
+        : userDelta <= -SAME_RATE
+          ? `당신의 판단은 방치보다 ${abs(userDelta)} 낮았습니다(${percent(
+              compare.rates.noop,
+            )} → ${percent(compare.rates.user)}). 바꾼 방향이 이 국면과 맞지 않았습니다.`
+          : `당신의 판단과 방치는 성공 가능성이 거의 같았습니다(${percent(
+              compare.rates.noop,
+            )} 대 ${percent(compare.rates.user)}). 바꾸긴 했지만 결과 분포는 움직이지 않았습니다.`,
   )
 
   // 어느 칸에서 가장 많이 뒤졌나. 단위가 서로 달라 비율로 견준다

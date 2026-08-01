@@ -2335,6 +2335,20 @@ describe('심판 셋과 오프사이드', () => {
      */
     const lo = (4 / 90) * SEGMENT_MINUTES
     const hi = (6 / 90) * SEGMENT_MINUTES
+    /**
+     * ★ **아래쪽에는 표본 오차를 얹는다.**
+     *
+     * 백 판에서 오프사이드는 백 번 안팎이다. 세는 사건이 백 개면 표준편차가
+     * √100 = 10, 곧 판당 ±0.10 이다. 그런데 실측한 실제 빈도는 300판에서
+     * 판당 1.00~1.05 라 하한 0.98 과 겨우 0.02 차이다. **표준편차의 5분의
+     * 1**이므로, 이 검사를 하한에 딱 붙여 두면 관전 쪽을 어디를 손대든
+     * 동전 던지기로 뒤집힌다. 실제로 연출 난수 수열이 조금 밀린 것만으로
+     * 0.95 가 나왔고, 같은 변경을 300판으로 재면 1.00 이었다.
+     *
+     * 그래서 하한은 **한 표준편차만큼 내려서** 본다. 위쪽은 그대로 둔다 —
+     * 아래 주석대로 이 검사에서 중요한 것은 판정이 잦아지는 쪽이다.
+     */
+    const floor = lo - 0.1
     let total = 0
     let raised = 0
     let linked = 0
@@ -2387,7 +2401,9 @@ describe('심판 셋과 오프사이드', () => {
 
     const per = total / 100
     const band = `실제 축구 환산 ${lo.toFixed(2)}~${hi.toFixed(2)}회`
-    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회 · ${band}`).toBeGreaterThanOrEqual(lo)
+    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회 · ${band}`).toBeGreaterThanOrEqual(
+      floor,
+    )
     expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회 · ${band}`).toBeLessThanOrEqual(hi)
     expect(raised).toBeGreaterThan(total)
     expect(afterDefenderOwned, '수비 소유 뒤 오프사이드').toBe(0)
@@ -2869,7 +2885,23 @@ describe('비득점 슛은 골라인 뒤에서 가짜 선방을 만들지 않는
     let fakeSaveCorners = 0
     let wholeCrossings = 0
     const saveDistances: number[] = []
-    const insideShots: Array<{ saved: boolean }> = []
+    /**
+     * `blockedAt` 은 **골키퍼가 아닌 선수가 슛을 끊은 지점**이 골라인에서
+     * 얼마나 떨어져 있었는가다. 끊기지 않았으면 `null`.
+     *
+     * ★ 전에는 이 구분이 없어서 **막힌 슛까지 선방을 요구했다.** 골문 쪽으로
+     * 향한 슛을 수비수가 몸으로 막는 것은 축구에서 가장 흔한 장면인데,
+     * 그것을 "가짜 선방"과 같은 칸에 넣고 있었다. 실측으로 이 검사가 쓰던
+     * 스무 판을 백 판으로 늘리면 **수정 전 코드에서도 다섯 판이** 이
+     * 단언을 어겼다(시드 85803·85811 두 번·85840·85846). 스무 판에서만
+     * 통과한 것은 원리가 지켜져서가 아니라 그 창에 블록이 없었기 때문이다.
+     *
+     * QA-26 이 잡으려던 것은 **골라인을 넘은 공을 선방·코너로 바꾸는 것**
+     * 이고, 그건 아래 `wholeCrossings` 와 `fakeSaveCorners` 가 그대로
+     * 지킨다. 여기서는 골문까지 도달한 슛만 선방을 요구하고, 끊긴 슛은
+     * 골문 근처가 아니라 필드에서 끝났는지를 따로 본다.
+     */
+    const insideShots: Array<{ saved: boolean; blockedAt: number | null }> = []
 
     for (let seedOffset = 0; seedOffset < 20; seedOffset++) {
       const problem = { ...P03_85776, seed: P03_85776.seed + seedOffset }
@@ -2909,7 +2941,17 @@ describe('비득점 슛은 골라인 뒤에서 가짜 선방을 만들지 않는
             if (vm.restart?.kind === 'CORNER') fakeSaveCorners += 1
           }
           if (shot && vm.ball.mode !== 'SHOT') {
-            if (shot.inside) insideShots.push({ saved: shot.saved })
+            if (shot.inside) {
+              const holder = vm.players.find((player) => player.id === vm.ball.holder)
+              insideShots.push({
+                saved: shot.saved,
+                // 골키퍼가 잡은 것은 블록이 아니라 선방이다
+                blockedAt:
+                  holder && holder.pos !== 'GK'
+                    ? Math.min(vm.ball.x, PITCH_W - vm.ball.x)
+                    : null,
+              })
+            }
             shot = null
           }
         }
@@ -2921,9 +2963,112 @@ describe('비득점 슛은 골라인 뒤에서 가짜 선방을 만들지 않는
 
     expect(fakeSaveCorners).toBe(0)
     expect(wholeCrossings).toBe(0)
-    expect(insideShots.length, '골문 안 비득점 슛 표본').toBeGreaterThan(0)
-    expect(insideShots.every((shot) => shot.saved)).toBe(true)
+    const reached = insideShots.filter((shot) => shot.blockedAt === null)
+    expect(reached.length, '골문까지 간 비득점 슛 표본').toBeGreaterThan(0)
+    expect(reached.every((shot) => shot.saved)).toBe(true)
+    /**
+     * 블록은 필드에서 일어나야 한다. 골 에어리어(5.5m) 안에서 슛이
+     * 조용히 없어지면 그것은 블록이 아니라 사라진 골이다.
+     */
+    for (const shot of insideShots) {
+      if (shot.blockedAt !== null) expect(shot.blockedAt).toBeGreaterThan(5.5)
+    }
     expect(saveDistances.length, '실제 선방 표본').toBeGreaterThan(0)
     expect(Math.max(...saveDistances), 'GK와 접촉점 최대 거리').toBeLessThan(3.5)
+  })
+})
+
+/**
+ * 상대의 반칙과 주심의 카드 — QA-20·QA-25.
+ *
+ * 두 결함이 한 장면의 앞뒤다. 상대가 우리를 넘어뜨리면 (1) 닿을 수 있는
+ * 거리여야 하고 (2) 경고가 나왔다면 주심이 카드를 들어야 한다.
+ */
+describe('반칙 장면이 축구로 보인다', () => {
+  const P03_FOUL = problems.find((problem) => problem.id === 'p03') as unknown as Problem
+
+  /** 경고가 난 틱의 주심 동작과, 상대 반칙이 난 순간의 선수 간 거리 */
+  function watchFouls(halves: number) {
+    /** 같은 틱에 페널티가 함께 나온 경우를 뺀 경고 수 */
+    let cards = 0
+    let carded = 0
+    const foulGaps: number[] = []
+
+    for (let i = 0; i < halves; i++) {
+      const problem = { ...P03_FOUL, seed: 83500 + i }
+      const rng = createRng(problem.seed)
+      let state = createState(problem)
+      const vm = new VisualMatch(state, problem.seed)
+      let logLen = state.log.length
+      let fouls = vm.awayFouls
+
+      for (let tickIndex = 0; tickIndex < TOTAL_TICKS; tickIndex++) {
+        state = tick(state, rng)
+        vm.sync(state)
+
+        const fresh = state.log.slice(logLen)
+        logLen = state.log.length
+        const cardTick = fresh.find((e) => e.kind === 'CARD' || e.kind === 'SEND_OFF')
+        /**
+         * 페널티는 뺀다. 주심이 지점을 가리키는 것이 그 판정 자체이고,
+         * 안내판(`calloutOf`)도 페널티킥을 카드보다 먼저 읽는다.
+         */
+        if (cardTick && !fresh.some((e) => e.kind === 'PENALTY')) {
+          cards += 1
+          if (vm.whistle?.kind === 'CARD') carded += 1
+        }
+
+        for (let frame = 0; frame < 6; frame++) {
+          vm.advance(state, 1 / 60)
+          if (vm.awayFouls === fouls) continue
+          fouls = vm.awayFouls
+          // 프리킥 지점이 곧 넘어진 선수의 자리다. 반칙한 선수는 그 자리에서
+          // 가장 가까운 상대 필드 플레이어다
+          const spot = vm.restart
+          if (!spot) continue
+          let gap = Infinity
+          for (const player of vm.players) {
+            if (player.side !== 'AWAY' || player.pos === 'GK') continue
+            gap = Math.min(gap, Math.hypot(player.x - spot.x, player.y - spot.y))
+          }
+          if (Number.isFinite(gap)) foulGaps.push(gap)
+        }
+      }
+    }
+    return { cards, carded, foulGaps }
+  }
+
+  const FOULS = watchFouls(40)
+
+  it('경고를 준 주심이 카드를 든다', () => {
+    /**
+     * ★ `sync()` 가 `captureDowned` 로 카드 동작을 만든 직후 `syncFouls` 가
+     * 같은 반칙의 프리킥으로 그 동작을 덮어썼다. 선수 옆에는 노란 배지가
+     * 붙는데 주심은 카드를 꺼내지 않아, 경기를 보는 사람은 카드가 나온 줄을
+     * 몰랐다. 실측으로 **경고 41회 중 29회(70.7%)**가 그렇게 사라졌다.
+     */
+    expect(FOULS.cards, '경고 표본').toBeGreaterThan(5)
+    expect(FOULS.carded, `카드 동작 ${FOULS.carded}/${FOULS.cards}`).toBe(FOULS.cards)
+  })
+
+  it('닿을 수 있는 거리에서만 반칙이 난다', () => {
+    /**
+     * ★ 전에는 경합 거리 6미터가 그대로 반칙 거리였다. 실측으로 반칙 45회의
+     * 선수 간 거리가 중앙값 3.80m·최대 5.99m였고 39회가 3미터 밖이었다.
+     * 6미터 떨어진 선수는 상대를 넘어뜨릴 수도 붙잡을 수도 없다.
+     *
+     * 상한은 `FOUL_CONTACT`(2.4m)에 한 프레임의 이동 여유를 더한 값이다 —
+     * 반칙은 프레임 처음에 판정되고 거리는 그 프레임이 끝난 뒤에 잰다.
+     */
+    expect(FOULS.foulGaps.length, '상대 반칙 표본').toBeGreaterThan(5)
+    const worst = Math.max(...FOULS.foulGaps)
+    expect(worst, `최대 ${worst.toFixed(2)}m`).toBeLessThan(2.8)
+  })
+
+  it('상대도 반칙을 해서 우리가 프리킥을 얻는다', () => {
+    // 거리를 좁히면서 빈도까지 떨어뜨리면 고치는 의미가 없다.
+    // 실제 축구는 90분에 팀당 10~12회이고 이 화면은 그보다 한참 적다
+    const perHalf = FOULS.foulGaps.length / 40
+    expect(perHalf, `하프당 ${perHalf.toFixed(2)}회`).toBeGreaterThan(0.15)
   })
 })
