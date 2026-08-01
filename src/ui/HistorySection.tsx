@@ -54,6 +54,10 @@ import {
   type LessonRow,
   type Trend,
 } from '../analysis/history'
+import {
+  VARIANT_COMPARISON_NOTE,
+  variantComparisonTitle,
+} from '../analysis/comparisonCopy'
 import { historySummary, timeAgo, type MatchRecord } from './matchHistory'
 
 function deltaText(delta: number | null): string {
@@ -169,10 +173,12 @@ function LessonBoard({ lesson }: { lesson: Lesson }) {
     <section className="lesson-board" aria-labelledby="lesson-title">
       <header>
         <span>
-          최근 경기 · {lesson.problemTitle} · {lesson.opponentName} 상대 · 같은 조건으로 150판 비교
+          최근 경기 · {lesson.problemTitle} · {lesson.opponentName} 상대 ·{' '}
+          {variantComparisonTitle(lesson.runs)}
         </span>
         <h3 id="lesson-title">{lesson.headline}</h3>
       </header>
+      <p className="comparison-scope-note">{VARIANT_COMPARISON_NOTE}</p>
 
       <ul className="lesson-legend">
         <li data-who="noop">

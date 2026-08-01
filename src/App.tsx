@@ -73,6 +73,12 @@ interface PickedMatch {
   half: Half
 }
 
+/** 사용자 경기와 별도로 잠깐 열리는 권장안 자동 관전 세션. */
+interface RecommendationSession {
+  mode: 'RECOMMENDATION'
+  recommendationRate: number
+}
+
 function goalLabel(problem: Problem): '리드 지키기' | '동점 이상' {
   return problem.objective.type === 'SURVIVE' ? '리드 지키기' : '동점 이상'
 }
@@ -635,6 +641,8 @@ export function App() {
   const [picked, setPicked] = useState<PickedMatch | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [replay, setReplay] = useState(0)
+  const [recommendationSession, setRecommendationSession] =
+    useState<RecommendationSession | null>(null)
   const [opponent, setOpponent] = useState<OpponentId>('USA')
   /**
    * 첫 화면을 지났는가.
@@ -742,33 +750,72 @@ export function App() {
 
   if (picked && pickedProblem) {
     const problem = pickedProblem
+    const userMatchKey = `${picked.entry.problem.id}#${picked.half}#${attempt}#${replay}#${opponent}`
     return (
-      <MatchScreen
-        key={`${picked.entry.problem.id}#${picked.half}#${attempt}#${replay}#${opponent}`}
-        problem={problem}
-        startHalf={picked.half}
-        opponent={opponent}
-        starters={starters ?? undefined}
-        roster={roster}
-        onFinish={(finished) => {
-          // 같은 판이면 덮어쓴다. 분석이 끝나면 같은 판이 한 번 더 온다
-          setHistory(upsertRecord(toRecord(finished), isSameMatch))
-          /**
-           * 경기를 마치고 나가면 **기록**으로 간다.
-           *
-           * 전에는 국면 선택으로 되돌아왔다. 방금 한 판이 어디에도 안 보이고
-           * 곧바로 다음 판을 고르라는 화면이었다. 사용자가 찾았다 —
-           * *"플레이가 다 끝나면 4번으로 안 가고 바로 다시 3번으로 가더라."*
-           *
-           * 아직 경기 화면이 떠 있으므로 이 자리에서 바꿔둬도 보이지 않는다.
-           * 나가는 순간 그 자리가 펼쳐진다.
-           */
-          setSection('history')
-        }}
-        onExit={() => setPicked(null)}
-        onRetry={() => setAttempt((n) => n + 1)}
-        onReplay={() => setReplay((n) => n + 1)}
-      />
+      <div className="match-session-stack">
+        {/*
+          사용자 결과는 관전 중에도 **마운트된 채 보관**한다. 권장안 세션을
+          닫으면 분석을 다시 계산하지 않고 방금 보던 결과와 보고서로 곧바로
+          돌아온다. hidden은 레이아웃과 접근성 트리에서도 원본을 잠깐 뺀다.
+        */}
+        <div hidden={recommendationSession !== null}>
+          <MatchScreen
+            key={userMatchKey}
+            problem={problem}
+            startHalf={picked.half}
+            opponent={opponent}
+            starters={starters ?? undefined}
+            roster={roster}
+            onFinish={(finished) => {
+              // 같은 판이면 덮어쓴다. 분석이 끝나면 같은 판이 한 번 더 온다
+              setHistory(upsertRecord(toRecord(finished), isSameMatch))
+              /**
+               * 경기를 마치고 나가면 **기록**으로 간다.
+               *
+               * 전에는 국면 선택으로 되돌아왔다. 방금 한 판이 어디에도 안 보이고
+               * 곧바로 다음 판을 고르라는 화면이었다. 사용자가 찾았다 —
+               * *"플레이가 다 끝나면 4번으로 안 가고 바로 다시 3번으로 가더라."*
+               *
+               * 아직 경기 화면이 떠 있으므로 이 자리에서 바꿔둬도 보이지 않는다.
+               * 나가는 순간 그 자리가 펼쳐진다.
+               */
+              setSection('history')
+            }}
+            onExit={() => {
+              setRecommendationSession(null)
+              setPicked(null)
+            }}
+            onRetry={() => {
+              setRecommendationSession(null)
+              setAttempt((n) => n + 1)
+            }}
+            onReplay={() => {
+              setRecommendationSession(null)
+              setReplay((n) => n + 1)
+            }}
+            onWatchRecommendation={(recommendationRate) =>
+              setRecommendationSession({
+                mode: 'RECOMMENDATION',
+                recommendationRate,
+              })
+            }
+          />
+        </div>
+
+        {recommendationSession && (
+          <MatchScreen
+            key={`${userMatchKey}#recommendation`}
+            mode={recommendationSession.mode}
+            recommendationRate={recommendationSession.recommendationRate}
+            problem={problem}
+            startHalf={picked.half}
+            opponent={opponent}
+            starters={starters ?? undefined}
+            roster={roster}
+            onExit={() => setRecommendationSession(null)}
+          />
+        )}
+      </div>
     )
   }
 
