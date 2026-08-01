@@ -86,6 +86,15 @@ describe('150판 비교를 기록에 담을 만큼만 추린다', () => {
       ['awayShot', 'behind', 'goalsAgainst', 'goalsFor', 'homeShot', 'setPiece'].sort(),
     )
   })
+
+  it('실제로 비교한 판 수를 함께 남긴다', () => {
+    const packed = toRecordCompare([
+      { key: 'noop', rate: 0.2, runs: 150, profile: profile() },
+      { key: 'user', rate: 0.5, runs: 150, profile: profile() },
+      { key: 'recommendation', rate: 0.7, runs: 150, profile: profile() },
+    ])
+    expect(packed?.runs).toBe(150)
+  })
 })
 
 describe('가장 최근 판이 남긴 것', () => {
@@ -111,6 +120,8 @@ describe('가장 최근 판이 남긴 것', () => {
   it('지키는 국면과 쫓는 국면은 보는 칸이 다르다', () => {
     const keep = lastLesson([entry({ compare: compare() })], survive)
     expect(keep?.rows.map((row) => row.key)).toEqual([
+      'goalsFor',
+      'homeShot',
       'goalsAgainst',
       'awayShot',
       'setPiece',
@@ -130,7 +141,7 @@ describe('가장 최근 판이 남긴 것', () => {
 
   it('세 갈래 값을 그대로 옮기고 방향을 붙인다', () => {
     const lesson = lastLesson([entry({ compare: compare() })], survive)!
-    const conceded = lesson.rows[0]
+    const conceded = lesson.rows.find((row) => row.key === 'goalsAgainst')!
     expect(conceded.noop).toBeCloseTo(1.4)
     expect(conceded.user).toBeCloseTo(1.1)
     expect(conceded.recommendation).toBeCloseTo(0.7)
@@ -145,6 +156,90 @@ describe('가장 최근 판이 남긴 것', () => {
     expect(lesson.headroom).toBeCloseTo(0.2)
     expect(lesson.headline).toContain('20.0%p')
     expect(lesson.paragraphs.join(' ')).toContain('60.0%')
+  })
+
+  it('권장 성공률은 더 높지만 수비 평균은 내 판단이 좋으면 거래와 설명 한계를 밝힌다', () => {
+    const lesson = lastLesson(
+      [
+        entry({
+          compare: {
+            runs: 150,
+            rates: { noop: 0.4, user: 98 / 150, recommendation: 99 / 150 },
+            noop: profile(),
+            user: profile({
+              goalsFor: 0.72,
+              homeShot: 3.8,
+              goalsAgainst: 0.93,
+              awayShot: 4.3,
+              setPiece: 4.6,
+              behind: 1.7,
+            }),
+            recommendation: profile({
+              goalsFor: 0.81,
+              homeShot: 4.5,
+              goalsAgainst: 1.17,
+              awayShot: 6.7,
+              setPiece: 4.4,
+              behind: 2.1,
+            }),
+          },
+        }),
+      ],
+      survive,
+    )!
+    const explanation = lesson.paragraphs.join(' ')
+
+    expect(lesson.rows.map((row) => row.key)).toEqual([
+      'goalsFor',
+      'homeShot',
+      'goalsAgainst',
+      'awayShot',
+      'setPiece',
+      'behind',
+    ])
+    expect(explanation).toContain('공격 쪽')
+    expect(explanation).toContain('세트피스 위험(내 판단 4.6 · 권장 4.4)도 권장안이 나았습니다')
+    expect(explanation).toContain('평균에서는 공격 여유와 수비 위험이 맞바뀌어 있습니다')
+    expect(explanation).toContain('65.3% 대 66.0%')
+    expect(explanation).toContain('1판 더 목표를 이뤘다는 뜻')
+    expect(explanation).toContain('평균만으로 성공률 차이의 원인을 하나로 단정')
+    expect(explanation).toContain('권장안이 전반적으로 더 낫다고 말할 수는 없습니다')
+  })
+
+  it('표시된 평균에 권장 우위가 없으면 성공률 차이를 설명할 수 없다고 말한다', () => {
+    const user = profile({
+      goalsFor: 0.9,
+      homeShot: 5.2,
+      goalsAgainst: 0.93,
+      awayShot: 4.3,
+      setPiece: 4.2,
+      behind: 1.7,
+    })
+    const recommendation = profile({
+      goalsFor: 0.8,
+      homeShot: 4.8,
+      goalsAgainst: 1.17,
+      awayShot: 6.7,
+      setPiece: 4.4,
+      behind: 2.1,
+    })
+    const lesson = lastLesson(
+      [
+        entry({
+          compare: {
+            runs: 150,
+            rates: { noop: 0.4, user: 98 / 150, recommendation: 99 / 150 },
+            noop: profile(),
+            user,
+            recommendation,
+          },
+        }),
+      ],
+      survive,
+    )!
+    expect(lesson.paragraphs.join(' ')).toContain(
+      '공개된 공격·수비 평균에서는 권장안이 앞선 항목을 확인할 수 없습니다',
+    )
   })
 
   /**
@@ -216,7 +311,10 @@ describe('가장 최근 판이 남긴 것', () => {
     )!
     expect(lesson.gaps.map((gap) => gap.label)).toEqual(['대형', '라인', '압박', '폭'])
     expect(lesson.gaps[1]).toEqual({ label: '라인', mine: '낮음', recommended: '보통' })
-    expect(lesson.paragraphs[lesson.paragraphs.length - 1]).toContain('라인 낮음 → 보통')
+    const setupParagraph = lesson.paragraphs[lesson.paragraphs.length - 1]
+    expect(setupParagraph).toContain('종료 시점 실제 설정: 4-4-2 · 라인 낮음 · 압박 약 · 폭 좁게')
+    expect(setupParagraph).toContain('권장 설정: 4-3-3 · 라인 보통 · 압박 중 · 폭 넓게')
+    expect(setupParagraph).toContain('라인 낮음 → 보통')
   })
 
   it('설정이 같으면 무엇이 아니라 언제의 문제라고 말한다', () => {
@@ -234,7 +332,7 @@ describe('가장 최근 판이 남긴 것', () => {
     expect(lesson.mine).toBeNull()
     expect(lesson.recommended).toBeNull()
     expect(lesson.gaps).toHaveLength(0)
-    expect(lesson.rows).toHaveLength(4)
+    expect(lesson.rows).toHaveLength(6)
   })
 
   it('같은 기록에는 같은 문장이 나온다', () => {

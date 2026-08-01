@@ -64,6 +64,8 @@ export interface RecordProfile {
 
 /** 같은 150 시드를 세 갈래에 똑같이 먹인 결과 */
 export interface RecordCompare {
+  /** 이 세 갈래를 각각 몇 판씩 돌렸는가. 이 칸이 없던 옛 기록은 150판이다 */
+  runs?: number
   rates: { noop: number; user: number; recommendation: number }
   noop: RecordProfile
   user: RecordProfile
@@ -94,6 +96,7 @@ interface ComparableRow {
   key: 'noop' | 'user' | 'recommendation'
   rate: number
   profile: RecordProfile
+  runs?: number
 }
 
 /**
@@ -109,6 +112,12 @@ export function toRecordCompare(rows: readonly ComparableRow[]): RecordCompare |
   const recommendation = pick('recommendation')
   if (!noop || !user || !recommendation) return null
 
+  const sameRuns =
+    Number.isInteger(noop.runs) &&
+    noop.runs! > 0 &&
+    user.runs === noop.runs &&
+    recommendation.runs === noop.runs
+
   const slim = (profile: RecordProfile): RecordProfile => ({
     goalsFor: profile.goalsFor,
     goalsAgainst: profile.goalsAgainst,
@@ -119,6 +128,7 @@ export function toRecordCompare(rows: readonly ComparableRow[]): RecordCompare |
   })
 
   return {
+    ...(sameRuns ? { runs: noop.runs } : {}),
     rates: {
       noop: noop.rate,
       user: user.rate,
@@ -136,6 +146,8 @@ const abs = (rate: number) => `${(Math.abs(rate) * 100).toFixed(1)}%p`
 
 /** 성공 가능성이 "사실상 같다"고 볼 폭. `verdict()` 와 같은 기준을 쓴다 */
 const SAME_RATE = 0.04
+/** `runs` 칸이 생기기 전 기록도 실제로는 이 횟수로 비교했다 */
+const LEGACY_ANALYSIS_RUNS = 150
 
 export function setupText(setup: RecordSetup): string {
   return `${setup.formation} · 라인 ${LEVEL_LABEL.line[setup.line]} · 압박 ${
@@ -174,6 +186,7 @@ export interface Lesson {
   opponentName: string
   passed: boolean
   goal: Goal
+  runs: number
   rates: { noop: number; user: number; recommendation: number }
   rows: LessonRow[]
   /** 권장안이 내 판단보다 몇 만큼 높았나. 음수면 내가 더 나았다 */
@@ -212,6 +225,10 @@ function rowsOf(compare: RecordCompare, goal: Goal): LessonRow[] {
           { key: 'behind', label: '배후 침투 허용', lower: true, digits: 1 },
         ]
       : [
+          // 리드를 지키는 성공률도 최종 득실의 결과다. 수비 위험만 보이면
+          // 추가 득점으로 한 골 차 경기를 지킨 거래가 화면에서 사라진다.
+          { key: 'goalsFor', label: '평균 득점', lower: false, digits: 2 },
+          { key: 'homeShot', label: '우리 슈팅', lower: false, digits: 1 },
           { key: 'goalsAgainst', label: '평균 실점', lower: true, digits: 2 },
           { key: 'awayShot', label: '상대 슈팅', lower: true, digits: 1 },
           { key: 'setPiece', label: '세트피스 위험', lower: true, digits: 1 },
@@ -256,6 +273,74 @@ function rowsOf(compare: RecordCompare, goal: Goal): LessonRow[] {
   })
 }
 
+/** 양수면 권장안의 평균이 낫고, 음수면 내 판단의 평균이 낫다 */
+function recommendationGain(row: LessonRow): number {
+  return row.lowerIsBetter
+    ? row.user - row.recommendation
+    : row.recommendation - row.user
+}
+
+function metricComparison(row: LessonRow): string {
+  return `${row.label}(내 판단 ${digitsOf(row.user, row.digits)} · 권장 ${digitsOf(
+    row.recommendation,
+    row.digits,
+  )})`
+}
+
+/**
+ * 성공률과 평균 지표가 서로 다른 답처럼 보일 때 그 차이를 숨기지 않는다.
+ *
+ * 성공률은 목표를 이룬 **경기 수**, 아래 막대는 150판을 한데 모은 평균이다.
+ * 평균에는 어느 경기에서 득점과 실점이 함께 났는지 남지 않으므로, 평균만
+ * 보고 한두 판의 성공 차이를 특정 채널 탓이라고 단정할 수 없다.
+ */
+function explainRecommendationEdge(
+  rows: readonly LessonRow[],
+  headroom: number,
+  runs: number,
+): string | null {
+  if (headroom <= 0) return null
+
+  const recBetter = rows.filter((row) => recommendationGain(row) > 1e-9)
+  const userBetter = rows.filter((row) => recommendationGain(row) < -1e-9)
+  const recAttack = recBetter.filter(
+    (row) => row.key === 'goalsFor' || row.key === 'homeShot',
+  )
+  const recDefense = recBetter.filter(
+    (row) => row.key !== 'goalsFor' && row.key !== 'homeShot',
+  )
+  const extraSuccesses = Math.max(1, Math.round(headroom * runs))
+  const edge = `권장안의 성공률이 ${abs(headroom)} 높았다는 것은 같은 ${runs}판에서 ${extraSuccesses}판 더 목표를 이뤘다는 뜻입니다.`
+
+  let comparison: string
+  if (recAttack.length > 0) {
+    comparison = `권장안은 공격 쪽 ${recAttack.map(metricComparison).join(', ')}에서 앞섰습니다.`
+    if (recDefense.length > 0) {
+      comparison += ` ${recDefense.map(metricComparison).join(', ')}도 권장안이 나았습니다.`
+    }
+    if (userBetter.length > 0) {
+      comparison += ` 반대로 ${userBetter.map(metricComparison).join(', ')}에서는 내 판단이 나았습니다. 평균에서는 공격 여유와 수비 위험이 맞바뀌어 있습니다.`
+    }
+  } else if (recBetter.length > 0) {
+    comparison = `권장안이 수치상 앞선 평균은 ${recBetter
+      .map(metricComparison)
+      .join(', ')}뿐입니다.`
+    if (userBetter.length > 0) {
+      comparison += ` ${userBetter.map(metricComparison).join(', ')}에서는 내 판단이 나았습니다.`
+    }
+  } else {
+    comparison =
+      '아래에 공개된 공격·수비 평균에서는 권장안이 앞선 항목을 확인할 수 없습니다.'
+  }
+
+  return (
+    `${edge} ${comparison} ` +
+    '성공률은 최종 점수로 목표를 이룬 판 수이고, 아래 수치는 모든 판을 합친 평균이라 ' +
+    '어느 한 골 차 경기에서 득실이 어떻게 짝을 이뤘는지는 보여주지 않습니다. ' +
+    '따라서 이 평균만으로 성공률 차이의 원인을 하나로 단정하거나 권장안이 전반적으로 더 낫다고 말할 수는 없습니다.'
+  )
+}
+
 /** 내 설정과 권장 설정이 어디서 갈렸나 */
 export function setupGaps(mine: RecordSetup, recommended: RecordSetup): SetupGap[] {
   const gaps: SetupGap[] = []
@@ -291,6 +376,7 @@ export function lastLesson(
 
   const goal = goalOf(found.problemId) ?? 'SURVIVE'
   const compare = found.compare
+  const runs = compare.runs ?? LEGACY_ANALYSIS_RUNS
   const rows = rowsOf(compare, goal)
   const headroom = compare.rates.recommendation - compare.rates.user
   const userDelta = compare.rates.user - compare.rates.noop
@@ -304,8 +390,9 @@ export function lastLesson(
 
   const paragraphs: string[] = [
     '회색은 앞 감독의 지시를 그대로 뒀을 때, 초록은 당신이 실제로 만든 설정, ' +
-      '노랑은 같은 국면을 1,200판 검증해 고른 권장 설정입니다. 셋 다 똑같은 150경기를 ' +
-      '돌렸기 때문에 달라진 것은 운이 아니라 판단뿐입니다.',
+      `노랑은 같은 국면을 1,200판 검증해 고른 권장 설정입니다. 셋 다 똑같은 ${runs}경기를 ` +
+      '돌렸기 때문에 달라진 것은 운이 아니라 판단뿐입니다. 이 성공률과 평균은 방금 끝난 ' +
+      '한 경기의 스코어가 아니라 반복 비교이며, 한 경기의 타파·실패와는 따로 봐야 합니다.',
   ]
 
   paragraphs.push(
@@ -355,7 +442,7 @@ export function lastLesson(
     paragraphs.push(
       `이 판은 권장 설정보다 좋았습니다(${percent(compare.rates.user)} 대 ${percent(
         compare.rates.recommendation,
-      )}). 권장안은 평균적으로 안전한 답이지 유일한 답이 아닙니다. 같은 국면을 다시 만나면 이 설정을 그대로 쓰세요.`,
+      )}). 권장안은 검증된 기준안이지 유일한 답이 아닙니다. 같은 국면을 다시 만나면 이 설정을 그대로 쓰세요.`,
     )
   } else {
     paragraphs.push(
@@ -365,6 +452,9 @@ export function lastLesson(
     )
   }
 
+  const edgeExplanation = explainRecommendationEdge(rows, headroom, runs)
+  if (edgeExplanation) paragraphs.push(edgeExplanation)
+
   const mine = found.setup ?? null
   const recommended = found.recommended ?? null
   const gaps = mine && recommended ? setupGaps(mine, recommended) : []
@@ -372,10 +462,14 @@ export function lastLesson(
   if (mine && recommended) {
     paragraphs.push(
       gaps.length > 0
-        ? `다음에 같은 국면을 만나면 ${gaps
+        ? `종료 시점 실제 설정: ${setupText(mine)}. 권장 설정: ${setupText(
+            recommended,
+          )}. 성공률은 이 종료 설정 하나가 아니라 경기 중 판단 전체를 실제 시각대로 되풀이한 값입니다. 다음에 같은 국면을 만나면 ${gaps
             .map((gap) => `${gap.label} ${gap.mine} → ${gap.recommended}`)
             .join(', ')}부터 맞추고 시작하세요.`
-        : '설정은 종료 시점에 권장안과 같았습니다. 남은 차이는 무엇을 골랐는가가 아니라 ' +
+        : `종료 시점 실제 설정과 권장 설정은 같습니다: ${setupText(mine)}. ` +
+          '성공률은 이 종료 설정 하나가 아니라 경기 중 판단 전체를 실제 시각대로 되풀이한 값입니다. ' +
+          '남은 차이는 무엇을 골랐는가가 아니라 ' +
           '언제 맞췄는가에서 옵니다. 다음에는 킥오프 직후에 네 가지를 한꺼번에 거세요.',
     )
   }
@@ -386,6 +480,7 @@ export function lastLesson(
     opponentName: found.opponentName,
     passed: found.passed,
     goal,
+    runs,
     rates: compare.rates,
     rows,
     headroom,
