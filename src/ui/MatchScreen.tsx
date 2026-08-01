@@ -1060,19 +1060,28 @@ export function MatchScreen({
    * 권장안 관전은 급수 타임에 사람이 누르는 것과 같은 setter를 지난다.
    * setter는 난수를 소비하지 않고 결정 이력에 0틱 결정을 남긴 뒤, 네 결정이
    * 모두 들어간 다음에만 경기 시계를 시작한다.
+   *
+   * 마운트 효과 안에서 바로 적용하면 실제 앱의 StrictMode가
+   * `useMatch.reset()` 효과를 한 번 더 붙이는 순간 설정과 RUNNING을 READY로
+   * 되돌린다. 첫 효과의 예약은 정리 때 취소하고, 두 번째 효과까지 끝난 다음
+   * 0ms 작업에서 적용해야 초기화보다 항상 뒤에 선다.
    */
   useEffect(() => {
     if (!recommendationMode || phase !== 'READY') return
-    if (!problem.recommendation) return
+    const recommendation = problem.recommendation
+    if (!recommendation) return
 
-    const applied = applyRecommendationOnce(
-      half,
-      recommendationApplied.current,
-      problem.recommendation,
-      { setFormation, setLever },
-    )
-    if (!applied) return
-    resume()
+    const timer = window.setTimeout(() => {
+      const applied = applyRecommendationOnce(
+        half,
+        recommendationApplied.current,
+        recommendation,
+        { setFormation, setLever },
+      )
+      if (applied) resume()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [half, phase, problem.recommendation, recommendationMode, resume, setFormation, setLever])
 
   /** 전반부터 관전했다면 하프타임도 조작 없이 같은 권장안으로 이어간다. */

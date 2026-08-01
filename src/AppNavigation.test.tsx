@@ -5,6 +5,7 @@
  * 급수 타임까지 한 번에 가고, 「경기 준비」의 01→02→03 흐름은 그대로 남아야
  * 한다.
  */
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { buildBriefing } from './analysis/briefing'
@@ -175,7 +176,13 @@ describe('첫 화면 시작 길', () => {
   })
 
   it('권장안 관전은 기록을 바꾸지 않고 원래 사용자 결과로 돌아온다', () => {
-    const view = mount(<App />)
+    // 실제 진입점(main.tsx)과 같은 생명주기다. StrictMode가 마운트 효과를
+    // 붙였다 떼어도 권장안 READY 초기화가 자동 시작을 덮어쓰면 안 된다.
+    const view = mount(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
 
     click(find(view.container, 'button.title-quick', '바로 킥오프'))
     click(find(view.container, 'button.kickoff-button', '경기 재개'))
@@ -192,6 +199,7 @@ describe('첫 화면 시작 길', () => {
     expect(historyBefore).not.toBeNull()
 
     click(watchButton)
+    advance(() => vi.advanceTimersByTime(0))
 
     const matches = [...view.container.querySelectorAll<HTMLElement>('.match-screen')]
     const watch = matches.at(-1)!
@@ -203,6 +211,12 @@ describe('첫 화면 시작 길', () => {
       '권장안 자동 적용',
     )
     expect(watch.querySelector('.recommendation-banner')?.textContent).toContain('조작 불가')
+    expect(watch.querySelector('.match-break')).toBeNull()
+    expect(watch.querySelector('.match-subs')).not.toBeNull()
+    expect(watch.querySelector('.match-meta')?.textContent).toContain('4-3-3')
+    expect(
+      [...watch.querySelectorAll('.lever-seg')].map((row) => row.getAttribute('data-value')),
+    ).toEqual(['1', '1', '2'])
     expect(
       [...watch.querySelectorAll<HTMLButtonElement>('button')]
         .filter((button) => !button.classList.contains('match-back'))
@@ -217,6 +231,7 @@ describe('첫 화면 시작 길', () => {
     expect(window.localStorage.getItem('saehwal.history.v1')).toBe(historyBefore)
 
     click(find(view.container, 'button.solution-watch', '이 권장안으로 경기 보기'))
+    advance(() => vi.advanceTimersByTime(0))
     const finishedWatch = [...view.container.querySelectorAll<HTMLElement>('.match-screen')].at(-1)!
 
     advance(() => vi.advanceTimersByTime(75_100))

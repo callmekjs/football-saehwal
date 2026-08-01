@@ -105,12 +105,17 @@ describe('경기 분석', () => {
     expect(ending).toBe(`종료 설정: ${setupText(record.setup!)}`)
   })
 
-  it('모든 국면의 권장 전술은 방치보다 성공 가능성을 확실히 높인다', () => {
-    for (let index = 0; index < raw.length; index++) {
-      const result = compareDecisions(problemAt(index), [])
-      expect(result.rows[2].rate).toBeGreaterThan(result.rows[0].rate + 0.1)
-    }
-  })
+  it(
+    '모든 국면의 권장 전술은 방치보다 성공 가능성을 확실히 높인다',
+    () => {
+      for (let index = 0; index < raw.length; index++) {
+        const result = compareDecisions(problemAt(index), [])
+        expect(result.rows[2].rate).toBeGreaterThan(result.rows[0].rate + 0.1)
+      }
+    },
+    // 150판 × 세 전략 × 다섯 국면이라 병렬 전체 검사에서는 5초를 넘을 수 있다.
+    10_000,
+  )
 
   it('전반부터 뛴 경기는 감독 보고서가 전반 결정과 전반 기록까지 말한다', () => {
     const problem = problemAt(1)
