@@ -593,6 +593,27 @@ const CARD_SHOW = 2.2
 
 /** 페널티 지역 깊이(미터). 골라인에서 16.5m 가 규격이다 */
 const PENALTY_DEPTH = 16.5
+/**
+ * 「골대 근처」의 범위(m). 박스(16.5m)와 **그 바로 앞**을 함께 본다.
+ *
+ * 사용자가 정했다 — *"플레이어가 골대 근처 특히 페널티 박스에 있을때
+ * 백 패스 할 확률 1퍼로 만들어주고 70%는 슛할 확률로 만들어."*
+ *
+ * ★ **박스 안은 원래 문제가 없었다.** 실측으로 박스 안은 이미 슛 96.2%·
+ * 백패스 0% 였다. 눈에 띄던 문전 백패스는 **박스 바로 앞 16.5~25m** 에
+ * 몰려 있었다 — 그 띠에서 슛 39.1%·백패스 34.4% 였다. 그래서 두 곳을
+ * 함께 「골대 근처」로 묶는다.
+ */
+const NEAR_GOAL = 25
+/** 골대 근처에서 지키는 최소 슛 확률. 열 번에 일곱 번이다 */
+const NEAR_GOAL_SHOT_FLOOR = 0.7
+/**
+ * 골대 근처에서 **뒤로 빼는 것**을 허용하는 비율. 백에 하나다.
+ *
+ * 0 으로 두지 않은 이유가 있다. 실제 축구에도 아주 가끔 마이너스 패스가
+ * 있고, 완전히 막으면 앞이 다 막혔을 때 할 수 있는 일이 사라진다.
+ */
+const NEAR_GOAL_BACKPASS = 0.01
 
 /** 심판이 낼 수 있는 최고 속도(초당 미터). 선수보다 느리다 */
 const REF_SPEED = 6.2
@@ -3313,7 +3334,16 @@ export class VisualMatch {
   }
 
   /** 패스 받을 사람을 고른다. 앞쪽이고 마크가 헐거우며 길목이 열린 동료 */
-  private choosePass(holder: VPlayer): VPlayer | null {
+  private choosePass(
+    holder: VPlayer,
+    /**
+     * 뒤로 빼는 선택을 아예 후보에서 뺀다. 골대 근처에서 켠다.
+     *
+     * 실측으로 박스 바로 앞(16.5~25m) 판단의 **34.4%** 가 백패스였다.
+     * 실제 축구의 그 자리는 때리거나 앞으로 넣는 자리다.
+     */
+    forwardOnly = false,
+  ): VPlayer | null {
     const dir = holder.side === 'HOME' ? 1 : -1
     let best: VPlayer | null = null
     let bestScore = -Infinity
@@ -3327,6 +3357,8 @@ export class VisualMatch {
 
       // 앞으로 갈수록 좋고, 상대가 붙어 있으면 나쁘다
       const forward = (p.x - holder.x) * dir
+      // 1미터는 옆으로 내주다 생기는 흔들림이다. 그것까지 백패스로 세지 않는다
+      if (forwardOnly && forward < -1) continue
       const marker = this.players.reduce((m, o) => {
         if (o.side === holder.side) return m
         return Math.min(m, dist(o, p))
@@ -3487,17 +3519,25 @@ export class VisualMatch {
      * 좁아, 박스 안 판단 스물둘 중 여섯이 "각이 없어 패스"로 빠졌다
      * (박스 안 슛 비율 0.73, 기준 0.75).
      */
-    if (Math.abs(p.y - GOAL_MID) > 9 + gd * 0.8) return 0
-    let want = gd <= 16.5
+    const inBox = gd <= PENALTY_DEPTH
+    /**
+     * 각이 닫혀 있으면 여전히 안 쏜다 — **박스 밖에서만이다.**
+     *
+     * 박스 안에서는 옆으로 치우쳐도 때리는 것이 실제 축구다. 전에는
+     * 여기서 무조건 0을 돌려줘 그대로 패스로 빠졌다.
+     */
+    if (!inBox && Math.abs(p.y - GOAL_MID) > 9 + gd * 0.8) return 0
+    let want = inBox
       ? clamp(1.04 - gd * 0.005, 0.94, 0.98)
-      : clamp(0.94 - (gd - 16.5) * 0.1, 0, 0.94)
+      : clamp(0.94 - (gd - PENALTY_DEPTH) * 0.1, 0, 0.94)
     // 수비가 발앞에 있어도 문전에서는 슛이 우선이다. 완전히 같은 확률로
     // 두면 압박이 무의미해지므로 막힐 여지만 작게 남긴다
     // 박스 안에서는 감점을 작게 둔다. 대형을 실제 폭으로 넓히자 박스
     // 안에서도 옆으로 치우친 자리가 늘었는데, 거기서까지 패스를 고르면
     // 문전 백패스가 다시 늘어난다(실측 박스 안 슛 비율 0.74, 기준 0.75)
-    if (nearest < 1.7) want *= gd <= 16.5 ? 0.95 : 0.88
-    return want
+    if (nearest < 1.7) want *= inBox ? 0.95 : 0.88
+    // 골대 근처에서는 무슨 일이 있어도 열 번에 일곱 번은 때린다
+    return gd <= NEAR_GOAL ? Math.max(want, NEAR_GOAL_SHOT_FLOOR) : want
   }
 
   /** 공을 가진 선수가 무엇을 할지 정한다 */
@@ -3521,7 +3561,25 @@ export class VisualMatch {
       return
     }
 
-    const target = this.choosePass(holder)
+    /**
+     * **골대 근처에서는 뒤로 빼지 않는다.**
+     *
+     * 백에 하나만 남기고 나머지는 후보에서 뺀다. 앞이 다 막혔으면
+     * `choosePass` 가 `null` 을 돌려주고 아래에서 공을 몰고 버틴다.
+     * 그게 실제 축구의 문전이다.
+     *
+     * ★ **거리는 공 위치로 잰다, 선수 위치가 아니라.** 공은 발밑에서
+     * 진행 방향으로 `CONTROL_DIST` 만큼 앞서 있고 패스는 그 지점에서
+     * 출발한다(`kickBall` 이 `fromX` 를 공 위치로 잡는다). 선수로 재면
+     * 경계가 1.3미터 어긋나 골대 24.9미터에서 나간 백패스가 필터를
+     * 빠져나간다 — 실측으로 남은 백패스 일곱 개가 전부 그 틈이었다.
+     */
+    const goalGap = Math.hypot(
+      this.goalX(holder.side) - this.ball.x,
+      GOAL_MID - this.ball.y,
+    )
+    const noBackPass = goalGap <= NEAR_GOAL && this.rng.next() >= NEAR_GOAL_BACKPASS
+    const target = this.choosePass(holder, noBackPass)
 
     // 골키퍼는 공을 몰고 나가지 않는다. 잡으면 앞으로 차낸다.
     // 아무도 못 찾으면 가장 가까운 동료에게라도 준다 — 여기서 계속

@@ -1063,8 +1063,17 @@ describe('공의 물리 — 차인 공은 단번에 서지 않는다', () => {
 describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
   const GOAL_OF = (id: string) => (id.startsWith('H') ? PITCH_W : 0)
 
-  /** 킥이 시작된 순간의 (찬 선수, 골대까지 거리, 종류) */
-  const kicks: Array<{ side: string; goalDist: number; kind: 'PASS' | 'SHOT' }> = []
+  /**
+   * 킥이 시작된 순간의 (찬 선수, 골대까지 거리, 종류).
+   *
+   * `BACK` 은 **뒤로 뺀 패스**다. 아래 `kind !== 'SHOT'` 으로 세는 검사가
+   * 있으므로 패스의 한 갈래로 둔다 — 슛 비율은 그대로 계산된다.
+   */
+  const kicks: Array<{
+    side: string
+    goalDist: number
+    kind: 'PASS' | 'SHOT' | 'BACK'
+  }> = []
   for (const fs of WIDE) {
     for (let i = 1; i < fs.length; i++) {
       const prev = fs[i - 1]
@@ -1098,10 +1107,14 @@ describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
       const gx = GOAL_OF(side)
       const from = { x: now.ball.fromX, y: now.ball.fromY }
       void p
+      // 공격 방향으로 갔나, 자기 골대 쪽으로 뺐나. 1미터는 옆으로
+      // 내주다 생기는 흔들림이라 백패스로 세지 않는다
+      const dir = side === 'H' ? 1 : -1
+      const backward = (now.ball.toX - from.x) * dir < -1
       kicks.push({
         side,
         goalDist: Math.hypot(gx - from.x, PITCH_H / 2 - from.y),
-        kind: isShot ? 'SHOT' : 'PASS',
+        kind: isShot ? 'SHOT' : backward ? 'BACK' : 'PASS',
       })
     }
   }
@@ -1118,6 +1131,35 @@ describe('슛 — 골대에 가까우면 패스보다 슛이다', () => {
     const shots = box.filter((k) => k.kind === 'SHOT').length
     expect(shots / box.length, `박스 안 슛 ${shots} vs 패스 ${box.length - shots}`)
       .toBeGreaterThanOrEqual(0.75)
+  })
+
+  it('골대 근처에서는 뒤로 빼지 않는다', () => {
+    /**
+     * 사용자가 정했다 — *"플레이어가 골대 근처 특히 페널티 박스에 있을때
+     * 백 패스 할 확률 1퍼로 만들어주고 70%는 슛할 확률로 만들어."*
+     *
+     * ★ **박스 안은 원래 문제가 없었다.** 실측으로 이미 슛 96.2%·백패스
+     * 0% 였다. 눈에 띄던 문전 백패스는 **박스 바로 앞 16.5~25미터**에
+     * 몰려 있었고 그 띠에서 백패스가 **34.4%** 였다. 그래서 두 곳을 함께
+     * 「골대 근처」로 묶어 잰다.
+     *
+     * **흘린 공(`SPILL`)은 세지 않는다.** 뺏기거나 튄 공이라 고른 것이
+     * 아니다. 화면에서는 뒤로 가는 공으로 보이지만 판단이 아니다.
+     */
+    const near = kicks.filter((k) => k.goalDist <= 25)
+    expect(near.length, '골대 근처 표본').toBeGreaterThan(40)
+
+    const shots = near.filter((k) => k.kind === 'SHOT').length
+    const back = near.filter((k) => k.kind === 'BACK').length
+
+    expect(
+      shots / near.length,
+      `골대 근처 슛 ${shots}/${near.length}`,
+    ).toBeGreaterThanOrEqual(0.7)
+    expect(
+      back / near.length,
+      `골대 근처 백패스 ${back}/${near.length}`,
+    ).toBeLessThanOrEqual(0.05)
   })
 
   it('먼 데서는 패스가 슛보다 많다', () => {
