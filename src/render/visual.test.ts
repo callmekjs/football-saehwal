@@ -15,6 +15,7 @@ import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
 import { abilityOf, effectivePos, getPlayer } from '../sim/squad'
 import { EVENTS, TOTAL_TICKS } from '../sim/constants'
+import { SEGMENT_MINUTES } from '../matchClock'
 import type { MatchState, PlayerOrder, Problem } from '../sim/types'
 import problems from '../data/problems.json'
 
@@ -936,7 +937,7 @@ describe('공의 물리 — 차인 공은 단번에 서지 않는다', () => {
     // 0이 됐다.** 차인 공이 허공에서 서는 것은 축구가 아니다. 이제 공이
     // 서는 것은 누가 잡았을 때(HELD)와 규칙상 죽었을 때(재개)뿐이다.
     //
-    // 잔디 마찰로 줄어드는 속도는 0.1초에 초속 20미터 기준 0.25m/s,
+    // 잔디 마찰로 줄어드는 속도는 0.1초에 초속 20미터 기준 0.63m/s,
     // 한 번 튀어도 30%를 넘지 않는다. 절반 아래로 떨어지면 물리가 아니다
     let checked = 0
     for (const fs of MULTI) {
@@ -978,6 +979,61 @@ describe('공의 물리 — 차인 공은 단번에 서지 않는다', () => {
     }
     expect(slowing, '굴러가는 공 표본').toBeGreaterThan(50)
     expect(speeding, '저절로 빨라진 공').toBe(0)
+  })
+
+  it('빠른 공일수록 훨씬 더 많이 죽는다 — 공기 저항은 속도의 제곱이다', () => {
+    /**
+     * 위 검사는 **방향만** 본다. 그래서 감속이 실제 축구의 5분의 3밖에
+     * 안 되어도 통과했고, 사용자가 화면을 보고 찾았다 — *"공이 계속 같은
+     * 속도로 굴러가 이건 물리법칙에 어긋나"*.
+     *
+     * 원인은 세기가 아니라 **모양**이었다. 공기 저항을 속도에 비례하게
+     * 두면(`0.54 + 0.1·v`) 초속 20미터의 공이 1초에 12%밖에 안 잃는다.
+     * 실제로는 항력이 속도의 **제곱**이라 31%를 잃는다.
+     *
+     * 그래서 여기서는 절대값이 아니라 **비율**로 잰다. 빠른 공의 감속이
+     * 느린 공의 감속보다 훨씬 커야 한다. 제곱이면 그렇게 되고 비례면
+     * 그렇게 안 된다. 상수를 조금 다듬어도 이 부등식은 살아 있다.
+     */
+    const band = (lo: number, hi: number) => {
+      const d: number[] = []
+      for (const fs of MULTI) {
+        for (let i = 1; i < fs.length; i++) {
+          const a = fs[i - 1]
+          const b = fs[i]
+          if (a.mode !== b.mode || a.mode === 'HELD') continue
+          if (a.ball.toX !== b.ball.toX || a.ball.toY !== b.ball.toY) continue
+          // 땅에 붙어 구르는 구간만. 튀는 순간은 물리가 아니라 충돌이다
+          if (a.ball.z > 0.02 || b.ball.z > 0.02) continue
+          if (a.ball.v < lo || a.ball.v >= hi) continue
+          if (b.ball.v > a.ball.v) continue
+          d.push((a.ball.v - b.ball.v) / 0.1)
+        }
+      }
+      return d
+    }
+
+    const slow = band(3, 6)
+    const fast = band(15, 22)
+    expect(slow.length, '느린 공 표본').toBeGreaterThan(30)
+    expect(fast.length, '빠른 공 표본').toBeGreaterThan(30)
+
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+    const slowA = mean(slow)
+    const fastA = mean(fast)
+
+    /**
+     * 실제 축구 — 구름 저항 0.9 + 0.0135·v² 다.
+     * 초속 4.5미터에서 1.17, 18.5미터에서 5.52 로 **4.7배**다.
+     * 속도에 비례하는 옛 모델은 0.99 → 2.39 로 2.4배밖에 안 됐다.
+     */
+    expect(
+      fastA / slowA,
+      `느린 공 ${slowA.toFixed(2)} · 빠른 공 ${fastA.toFixed(2)} m/s² (${(fastA / slowA).toFixed(1)}배)`,
+    ).toBeGreaterThan(3.2)
+
+    // 세기도 함께 지킨다. 모양만 맞고 전체가 약하면 여전히 등속으로 보인다
+    expect(fastA, `빠른 공 감속 ${fastA.toFixed(2)} m/s²`).toBeGreaterThan(3.5)
   })
 
   it('뜬 공이 있고, 떨어져서 튄다', () => {
@@ -1283,11 +1339,32 @@ describe('골은 갑자기 터지지 않는다', () => {
       // 슛이 시작된 프레임을 찾는다. 직전 한 프레임만 보면 안 된다 —
       // 한 프레임은 0.1초이고 초속 30미터짜리 슛은 그 사이 3미터를 간다.
       // 골문 앞 툭 밀어넣기는 슛과 골이 같은 프레임에 잡힌다
+      /**
+       * ★ **찬 팀이 이 골을 넣은 팀인지 반드시 확인한다.**
+       *
+       * 양 팀이 2초 안에 연달아 득점하면 이 창 안에 **상대의 득점 슛**이
+       * 함께 들어온다. 그것을 이 골의 슛으로 잡으면 거리를 반대편 골대
+       * 기준으로 재게 되어 73.9m 짜리 유령 슛이 나온다. 실측으로 그런
+       * 장면이 72판에 한 번 있었고, 검사는 그것을 "자기 진영에서 넣은
+       * 골"이라고 보고했다. 실제로는 양쪽 다 38m 안에서 쏜 정상 골이다.
+       */
       let shotAt = -1
       for (let k = Math.max(0, i - 20); k <= i; k++) {
-        if (fs[k].mode === 'SHOT' && fs[k].ball.willScore && shotAt < 0) shotAt = k
+        if (
+          fs[k].mode === 'SHOT' &&
+          fs[k].ball.willScore &&
+          fs[k].ball.lastTouch === side &&
+          shotAt < 0
+        ) {
+          shotAt = k
+        }
       }
-      while (shotAt > 0 && fs[shotAt - 1].mode === 'SHOT' && fs[shotAt - 1].ball.willScore) {
+      while (
+        shotAt > 0 &&
+        fs[shotAt - 1].mode === 'SHOT' &&
+        fs[shotAt - 1].ball.willScore &&
+        fs[shotAt - 1].ball.lastTouch === side
+      ) {
         shotAt -= 1
       }
 
@@ -2183,13 +2260,24 @@ describe('심판 셋과 오프사이드', () => {
 
   it('오프사이드 빈도가 실제 축구 범위 안이다', () => {
     /**
-     * 실제 축구는 90분에 양 팀 합쳐 4~6회다. 이 화면은 15분 구간이므로
-     * 판당 0.7~1.0회가 된다.
+     * 실제 축구는 90분에 양 팀 합쳐 4~6회다. 한 판은 그 90분 중
+     * `SEGMENT_MINUTES` 만큼이므로 그 비율로 환산한다.
      *
-     * **숫자를 박지 않고 범위로 쓴다.** 위쪽이 중요하다 — 판정이 잦으면
-     * 데드볼이 늘어 75초짜리 관전에서 볼 것이 사라진다. 아래쪽은 0을
-     * 막기만 한다. 애매하면 안 부는 쪽이 맞기 때문이다
+     * ★ **전에는 「15분 구간」이라고 적고 0.7~1.0회로 잡았다.** 이 저장소는
+     * 7/30에 한 판의 길이를 15분이 아니라 **22분**으로 바로잡았는데
+     * (`matchClock.ts` 의 `SEGMENT_MINUTES`) 이 유도만 낡은 채 남았다.
+     * 22분으로 환산하면 0.98~1.47회다. 낡은 상한 1.0은 실제 축구의
+     * **하한**에 붙어 있어서, 판정이 조금만 정확해져도 깨졌다.
+     *
+     * 그래서 숫자를 박지 않고 **단일 원본에서 유도한다.** 한 판의 길이를
+     * 다시 바꾸면 이 범위가 저절로 따라온다.
+     *
+     * **위쪽이 중요하다** — 판정이 잦으면 데드볼이 늘어 75초짜리 관전에서
+     * 볼 것이 사라진다. 아래쪽은 0을 막기만 한다. 애매하면 안 부는 쪽이
+     * 맞기 때문이다
      */
+    const lo = (4 / 90) * SEGMENT_MINUTES
+    const hi = (6 / 90) * SEGMENT_MINUTES
     let total = 0
     let raised = 0
     let linked = 0
@@ -2241,8 +2329,9 @@ describe('심판 셋과 오프사이드', () => {
     }
 
     const per = total / 100
-    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회`).toBeGreaterThanOrEqual(0.7)
-    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회`).toBeLessThanOrEqual(1)
+    const band = `실제 축구 환산 ${lo.toFixed(2)}~${hi.toFixed(2)}회`
+    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회 · ${band}`).toBeGreaterThanOrEqual(lo)
+    expect(per, `100하프 ${total}회 · 판당 ${per.toFixed(2)}회 · ${band}`).toBeLessThanOrEqual(hi)
     expect(raised).toBeGreaterThan(total)
     expect(afterDefenderOwned, '수비 소유 뒤 오프사이드').toBe(0)
     expect(linked, `깃발 뒤 휘슬·프리킥 ${linked}/${total}`).toBe(total)
