@@ -8,7 +8,7 @@ import {
   type FormationId,
 } from '../sim/formations'
 import { awaySlots } from '../sim/awayShape'
-import { effectivePos, formationRoleOf, getPlayer } from '../sim/squad'
+import { abilityOf, effectivePos, formationRoleOf, getPlayer } from '../sim/squad'
 import { MAX_ORDERS, checkPosition } from '../sim/engine'
 /**
  * 배치가 확률에 주는 효과를 **엔진과 같은 함수**로 읽는다.
@@ -865,7 +865,7 @@ export function SquadPanel({
                 ? boardPointOf(drag.target.position, { width: 100, height: 100 })
                 : null
             const detail =
-              `${p.num}번 ${currentRole} · 체력 ${Math.round(s.stamina)} · 속도 ${p.speed}` +
+              `${p.num}번 ${currentRole} · 체력 ${Math.round(s.stamina)} · 속도 ${abilityOf(s).speed}` +
               (warn ? ` · ${warn.why}` : '') +
               (s.order !== 'NONE' ? ` · 지시: ${ORDER_LABELS[s.order].name}` : '') +
               (s.position ? ` · 자유 위치: ${positionZone(s.position).depth} ${positionZone(s.position).lane}` : '')
@@ -881,11 +881,7 @@ export function SquadPanel({
                 data-immovable={p.pos === 'GK' ? 'on' : undefined}
                 data-drag={held ? (drag.blocked ? 'bad' : 'on') : undefined}
                 aria-pressed={selectedPlayerId === s.id}
-                aria-label={
-                  isCaptain
-                    ? `${p.num}번 주장, ${currentRole}, 체력 ${Math.round(s.stamina)}`
-                    : undefined
-                }
+                aria-label={`${detail}${isCaptain ? ' · 주장' : ''}`}
                 disabled={locked}
                 title={
                   p.pos === 'GK'

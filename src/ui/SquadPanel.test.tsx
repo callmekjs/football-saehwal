@@ -96,7 +96,45 @@ describe('우리 팀 배치판', () => {
     // 주장은 리더십으로 정해져 판마다 다르다. 등번호를 박지 않고
     // 완장을 찬 선수가 실제로 화면에 주장으로 적히는지만 본다
     const captain = homeCaptainNumber(stateOf('p02').players)
-    expect(html).toContain(`aria-label="${captain}번 주장,`)
+    expect(html).toMatch(new RegExp(`aria-label="${captain}번[^"]*주장`))
+  })
+
+  it('배치판 카드 설명은 고정 명단이 아니라 이번 판의 속도를 말한다', () => {
+    const base = stateOf('p02')
+    const target = base.players.find((player) => player.onPitch && !player.out)!
+    const fixed = getPlayer(target.id)
+    const matchSpeed = fixed.speed === 1 ? 2 : 1
+    const state = {
+      ...base,
+      players: base.players.map((player) =>
+        player.id === target.id
+          ? {
+              ...player,
+              ability: {
+                ...player.ability!,
+                speed: matchSpeed,
+              },
+            }
+          : player,
+      ),
+    }
+    const html = renderToStaticMarkup(
+      <SquadPanel
+        state={state}
+        locked={false}
+        onOrder={() => null}
+        onPosition={() => null}
+        onFormation={() => undefined}
+      />,
+    )
+
+    expect(matchSpeed).not.toBe(fixed.speed)
+    expect(html).toMatch(
+      new RegExp(`aria-label="${fixed.num}번[^"]*속도 ${matchSpeed}[^"]*"`),
+    )
+    expect(html).toMatch(
+      new RegExp(`title="${fixed.num}번[^"]*속도 ${matchSpeed}[^"]*"`),
+    )
   })
 
   it('강한 압박 아래 경고 선수는 실제 퇴장 전까지 퇴장 위험으로 표시한다', () => {

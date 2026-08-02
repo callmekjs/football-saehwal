@@ -7,7 +7,7 @@ import {
   SquadPanel,
   playerExitLabel,
 } from './SquadPanel'
-import { BENCH, assignFormationRoles, effectivePos, getPlayer, meanStamina } from '../sim/squad'
+import { BENCH, abilityOf, assignFormationRoles, effectivePos, getPlayer, meanStamina } from '../sim/squad'
 import {
   applyAwayFatigue,
   applyOpponent,
@@ -555,7 +555,7 @@ function Bench({
               >
                 <span className="bench-num">{b.num}</span>
                 <span className="bench-sub">
-                  {s.out ? '이탈' : s.onPitch ? '출전 중' : `${b.pos} · 속도 ${b.speed}`}
+                  {s.out ? '이탈' : s.onPitch ? '출전 중' : `${b.pos} · 속도 ${abilityOf(s).speed}`}
                 </span>
               </button>
             )

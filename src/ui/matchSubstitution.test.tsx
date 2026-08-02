@@ -16,6 +16,7 @@ import { MatchScreen } from './MatchScreen'
 import { advance, click, find, mount } from './domHarness'
 import { createState } from '../sim/engine'
 import { PROBLEMS } from '../sim/problems'
+import { BENCH, rollRoster } from '../sim/squad'
 
 /** 교체 카드 세 장짜리 국면. 3 → 2 가 되는 것을 눈으로 셀 수 있다 */
 const PROBLEM = PROBLEMS.find((problem) => problem.id === 'p01')!
@@ -102,6 +103,38 @@ describe('급수 타임 · 배치판 카드로 교체하기', () => {
       '5번 → 15번',
     )
     expect(view.container.textContent).not.toContain('교체할 수 없습니다')
+
+    view.unmount()
+  })
+
+  it('명단을 다시 뽑아도 벤치 카드와 상세가 같은 이번 판 속도를 쓴다', () => {
+    const roster = rollRoster(1)
+    const player = BENCH.find((entry) => entry.num === 15)!
+    // 국면 시작 때 같은 포지션 안에서 능력 주인이 한 번 더 섞인다. 화면은
+    // 입력 명단표가 아니라 그 섞기까지 끝난 실제 PlayerState를 읽어야 한다.
+    const expected = createState(PROBLEM, 'USA', undefined, roster)
+      .players.find((entry) => entry.id === player.id)!.ability!.speed
+    expect(expected).not.toBe(player.speed)
+
+    const view = mount(
+      <MatchScreen
+        problem={PROBLEM}
+        startHalf={2}
+        roster={roster}
+        onExit={() => undefined}
+      />,
+    )
+
+    const chip = benchChip(view.container, player.num)!
+    expect(chip.textContent).toContain(`속도 ${expected}`)
+    expect(chip.textContent).not.toContain(`속도 ${player.speed}`)
+
+    click(chip)
+    const speedMetric = [...view.container.querySelectorAll('.player-data-metrics > div')]
+      .find((metric) => metric.querySelector('dt')?.textContent === '속도')
+      ?.querySelector('dd')
+    expect(speedMetric?.textContent?.trim()).toBe(String(expected))
+    expect(benchChip(view.container, player.num)?.getAttribute('aria-pressed')).toBe('true')
 
     view.unmount()
   })

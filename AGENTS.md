@@ -84,7 +84,7 @@ npx tsx -e "import('./src/sim/engine.ts').then(()=>console.log('OK'))"
 ## 2. 바꾸기 전에 확인해야 하는 것
 
 ```bash
-npm test        # 738개. 전부 통과해야 한다
+npm test        # 743개. 전부 통과해야 한다
 npx tsc --noEmit # 타입 오류 0
 npm run sim     # 다섯 국면 전부 "합격"
 ```
@@ -404,7 +404,7 @@ Claude Code에서는 **`coach-agent`** (`.claude/agents/coach-agent.md`)를 쓴�
 
 ```bash
 npm run dev     # 개발 서버
-npm test        # 테스트 738개
+npm test        # 테스트 743개
 npm run sim     # 밸런스 검증 (시드 1200개 x 27조합 x 5국면, 난이도 「보통」)
 npm run sim -- --team=ALL   # 상대 13팀 전부 (45~80분)
 npm run build   # 프로덕션 빌드 (타입 검사 포함)
