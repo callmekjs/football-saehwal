@@ -5634,6 +5634,69 @@ button {
   gap: 10px;
 }
 
+.coach-simple-summary {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-simple-summary > div {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line-3);
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.coach-simple-summary dt {
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.coach-simple-summary dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.coach-technical-details {
+  border: 1px solid var(--line-3);
+  border-radius: 7px;
+  background: var(--panel-deep);
+}
+
+.coach-technical-details > summary {
+  min-height: 44px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--dim-2);
+  font-size: 11px;
+  font-weight: 750;
+  list-style: none;
+}
+
+.coach-technical-details > summary::-webkit-details-marker { display: none; }
+.coach-technical-details > summary::after {
+  content: '+';
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 16px;
+}
+.coach-technical-details[open] > summary::after { content: '−'; }
+
+.coach-technical-body {
+  padding: 0 8px 8px;
+  display: grid;
+  gap: 10px;
+}
+
 .evidence-body .coach-overview ul {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -5759,6 +5822,8 @@ button {
   .evidence-body .coach-findings {
     grid-template-columns: 1fr;
   }
+
+  .coach-simple-summary { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 390px) {

@@ -165,6 +165,16 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
     expect(comparison?.textContent).toContain('무개입')
     expect(comparison?.textContent).toContain('나의 판단')
     expect(comparison?.textContent).toContain('권장 전술')
+
+    const coach = view.container.querySelector<HTMLDetailsElement>('.coach-details')
+    coach?.setAttribute('open', '')
+    const simple = coach?.querySelector('.coach-simple-summary')?.textContent ?? ''
+    expect(simple).toContain('무슨 일이 있었나요?')
+    expect(simple).toContain('쉽게 말하면')
+    expect(simple).toContain('다음에는 뭘 해야 하나요?')
+    const technical = coach?.querySelector<HTMLDetailsElement>('.coach-technical-details')
+    expect(technical?.open).toBe(false)
+    expect(technical?.querySelector('summary')?.textContent).toContain('숫자와 장면 기록')
     expect(comparison?.textContent).toContain('상대 슈팅')
 
     view.unmount()

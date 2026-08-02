@@ -532,42 +532,62 @@ export function AnalysisPanel({
             <details className="coach-details analysis-evidence">
               <summary>왜 이런 결과가 나왔는지 자세히 보기</summary>
               <div className="evidence-body">
-                <section className="coach-overview">
-                  <span>감독 보고서 · 실제 경기 기록 분석</span>
-                  <h3>{analysis.coach.headline}</h3>
-                  <ul>
-                    {analysis.coach.summary.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </section>
+                <dl className="coach-simple-summary">
+                  <div>
+                    <dt>무슨 일이 있었나요?</dt>
+                    <dd>{analysis.coach.headline}</dd>
+                  </div>
+                  <div>
+                    <dt>쉽게 말하면</dt>
+                    <dd>{analysis.coach.summary[0]}</dd>
+                  </div>
+                  <div>
+                    <dt>다음에는 뭘 해야 하나요?</dt>
+                    <dd>{analysis.coach.prescriptions[0]}</dd>
+                  </div>
+                </dl>
 
-                <div className="coach-section">
-                  <h3>경기의 전환점</h3>
-                  <FindingCard finding={analysis.coach.turningPoint} />
-                </div>
+                <details className="coach-technical-details">
+                  <summary>숫자와 장면 기록 더 보기</summary>
+                  <div className="coach-technical-body">
+                    <section className="coach-overview">
+                      <span>감독 보고서 · 실제 경기 기록 분석</span>
+                      <h3>{analysis.coach.headline}</h3>
+                      <ul>
+                        {analysis.coach.summary.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </section>
 
-                <div className="coach-findings">
-                  {analysis.coach.goalsFor.map((finding) => (
-                    <FindingCard key={finding.id} finding={finding} />
-                  ))}
-                  {analysis.coach.goalsAgainst.map((finding) => (
-                    <FindingCard key={finding.id} finding={finding} />
-                  ))}
-                  {analysis.coach.decisionReview.map((finding) => (
-                    <FindingCard key={finding.id} finding={finding} />
-                  ))}
-                </div>
+                    <div className="coach-section">
+                      <h3>경기의 전환점</h3>
+                      <FindingCard finding={analysis.coach.turningPoint} />
+                    </div>
 
-                <section className="coach-prescriptions">
-                  <h3>다음 경기에서 바꿀 것</h3>
-                  <ol>
-                    {analysis.coach.prescriptions.map((prescription) => (
-                      <li key={prescription}>{prescription}</li>
-                    ))}
-                  </ol>
-                </section>
-                <p className="evidence-note">{oneMove.note}</p>
+                    <div className="coach-findings">
+                      {analysis.coach.goalsFor.map((finding) => (
+                        <FindingCard key={finding.id} finding={finding} />
+                      ))}
+                      {analysis.coach.goalsAgainst.map((finding) => (
+                        <FindingCard key={finding.id} finding={finding} />
+                      ))}
+                      {analysis.coach.decisionReview.map((finding) => (
+                        <FindingCard key={finding.id} finding={finding} />
+                      ))}
+                    </div>
+
+                    <section className="coach-prescriptions">
+                      <h3>다음 경기에서 바꿀 것</h3>
+                      <ol>
+                        {analysis.coach.prescriptions.map((prescription) => (
+                          <li key={prescription}>{prescription}</li>
+                        ))}
+                      </ol>
+                    </section>
+                    <p className="evidence-note">{oneMove.note}</p>
+                  </div>
+                </details>
               </div>
             </details>
           </>
