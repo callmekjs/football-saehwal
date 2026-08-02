@@ -1041,6 +1041,22 @@ describe('공의 물리 — 차인 공은 단번에 서지 않는다', () => {
     expect(fastA, `빠른 공 감속 ${fastA.toFixed(2)} m/s²`).toBeGreaterThan(3.5)
   })
 
+  it('뜬 공도 날아가는 동안 계속 느려진다', () => {
+    let checked = 0
+    for (const fs of MULTI) {
+      for (let i = 1; i < fs.length; i++) {
+        const a = fs[i - 1]
+        const b = fs[i]
+        if (a.mode === 'HELD' || a.mode !== b.mode) continue
+        if (a.ball.toX !== b.ball.toX || a.ball.toY !== b.ball.toY) continue
+        if (a.ball.z < 0.2 || b.ball.z < 0.2 || a.ball.v < 3) continue
+        checked += 1
+        expect(b.ball.v).toBeLessThan(a.ball.v)
+      }
+    }
+    expect(checked, '날아가는 공 표본').toBeGreaterThan(30)
+  })
+
   it('뜬 공이 있고, 떨어져서 튄다', () => {
     // 롱패스와 슛은 공중을 지난다. 전부 땅볼이면 축구로 안 보인다
     let maxZ = 0
@@ -1700,7 +1716,10 @@ describe('교체 — 진짜로 선수가 바뀐다', () => {
         const last = ys[ys.length - 1]
         // 가까운 쪽 터치라인(0 또는 68)으로 다가갔는가
         const line = first < PITCH_H / 2 ? 0 : PITCH_H
-        expect(Math.abs(last - line)).toBeLessThan(Math.abs(first - line))
+        // 이미 선을 넘어 경기장 밖까지 걸어간 경우도 성공이다. 시작점이
+        // 선 바로 앞이면 마지막 좌표의 절댓값만 비교할 때 오히려 멀어진
+        // 것처럼 보인다.
+        expect(last <= 0 || last >= PITCH_H || Math.abs(last - line) < Math.abs(first - line)).toBe(true)
         sawWalk += 1
       }
     }

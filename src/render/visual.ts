@@ -348,8 +348,8 @@ const ROLL_DRAG = 0.0135
  * 0.83)보다 훨씬 덜 튄다. 잔디 위에서는 대략 0.6이다.
  */
 const BOUNCE = 0.6
-/** 공중 저항 */
-const AIR_DRAG = 0.05
+/** 공중 저항 계수. 수평 속도의 제곱에 곱한다. */
+const AIR_DRAG = 0.008
 /** 이 높이 아래면 발이 닿는다. 크로스바가 2.44m 다 */
 const REACH_HEIGHT = 1.9
 /** 슛 속도. 프로 선수의 슛은 초속 25~35미터다 */
@@ -4356,9 +4356,13 @@ export class VisualMatch {
     if (b.z > 0 || b.vz > 0) {
       b.vz -= GRAVITY * dt
       b.z += b.vz * dt
-      const drag = Math.max(0, 1 - AIR_DRAG * dt)
-      b.vx *= drag
-      b.vy *= drag
+      const airSpeed = Math.hypot(b.vx, b.vy)
+      if (airSpeed > 0) {
+        // 뜬 공도 등속으로 날지 않는다. 빠를수록 항력이 크게 걸린다.
+        const next = Math.max(0, airSpeed - AIR_DRAG * airSpeed * airSpeed * dt)
+        b.vx = (b.vx / airSpeed) * next
+        b.vy = (b.vy / airSpeed) * next
+      }
       if (b.z <= 0) {
         b.z = 0
         // 잔디에 떨어지며 튄다. 튈 때마다 수직 속도가 줄어 결국 구른다
