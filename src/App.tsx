@@ -8,6 +8,7 @@ import raw from './data/problems.json' with { type: 'json' }
 import { noActionRate, referenceNoActionRate } from './analysis/balanceBaseline'
 import {
   OUR_ABILITY_AVERAGE,
+  OPPONENT_DATA_NOTICE,
   TIER_LABEL,
   opponentAbilityAverage,
   opponentAbilityRatio,
@@ -235,6 +236,10 @@ function OpponentPicker({
         </div>
         <p>고른 팀이 어떤 축구를 하는지가 오른쪽에 함께 바뀝니다.</p>
       </div>
+
+      <p className="opp-foot" role="note" aria-label="데이터 안내">
+        <b>데이터 안내</b> · {OPPONENT_DATA_NOTICE}
+      </p>
 
       <div className="opp-layout">
         <div className="opp-list">

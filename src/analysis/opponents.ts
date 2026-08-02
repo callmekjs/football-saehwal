@@ -34,6 +34,10 @@ export const TIER_LABEL: Record<OpponentTeam['tier'], string> = {
  */
 export const REFERENCE_TEAM: OpponentId = 'USA'
 
+/** 공개 화면과 문서가 같은 경계를 말하도록 한 데이터 안내. */
+export const OPPONENT_DATA_NOTICE =
+  '국가명과 참고 순위만 FIFA 랭킹을 참고했습니다. 순위는 화면 표시용이며 경기 계산에는 쓰이지 않습니다. 국면·선수·공격력·수비력·팀 성향은 게임을 위해 만든 창작 데이터입니다.'
+
 export function opponentInfo(id: OpponentId): OpponentTeam {
   const found = OPPONENTS.teams.find((team) => team.id === id)
   if (!found) throw new Error(`없는 상대 팀: ${id}`)
