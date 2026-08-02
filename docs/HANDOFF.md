@@ -1,11 +1,19 @@
 # Codex 인수인계 — 이 파일 하나만 읽으면 된다
 
-> 마지막 갱신 **2026-08-02** · 상대 선택 화면의 빈 공간과 진행 흐름을 정리했다.
-> 다음은 Vercel 배포와 시연영상·제출뿐이다.
+> 마지막 갱신 **2026-08-02** · 상대 전력을 세 가지 쉬운 말로 정리했다.
+> Vercel 배포는 끝났고 다음은 시연영상·제출뿐이다.
 > 오늘용 짧은 순서는 [`docs/TOMORROW_HANDOFF.md`](TOMORROW_HANDOFF.md)에 있다.
 > 전에 `docs/CODEX_RESUME.md` 가 따로 있었으나 **이 파일로 합쳤다.**
 >
 > 배경 규칙은 `AGENTS.md`, 오늘 이전의 기록은 이 문서 아래쪽에 있다.
+
+### 상대 전력 문구와 색 정리
+
+- 다섯 개 막대를 공격력·수비력·결정력 세 카드로 줄였다.
+- `1.00배`·`기준` 대신 강함·보통·약함으로 표시하고, 각 카드에 뜻을 한 줄로
+  설명한다.
+- 붉은 막대는 없애고 호박색·파란색·초록색을 작은 강조에만 쓴다.
+- 표시만 바꿨으며 상대 데이터·확률·경기 계산은 그대로다.
 
 ### 상대 선택 화면 밀도 정리
 
@@ -30,7 +38,7 @@
 cd C:\football_hackerton
 git pull --ff-only
 git status          # 남의 미완성 작업이 있으면 건드리지 말고 사용자에게 알린다
-npm test            # 738개 통과
+npm test            # 739개 통과
 npx tsc --noEmit    # 0
 ```
 
@@ -883,13 +891,13 @@ ROLL_DRAG  0.1  → 0.0135   공기 항력 ½ρC_dA/m — 이제 v² 에 곱한�
 ## 1. 지금 상태
 
 ```bash
-npm test          # 738개
+npm test          # 739개
 npx tsc --noEmit  # 0
 npm run build
 npm run sim       # 기준팀(미국). 다섯 국면 전 국면 합격
 ```
 
-배포는 살아 있다 — <https://callmekjs.github.io/football-saehwal/>
+Vercel 배포는 살아 있다 — <https://football-saehwal.vercel.app/>
 `main` push 마다 자동으로 올라가며 **저장소에 커밋을 만들지 않는다.**
 Vercel 을 붙일 때 이 성질이 유지되는지 반드시 확인한다. 마감 뒤 커밋이
 생기면 실격이다.

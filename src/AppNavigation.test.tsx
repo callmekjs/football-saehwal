@@ -102,6 +102,12 @@ describe('첫 화면 시작 길', () => {
     const scouting = view.container.querySelector('.opp-scouting')?.textContent ?? ''
     expect(dossier).toContain('일본')
     expect(dossier).toContain('선택 완료')
+    expect(dossier).toContain('상대 전력 한눈에')
+    expect(dossier).toContain('공격력')
+    expect(dossier).toContain('수비력')
+    expect(dossier).toContain('결정력')
+    expect(dossier).not.toContain('상대가 주로 공격하는 방법')
+    expect(view.container.querySelectorAll('.opp-trait')).toHaveLength(3)
     expect(dossier).not.toContain('주요 선수')
     expect(scouting).toContain('주요 선수')
     expect(scouting).toContain('즐겨 서는 대형')

@@ -7474,8 +7474,8 @@ button {
 }
 .opp-compare strong[data-strong='on'] { color: var(--away); }
 
-.opp-meters, .opp-key, .opp-shape { display: grid; gap: 6px; }
-.opp-meters h3, .opp-key h3, .opp-shape h3 {
+.opp-traits, .opp-key, .opp-shape { display: grid; gap: 6px; }
+.opp-traits h3, .opp-key h3, .opp-shape h3 {
   margin: 0;
   display: flex;
   align-items: baseline;
@@ -7488,43 +7488,31 @@ button {
 }
 .opp-key h3 small, .opp-shape h3 small { color: var(--dim-3); font-size: 9px; letter-spacing: 0; }
 
-.opp-meter {
+.opp-traits > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.opp-trait {
+  min-width: 0;
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr) 46px;
-  align-items: center;
-  gap: 8px;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--trait-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
 }
-.opp-meter > small { color: var(--dim-2); font-size: 10.5px; }
-.opp-meter > i {
-  position: relative;
-  display: block;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.07);
+.opp-trait[data-tone='attack'] { --trait-color: #d9a75f; }
+.opp-trait[data-tone='defense'] { --trait-color: #6faac7; }
+.opp-trait[data-tone='finish'] { --trait-color: #78bd92; }
+.opp-trait > span { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.opp-trait small { color: var(--text); font-size: 11px; font-weight: 700; }
+.opp-trait b {
+  padding: 2px 6px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--trait-color) 14%, transparent);
+  color: var(--trait-color);
+  font-size: 10px;
 }
-/* 기준 눈금. 여기가 「보통」이다 */
-.opp-meter > i u {
-  position: absolute;
-  top: -2px;
-  width: 1px;
-  height: 10px;
-  background: var(--dim-3);
-}
-.opp-meter > i b {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--accent);
-}
-.opp-meter[data-side='up'] > i b { background: var(--away); }
-.opp-meter > b {
-  font-family: var(--num);
-  font-size: 12px;
-  text-align: right;
-  color: var(--dim-2);
-}
-.opp-meter[data-side='up'] > b { color: var(--away); }
+.opp-trait p { margin: 0; color: var(--dim-2); font-size: 9.5px; line-height: 1.45; }
+.opp-trait[data-level='약함'] { opacity: 0.72; }
 
 .opp-key ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .opp-key li {
@@ -7672,11 +7660,11 @@ button {
 
 @media (max-width: 1100px) {
   .opp-layout { grid-template-columns: minmax(0, 1fr); }
-  .opp-meter { grid-template-columns: 104px minmax(0, 1fr) 44px; }
   .opp-scouting { grid-column: 1; }
 }
 
 @media (max-width: 700px) {
+  .opp-traits > div { grid-template-columns: minmax(0, 1fr); }
   .opp-scouting { grid-template-columns: minmax(0, 1fr); }
   .opp-scouting > .opp-foot { grid-column: 1; }
   .opp-scouting .opp-board { max-width: none; }

@@ -91,40 +91,33 @@ function situationNote(state: MatchState): string {
   return '전원 정상'
 }
 
-/**
- * 기준선을 낀 막대 하나.
- *
- * 값 하나만 숫자로 적으면 그것이 센 것인지 약한 것인지 알 수 없다. 기준
- * 눈금을 함께 그려서 **어느 쪽으로 얼마나 치우쳤는지**를 보이게 한다.
- */
-function Meter({
+type TraitLevel = '강함' | '보통' | '약함'
+
+function traitLevel(value: number, base: number, threshold: number): TraitLevel {
+  if (value >= base + threshold) return '강함'
+  if (value <= base - threshold) return '약함'
+  return '보통'
+}
+
+/** 숫자 대신 처음 보는 사람도 바로 뜻을 아는 세 단계로 읽어 준다. */
+function OpponentTrait({
   label,
-  value,
-  min,
-  max,
-  base,
-  read,
+  description,
+  level,
+  tone,
 }: {
   label: string
-  value: number
-  min: number
-  max: number
-  /** 기준 눈금. 여기가 「보통」이다 */
-  base: number
-  /** 사람이 읽는 값 */
-  read: string
+  description: string
+  level: TraitLevel
+  tone: 'attack' | 'defense' | 'finish'
 }) {
-  const at = (v: number) => ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * 100
-  const from = Math.min(at(base), at(value))
-  const to = Math.max(at(base), at(value))
   return (
-    <div className="opp-meter" data-side={value >= base ? 'up' : 'down'}>
-      <small>{label}</small>
-      <i aria-hidden>
-        <u style={{ left: `${at(base)}%` }} />
-        <b style={{ left: `${from}%`, width: `${Math.max(1.5, to - from)}%` }} />
-      </i>
-      <b>{read}</b>
+    <div className="opp-trait" data-tone={tone} data-level={level}>
+      <span>
+        <small>{label}</small>
+        <b>{level}</b>
+      </span>
+      <p>{description}</p>
     </div>
   )
 }
@@ -324,48 +317,28 @@ function OpponentPicker({
             <strong data-strong={ratio >= 1 ? 'on' : undefined}>{ratio.toFixed(2)}배</strong>
           </div>
 
-          <div className="opp-meters">
-            <h3>상대가 주로 공격하는 방법</h3>
-            <Meter
-              label="수비 뒤 공간으로 보내기"
-              value={selected.shape.behind}
-              min={0.6}
-              max={1.5}
-              base={1}
-              read={`${selected.shape.behind.toFixed(2)}배`}
-            />
-            <Meter
-              label="짧은 패스로 파고들기"
-              value={selected.shape.open}
-              min={0.6}
-              max={1.5}
-              base={1}
-              read={`${selected.shape.open.toFixed(2)}배`}
-            />
-            <Meter
-              label="기회를 골로 연결하기"
-              value={selected.shape.finish}
-              min={0.6}
-              max={1.5}
-              base={1}
-              read={`${selected.shape.finish.toFixed(2)}배`}
-            />
-            <Meter
-              label="공격 능력"
-              value={selected.atk}
-              min={-1}
-              max={1}
-              base={0}
-              read={selected.atk === 0 ? '기준' : `${selected.atk > 0 ? '+' : ''}${selected.atk}`}
-            />
-            <Meter
-              label="수비 능력"
-              value={selected.def}
-              min={-1}
-              max={1}
-              base={0}
-              read={selected.def === 0 ? '기준' : `${selected.def > 0 ? '+' : ''}${selected.def}`}
-            />
+          <div className="opp-traits">
+            <h3>상대 전력 한눈에</h3>
+            <div>
+              <OpponentTrait
+                label="공격력"
+                description="기회를 만드는 힘"
+                level={traitLevel(selected.atk, 0, 0.15)}
+                tone="attack"
+              />
+              <OpponentTrait
+                label="수비력"
+                description="상대 공격을 막는 힘"
+                level={traitLevel(selected.def, 0, 0.15)}
+                tone="defense"
+              />
+              <OpponentTrait
+                label="결정력"
+                description="기회를 골로 바꾸는 힘"
+                level={traitLevel(selected.shape.finish, 1, 0.075)}
+                tone="finish"
+              />
+            </div>
           </div>
 
           <p className="opp-ready">
