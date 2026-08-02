@@ -240,10 +240,11 @@ describe('첫 화면 시작 길', () => {
     expect(situationCards).toHaveLength(5)
     for (const card of situationCards) {
       const text = card.textContent ?? ''
-      expect(text).toContain('목표 ·')
       expect(text).toContain('목표 달성 확률')
-      expect(text).toContain('전 · 아무것도 바꾸지 않으면')
-      expect(text).not.toMatch(/SURVIVE|EQUALIZE|제\d국면|만 버팁니다/)
+      expect(text).toContain('전 · 현재 전술 기준')
+      expect(text).not.toMatch(
+        /SURVIVE|EQUALIZE|제\d국면|목표 ·|아무것도 바꾸지 않으면|만 버팁니다/,
+      )
     }
 
     const selectedCard = view.container.querySelector('.kickoff-situation[data-selected="true"]')

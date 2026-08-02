@@ -443,7 +443,7 @@ function SituationCard({
     >
       <span className="kickoff-situation-top">
         <b>상황 {n}</b>
-        <em>목표 · {survive ? '리드 지키기' : '동점 만들기'}</em>
+        <em>{survive ? '리드 지키기' : '동점 만들기'}</em>
       </span>
       <span className="kickoff-situation-score">
         {problem.score[0]}
@@ -467,7 +467,7 @@ function SituationCard({
         </u>
       </span>
       <span className="kickoff-survival">
-        <small>{opponentInfo(opponent).name}전 · 아무것도 바꾸지 않으면</small>
+        <small>{opponentInfo(opponent).name}전 · 현재 전술 기준</small>
         <b>{(rate * 100).toFixed(1)}%</b>
         <em>목표 달성 확률</em>
         <i className="kickoff-survival-bar" aria-hidden>
