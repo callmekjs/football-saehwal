@@ -321,7 +321,7 @@ export function AnalysisPanel({
       <section className="survival-hero">
         <header className="survival-hero-head">
           <div>
-            <span className="survival-kicker">경기 복기 · 실제 경기 기록</span>
+            <span className="survival-kicker">경기 끝 · 한눈에 보기</span>
             <h2>{story.outcome.title}</h2>
             <p>{problem.title}</p>
           </div>
@@ -336,14 +336,14 @@ export function AnalysisPanel({
         <ol className="story-route story-core" aria-label="결과와 핵심 판단">
           <li className="story-stage outcome">
             <span className="story-index">01</span>
-            <small>목표 결과</small>
-            <strong>{passed ? '타파 성공' : '타파 실패'}</strong>
+            <small>이번 목표</small>
+            <strong>{passed ? '목표 달성' : '목표 실패'}</strong>
             <p>{story.crisis.objective}</p>
             <span className="outcome-mark">{passed ? '✓' : '×'}</span>
           </li>
           <li className="story-stage response">
             <span className="story-index">02</span>
-            <small>내 핵심 판단</small>
+            <small>내가 바꾼 것</small>
             {firstBeat ? (
               <>
                 <time>{firstBeat.time}</time>
@@ -357,7 +357,7 @@ export function AnalysisPanel({
                 )}
               </>
             ) : (
-              <strong className="no-response">개입 없음</strong>
+              <strong className="no-response">바꾼 것 없음</strong>
             )}
           </li>
         </ol>
@@ -436,20 +436,20 @@ export function AnalysisPanel({
           <>
             <section className="decision-summary">
               <header>
-                <span>핵심 판단</span>
-                <h3>이 판단은 정말 통했나?</h3>
+                <span>내 선택 평가</span>
+                <h3>내 선택이 도움이 됐나요?</h3>
               </header>
               <strong data-tone={oneMove.tone}>
                 {oneMove.deltaText}
-                <small>방치 대비</small>
+                <small>아무것도 안 했을 때와 비교</small>
               </strong>
               <p>{verdict(analysis.userDelta)}</p>
             </section>
 
             <section className="next-solution">
               <header>
-                <span>다음 한 수 · 같은 위기를 다시 만난다면</span>
-                <h3>다음에는 이렇게 시작하세요</h3>
+                <span>다음 경기 추천</span>
+                <h3>같은 상황에서는 이렇게 시작하세요</h3>
               </header>
               <div className="solution-board" aria-label="권장 설정">
                 <span>

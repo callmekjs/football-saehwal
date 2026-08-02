@@ -128,7 +128,7 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
     const view = mount(<Report onSave={() => {}} />)
     const hero = view.container.querySelector('.survival-hero')?.textContent ?? ''
 
-    expect(hero).toContain('경기 복기 · 실제 경기 기록')
+    expect(hero).toContain('경기 끝 · 한눈에 보기')
     expect(hero).toContain('최종')
     expect(hero).not.toContain('MISSION DEBRIEF')
     expect(hero).not.toContain('FINAL')
@@ -142,11 +142,12 @@ describe('감독 보고서를 띄워 두고 기다릴 때', () => {
 
     const core = [...view.container.querySelectorAll('.story-core > .story-stage')]
     expect(core).toHaveLength(2)
-    expect(core[0].textContent).toContain('목표 결과')
-    expect(core[1].textContent).toContain('내 핵심 판단')
+    expect(core[0].textContent).toContain('이번 목표')
+    expect(core[0].textContent).toMatch(/목표 (달성|실패)/)
+    expect(core[1].textContent).toContain('내가 바꾼 것')
 
     const next = view.container.querySelector('.next-solution')?.textContent ?? ''
-    expect(next).toContain('다음 한 수')
+    expect(next).toContain('다음 경기 추천')
     expect(next).toContain('대형')
     expect(next).toContain('라인')
     expect(next).toContain('압박')
