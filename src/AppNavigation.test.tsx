@@ -106,7 +106,8 @@ describe('첫 화면 시작 길', () => {
     const scouting = view.container.querySelector('.opp-scouting')?.textContent ?? ''
     expect(dossier).toContain('일본')
     expect(dossier).toContain('선택 완료')
-    expect(dossier).toContain('상대 전력 한눈에')
+    expect(dossier).toContain('상대 전력')
+    expect(dossier).not.toContain('상대 전력 한눈에')
     expect(dossier).toMatch(/공격(?:강함|보통|약함)우리 \d+\.\d · 상대 \d+\.\d/)
     expect(dossier).toMatch(/수비(?:강함|보통|약함)우리 \d+\.\d · 상대 \d+\.\d/)
     expect(dossier).toMatch(/중원(?:강함|보통|약함)우리 \d+\.\d · 상대 \d+\.\d/)

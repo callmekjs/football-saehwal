@@ -332,7 +332,7 @@ function OpponentPicker({
           </div>
 
           <div className="opp-traits">
-            <h3>상대 전력 한눈에</h3>
+            <h3>상대 전력</h3>
             <div>
               <OpponentTrait
                 label="공격"
