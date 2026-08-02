@@ -13,12 +13,6 @@ import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
 import type { FormationId } from '../sim/formations'
 import { AnalysisPanel } from './AnalysisPanel'
-import { ANALYSIS_RUNS } from '../analysis/compare'
-import {
-  VARIANT_COMPARISON_NOTE,
-  variantComparisonTitle,
-} from '../analysis/comparisonCopy'
-import { applyRecommendationOnce } from '../analysis/recommendation'
 import { PRESETS, presetOf } from '../analysis/presets'
 import { buildBriefing, type Briefing } from '../analysis/briefing'
 import { immediateObjective } from '../analysis/objectiveStatus'
@@ -69,8 +63,6 @@ const LEVER_LABELS = {
   PRESS: ['약', '중', '강'],
   WIDTH: ['좁게', '보통', '넓게'],
 } as const
-
-export type MatchSessionMode = 'USER' | 'RECOMMENDATION'
 
 
 /**
@@ -703,9 +695,6 @@ export function MatchScreen({
   onExit,
   onRetry,
   onReplay,
-  mode = 'USER',
-  recommendationRate,
-  onWatchRecommendation,
 }: {
   problem: Problem
   /** 감독이 고른 선발. 없으면 명단의 기본 선발 */
@@ -751,14 +740,7 @@ export function MatchScreen({
    * 시험해볼 수 있다. 이것이 없으면 사활이 아니라 확률 놀이다.
    */
   onReplay?: () => void
-  /** 사용자 경기와 기록을 건드리지 않는 권장안 자동 관전 세션. */
-  mode?: MatchSessionMode
-  /** 같은 국면의 변형 150판에서 권장안이 성공한 비율. */
-  recommendationRate?: number
-  /** 사용자 경기 종료 보고서에서 권장안 관전을 연다. */
-  onWatchRecommendation?: (recommendationRate: number) => void
 }) {
-  const recommendationMode = mode === 'RECOMMENDATION'
   /**
    * 지금 뛰고 있는 반.
    *
@@ -809,10 +791,6 @@ export function MatchScreen({
    * 그 둘을 `upsert` 로 합치는 것은 의도된 설계다.
    */
   const deltaReported = useRef(false)
-  /** StrictMode가 효과를 다시 실행해도 한 반에 네 결정을 딱 한 번만 넣는다. */
-  const recommendationApplied = useRef<Set<Half>>(new Set())
-  /** 전반 종료 효과가 겹쳐 후반을 두 번 만드는 일을 막는다. */
-  const recommendationAdvanced = useRef(false)
   /**
    * 교체로 **들어올** 선수.
    *
@@ -919,8 +897,7 @@ export function MatchScreen({
     !benchPickState.onPitch &&
     !benchPickState.out &&
     state.subsLeft > 0 &&
-    phase !== 'DONE' &&
-    !recommendationMode
+    phase !== 'DONE'
       ? benchPickState.id
       : null
 
@@ -960,7 +937,7 @@ export function MatchScreen({
   }, [start])
 
   /** 급수 타임 1분. 경기 시계(750틱)와는 무관한 화면 전용 시계다 */
-  const breakLeft = useBreakClock(phase === 'READY' && !recommendationMode, resume)
+  const breakLeft = useBreakClock(phase === 'READY', resume)
 
   const [scene, setScene] = useState<[number, number]>(problem.score)
   useEffect(() => setScene(problem.score), [problem])
@@ -1056,55 +1033,13 @@ export function MatchScreen({
     startNextHalf(carryToNextHalf(state), secondHalfSeed(problem.seed))
   }, [state, decisions, startNextHalf, problem.seed])
 
-  /**
-   * 권장안 관전은 급수 타임에 사람이 누르는 것과 같은 setter를 지난다.
-   * setter는 난수를 소비하지 않고 결정 이력에 0틱 결정을 남긴 뒤, 네 결정이
-   * 모두 들어간 다음에만 경기 시계를 시작한다.
-   *
-   * 마운트 효과 안에서 바로 적용하면 실제 앱의 StrictMode가
-   * `useMatch.reset()` 효과를 한 번 더 붙이는 순간 설정과 RUNNING을 READY로
-   * 되돌린다. 첫 효과의 예약은 정리 때 취소하고, 두 번째 효과까지 끝난 다음
-   * 0ms 작업에서 적용해야 초기화보다 항상 뒤에 선다.
-   */
-  useEffect(() => {
-    if (!recommendationMode || phase !== 'READY') return
-    const recommendation = problem.recommendation
-    if (!recommendation) return
-
-    const timer = window.setTimeout(() => {
-      const applied = applyRecommendationOnce(
-        half,
-        recommendationApplied.current,
-        recommendation,
-        { setFormation, setLever },
-      )
-      if (applied) resume()
-    }, 0)
-
-    return () => window.clearTimeout(timer)
-  }, [half, phase, problem.recommendation, recommendationMode, resume, setFormation, setLever])
-
-  /** 전반부터 관전했다면 하프타임도 조작 없이 같은 권장안으로 이어간다. */
-  useEffect(() => {
-    if (!recommendationMode || phase !== 'DONE' || half !== 1) return
-    if (recommendationAdvanced.current) return
-    recommendationAdvanced.current = true
-    goSecondHalf()
-  }, [goSecondHalf, half, phase, recommendationMode])
-
-  const controlsLocked = phase === 'DONE' || recommendationMode
-
   return (
     <div
       className="match-screen"
       data-finished={phase === 'DONE' && half === 2 ? 'true' : undefined}
     >
       <header className="match-scorebar">
-        <button
-          className="match-back"
-          onClick={onExit}
-          aria-label={recommendationMode ? '원래 사용자 결과로' : '국면 선택으로'}
-        >
+        <button className="match-back" onClick={onExit} aria-label="국면 선택으로">
           ←
         </button>
         {/*
@@ -1113,7 +1048,6 @@ export function MatchScreen({
         */}
         <button
           className="match-mute"
-          disabled={recommendationMode}
           onClick={() => {
             const next = !mutedNow
             setMuted(next)
@@ -1173,15 +1107,6 @@ export function MatchScreen({
         )}
       </header>
 
-      {recommendationMode && (
-        <section className="recommendation-banner" role="status">
-          <strong>권장안 시범 경기</strong>
-          <span>방금 판과 선수·경고·체력·난수 동일</span>
-          <span>권장안 자동 적용</span>
-          <span>조작 불가</span>
-        </section>
-      )}
-
       {/*
         긴급 바 — 디자인 개편의 핵심이다.
 
@@ -1229,7 +1154,6 @@ export function MatchScreen({
         {CONTROL_TABS.map((tab) => (
           <button
             key={tab.id}
-            disabled={recommendationMode}
             aria-pressed={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
           >
@@ -1250,7 +1174,7 @@ export function MatchScreen({
           <div className="pane" data-pane="SQUAD">
             <SquadPanel
               state={state}
-              locked={controlsLocked}
+              locked={phase === 'DONE'}
               onOrder={setOrder}
               onPosition={setPosition}
               onFormation={setFormationLoud}
@@ -1262,7 +1186,7 @@ export function MatchScreen({
           <div className="pane" data-pane="SQUAD">
             <Bench
               state={state}
-              locked={controlsLocked}
+              locked={phase === 'DONE'}
               half={half}
               running={phase === 'RUNNING'}
               substitutedOut={substitutedOut}
@@ -1302,7 +1226,7 @@ export function MatchScreen({
           <div className="pane" data-pane="TACTICS">
             <Levers
               tactics={state.tactics}
-              locked={controlsLocked}
+              locked={phase === 'DONE'}
               onSet={setLeverLoud}
               onPreset={applyPreset}
             />
@@ -1334,7 +1258,7 @@ export function MatchScreen({
             모아 지시할 수 있는 몇 안 되는 순간이다.
             이 설정이 있어야 "왜 경기 전에 다 만질 수 있는가"가 설명된다.
           */}
-          {phase === 'READY' && !recommendationMode && (
+          {phase === 'READY' && (
             <section className="panel side-note break-note" data-tone={breakTone(breakLeft).toLowerCase()}>
               {/*
                 국면 제목도 목표도 시작 시각도 이미 점수판과 국면 카드에
@@ -1390,7 +1314,7 @@ export function MatchScreen({
             </section>
           )}
 
-          {phase === 'DONE' && half === 1 && halftime && !recommendationMode && (
+          {phase === 'DONE' && half === 1 && halftime && (
             /**
              * 하프타임 — 아직 경기가 끝나지 않았다.
              *
@@ -1422,7 +1346,7 @@ export function MatchScreen({
             </section>
           )}
 
-          {phase === 'DONE' && half === 2 && !recommendationMode && (
+          {phase === 'DONE' && half === 2 && (
             <section className={`panel side-note result ${passed ? 'passed' : 'failed'}`}>
               <h2>{endLabel(half)}</h2>
               <div className="side-note-body">
@@ -1489,44 +1413,6 @@ export function MatchScreen({
         </div>
       </div>
 
-      {phase === 'DONE' && half === 2 && recommendationMode && (
-        <section
-          className={`recommendation-result ${passed ? 'passed' : 'failed'}`}
-          aria-labelledby="recommendation-result-title"
-        >
-          <header>
-            <span>자동 관전 종료</span>
-            <h2 id="recommendation-result-title">권장안 시범 경기</h2>
-          </header>
-          <div className="recommendation-result-grid">
-            <article>
-              <small>이번 한 판</small>
-              <strong>{passed ? '타파 성공' : '타파 실패'}</strong>
-              <span>{state.score[0]} : {state.score[1]}</span>
-            </article>
-            <article>
-              <small>{variantComparisonTitle(ANALYSIS_RUNS)} · 권장 성공률</small>
-              <strong>
-                {recommendationRate === undefined
-                  ? '계산 없음'
-                  : `${(recommendationRate * 100).toFixed(1)}%`}
-              </strong>
-              <span>한 판의 결과와 별개인 반복 검증</span>
-            </article>
-          </div>
-          <p>
-            {passed
-              ? '이번에는 권장안으로 목표를 이뤘습니다. 그래도 한 판의 성공만으로 항상 성공한다고 말할 수는 없습니다.'
-              : '이번 한 판은 권장안으로도 실패했습니다. 권장안은 성공 가능성을 높인 기준안이지, 한 판의 성공을 보장하지 않습니다.'}
-          </p>
-          <small className="comparison-scope-note">{VARIANT_COMPARISON_NOTE}</small>
-          <button type="button" className="kickoff-button" onClick={onExit}>
-            원래 사용자 결과로
-            <small>방금 끝낸 내 경기와 감독 보고서를 그대로 봅니다</small>
-          </button>
-        </section>
-      )}
-
       {/*
         선수단 스트립 — 열한 명을 한 줄에 펼친다.
 
@@ -1548,7 +1434,7 @@ export function MatchScreen({
         것이 아니라 아직 45분이 남은 것이라, 여기서 판단 평가를 내면
         뒤집을 시간이 남았는데 결론을 선고하는 셈이다.
       */}
-      {phase === 'DONE' && half === 2 && !recommendationMode && (
+      {phase === 'DONE' && half === 2 && (
         <div className="match-report">
           <FinishReporter
             onReport={(delta) =>
@@ -1604,7 +1490,6 @@ export function MatchScreen({
               if (onRetry) onRetry()
               else reset()
             }}
-            onWatchRecommendation={onWatchRecommendation}
           />
         </div>
       )}

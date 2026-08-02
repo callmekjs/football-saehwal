@@ -5,14 +5,13 @@
  * 급수 타임까지 한 번에 가고, 「경기 준비」의 01→02→03 흐름은 그대로 남아야
  * 한다.
  */
-import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { buildBriefing } from './analysis/briefing'
 import { createState } from './sim/engine'
 import { PROBLEMS } from './sim/problems'
 import { addRecord, readHistory, type MatchRecord } from './ui/matchHistory'
-import { advance, click, doubleClickThrough, find, mount } from './ui/domHarness'
+import { click, doubleClickThrough, find, mount } from './ui/domHarness'
 
 const RECORD: MatchRecord = {
   at: 1_000,
@@ -171,88 +170,6 @@ describe('첫 화면 시작 길', () => {
 
     click(find(view.container, 'button.kickoff-button-main', '경기 시작'))
     expect(view.container.querySelector('.captain-brief')?.textContent).toContain(bookedLine!.text)
-
-    view.unmount()
-  })
-
-  it('권장안 관전은 기록을 바꾸지 않고 원래 사용자 결과로 돌아온다', () => {
-    // 실제 진입점(main.tsx)과 같은 생명주기다. StrictMode가 마운트 효과를
-    // 붙였다 떼어도 권장안 READY 초기화가 자동 시작을 덮어쓰면 안 된다.
-    const view = mount(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    )
-
-    click(find(view.container, 'button.title-quick', '바로 킥오프'))
-    click(find(view.container, 'button.kickoff-button', '경기 재개'))
-    advance(() => vi.advanceTimersByTime(75_100))
-    // 종료 보고서의 150판 비교 예약을 실행한다.
-    advance(() => vi.advanceTimersByTime(1))
-
-    const watchButton = find(
-      view.container,
-      'button.solution-watch',
-      '이 권장안으로 경기 보기',
-    )
-    const historyBefore = window.localStorage.getItem('saehwal.history.v1')
-    expect(historyBefore).not.toBeNull()
-
-    click(watchButton)
-    advance(() => vi.advanceTimersByTime(0))
-
-    const matches = [...view.container.querySelectorAll<HTMLElement>('.match-screen')]
-    const watch = matches.at(-1)!
-    expect(matches).toHaveLength(2)
-    expect(watch.querySelector('.recommendation-banner')?.textContent).toContain(
-      '방금 판과 선수·경고·체력·난수 동일',
-    )
-    expect(watch.querySelector('.recommendation-banner')?.textContent).toContain(
-      '권장안 자동 적용',
-    )
-    expect(watch.querySelector('.recommendation-banner')?.textContent).toContain('조작 불가')
-    expect(watch.querySelector('.match-break')).toBeNull()
-    expect(watch.querySelector('.match-subs')).not.toBeNull()
-    expect(watch.querySelector('.match-meta')?.textContent).toContain('4-3-3')
-    expect(
-      [...watch.querySelectorAll('.lever-seg')].map((row) => row.getAttribute('data-value')),
-    ).toEqual(['1', '1', '2'])
-    expect(
-      [...watch.querySelectorAll<HTMLButtonElement>('button')]
-        .filter((button) => !button.classList.contains('match-back'))
-        .every((button) => button.disabled),
-    ).toBe(true)
-    expect(window.localStorage.getItem('saehwal.history.v1')).toBe(historyBefore)
-
-    // 진행 중에도 왼쪽 위 화살표 하나만은 살아 있고, 누르면 원 결과로 간다.
-    click(find(watch, 'button.match-back', ''))
-    expect(view.container.querySelectorAll('.match-screen')).toHaveLength(1)
-    expect(view.container.querySelector('.analysis')).not.toBeNull()
-    expect(window.localStorage.getItem('saehwal.history.v1')).toBe(historyBefore)
-
-    click(find(view.container, 'button.solution-watch', '이 권장안으로 경기 보기'))
-    advance(() => vi.advanceTimersByTime(0))
-    const finishedWatch = [...view.container.querySelectorAll<HTMLElement>('.match-screen')].at(-1)!
-
-    advance(() => vi.advanceTimersByTime(75_100))
-
-    expect(finishedWatch.querySelector('.recommendation-result')?.textContent).toContain(
-      '권장안 시범 경기',
-    )
-    expect(finishedWatch.querySelector('.recommendation-result')?.textContent).toContain(
-      '이번 한 판',
-    )
-    expect(finishedWatch.querySelector('.recommendation-result')?.textContent).toContain(
-      '같은 국면의 변형 150판 비교',
-    )
-    expect(finishedWatch.querySelector('.match-report')).toBeNull()
-    expect(window.localStorage.getItem('saehwal.history.v1')).toBe(historyBefore)
-
-    click(find(finishedWatch, 'button.kickoff-button', '원래 사용자 결과로'))
-
-    expect(view.container.querySelectorAll('.match-screen')).toHaveLength(1)
-    expect(view.container.querySelector('.analysis')).not.toBeNull()
-    expect(window.localStorage.getItem('saehwal.history.v1')).toBe(historyBefore)
 
     view.unmount()
   })

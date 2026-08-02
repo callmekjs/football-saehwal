@@ -5,7 +5,6 @@ import { carryToNextHalf } from '../sim/engine'
 import type { FormationId } from '../sim/formations'
 import { getPlayer } from '../sim/squad'
 import { opponentInfo, REFERENCE_TEAM } from './opponents'
-import { VARIANT_COMPARISON_NOTE } from './comparisonCopy'
 import type {
   Decision,
   OpponentId,
@@ -698,7 +697,7 @@ function decisionFindings(
           : '방치와 통계적으로 큰 차이가 없었다',
     explanation: !intervened
       ? '경기 중에 아무것도 바꾸지 않아 「내 판단」 150판과 무개입 150판이 완전히 같습니다. 여기서 0%p가 나오는 것은 판단의 효과가 아니라 견줄 것이 없다는 뜻입니다.'
-      : `한 경기의 운을 빼고 보려고 같은 국면의 변형 150판을 다시 돌렸습니다. ${VARIANT_COMPARISON_NOTE} 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
+      : `한 경기의 운을 빼고 보려고 같은 조건으로 150판을 다시 돌렸습니다. 직접 내린 판단과 방치의 성공 가능성 차이는 ${point(
           metrics.userDelta,
         )}였습니다.`,
     evidence: impactEvidence,

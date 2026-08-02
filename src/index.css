@@ -5025,111 +5025,6 @@ button {
   list-style: none;
 }
 
-.recommendation-banner {
-  margin-top: 8px;
-  min-height: 44px;
-  padding: 9px 12px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line-3));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--panel-deep));
-}
-
-.recommendation-banner strong {
-  margin-right: auto;
-  color: var(--accent);
-  font-size: 12px;
-}
-
-.recommendation-banner span {
-  padding: 4px 7px;
-  border: 1px solid var(--line-3);
-  border-radius: 999px;
-  color: var(--text-4);
-  font-size: 9px;
-  font-weight: 750;
-}
-
-.recommendation-result {
-  margin-top: 12px;
-  padding: clamp(18px, 3vw, 34px);
-  display: grid;
-  gap: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--line-3));
-  border-radius: 8px;
-  background:
-    radial-gradient(circle at 88% 0%, rgba(100, 212, 155, 0.12), transparent 34%),
-    var(--panel-deep);
-}
-
-.recommendation-result.failed {
-  border-color: color-mix(in srgb, var(--away) 46%, var(--line-3));
-}
-
-.recommendation-result > header span {
-  color: var(--accent);
-  font-family: var(--label);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-}
-
-.recommendation-result > header h2 {
-  margin: 4px 0 0;
-  font-size: clamp(28px, 4vw, 52px);
-}
-
-.recommendation-result-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.recommendation-result-grid article {
-  min-width: 0;
-  min-height: 130px;
-  padding: 16px;
-  display: grid;
-  align-content: center;
-  gap: 7px;
-  border: 1px solid var(--line-3);
-  border-radius: 6px;
-  background: var(--panel-2);
-}
-
-.recommendation-result-grid small,
-.recommendation-result-grid span,
-.comparison-scope-note {
-  color: var(--dim-2);
-  font-size: 9px;
-  line-height: 1.5;
-}
-
-.recommendation-result-grid strong {
-  color: var(--accent);
-  font-family: var(--num);
-  font-size: clamp(25px, 4vw, 42px);
-  font-weight: 500;
-}
-
-.recommendation-result.failed .recommendation-result-grid article:first-child strong {
-  color: var(--away);
-}
-
-.recommendation-result > p {
-  margin: 0;
-  color: var(--text-4);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.recommendation-result > .kickoff-button {
-  width: min(100%, 440px);
-}
-
 .story-route.story-core,
 .story-route.story-context {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5679,7 +5574,7 @@ button {
 
 .next-solution {
   display: grid;
-  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1.45fr) minmax(170px, 0.45fr);
+  grid-template-columns: minmax(220px, 0.55fr) minmax(480px, 1.45fr);
   align-items: center;
   gap: 24px;
   border-color: color-mix(in srgb, var(--accent) 36%, var(--line-3));
@@ -5728,32 +5623,6 @@ button {
 .analysis-evidence {
   border-color: var(--line-3);
   background: var(--panel);
-}
-
-.solution-watch {
-  min-height: 58px;
-  padding: 10px 12px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  border: 1px solid var(--accent);
-  border-radius: 5px;
-  background: var(--accent);
-  color: var(--ink);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 850;
-  cursor: pointer;
-}
-
-.solution-watch small {
-  color: color-mix(in srgb, var(--ink) 72%, transparent);
-  font-size: 8px;
-  line-height: 1.35;
-}
-
-.comparison-scope-note {
-  display: block;
 }
 
 .decision-summary {
@@ -5936,18 +5805,6 @@ button {
   .solution-board > i { display: none; }
   .solution-board > span { min-height: 58px; padding-inline: 3px; }
   .solution-board b { font-size: 12px; }
-
-  .recommendation-banner {
-    align-items: stretch;
-  }
-
-  .recommendation-banner strong {
-    flex-basis: 100%;
-  }
-
-  .recommendation-result-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 
   .evidence-body .coach-overview ul,
   .evidence-body .coach-findings {

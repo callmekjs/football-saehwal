@@ -11,7 +11,6 @@ import {
   type CoachReport,
   type OutcomeProfile,
 } from './coach'
-import { recommendationDecisions } from './recommendation'
 
 /** 한 번의 운이 아니라 판단을 비교하기 위한 반복 횟수 */
 export const ANALYSIS_RUNS = 150
@@ -42,6 +41,16 @@ export interface CoachMatchSnapshot {
   initial: MatchState
   final: MatchState
   firstHalf: MatchState | null
+}
+
+function planOf(recommendation: Recommendation): Decision[] {
+  const { line, press, width } = recommendation.tactics
+  return [
+    { tick: 0, type: 'FORMATION', value: recommendation.formation },
+    { tick: 0, type: 'LINE', value: line },
+    { tick: 0, type: 'PRESS', value: press },
+    { tick: 0, type: 'WIDTH', value: width },
+  ]
 }
 
 /**
@@ -195,9 +204,9 @@ export function compareDecisions(
   const user = measure(problem, userDecisions, runs, firstHalf, opponent)
   const recommendation = measure(
     problem,
-    recommendationDecisions(problem.recommendation),
+    planOf(problem.recommendation),
     runs,
-    firstHalf && recommendationDecisions(problem.recommendation),
+    firstHalf && planOf(problem.recommendation),
     opponent,
   )
 

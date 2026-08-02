@@ -4,10 +4,6 @@ import {
   compareDecisions,
   type MatchAnalysis,
 } from '../analysis/compare'
-import {
-  VARIANT_COMPARISON_NOTE,
-  variantComparisonTitle,
-} from '../analysis/comparisonCopy'
 import type { CoachFinding, OutcomeProfile } from '../analysis/coach'
 import { toRecordCompare, type RecordCompare } from '../analysis/history'
 import type {
@@ -139,7 +135,6 @@ export function AnalysisPanel({
   onDelta,
   onReplay,
   onRetry,
-  onWatchRecommendation,
 }: {
   problem: Problem
   initialState: MatchState
@@ -162,8 +157,6 @@ export function AnalysisPanel({
   opponent?: OpponentId
   onReplay?: () => void
   onRetry?: () => void
-  /** 방금 판의 시작 조건으로 권장안을 자동 관전한다. */
-  onWatchRecommendation?: (recommendationRate: number) => void
 }) {
   const snapshot = useMemo(() => decisions.map((decision) => ({ ...decision })), [decisions])
   const [analysis, setAnalysis] = useState<MatchAnalysis | null>(null)
@@ -320,7 +313,6 @@ export function AnalysisPanel({
   const firstBeat = story.response.beats[0] ?? null
   const noop = analysis?.rows.find((row) => row.key === 'noop')
   const user = analysis?.rows.find((row) => row.key === 'user')
-  const recommendation = analysis?.rows.find((row) => row.key === 'recommendation')
   const metrics =
     noop && user ? profileMetrics(problem, noop.profile, user.profile) : []
 
@@ -480,16 +472,6 @@ export function AnalysisPanel({
                   <b>{LEVEL_LABEL.width[analysis.recommendation.tactics.width]}</b>
                 </span>
               </div>
-              {recommendation && onWatchRecommendation && (
-                <button
-                  type="button"
-                  className="solution-watch"
-                  onClick={() => onWatchRecommendation(recommendation.rate)}
-                >
-                  이 권장안으로 경기 보기
-                  <small>방금 판과 같은 선수·경고·체력·난수</small>
-                </button>
-              )}
             </section>
 
             <details className="comparison-details analysis-evidence">
@@ -498,7 +480,7 @@ export function AnalysisPanel({
                 <section className="decision-proof">
                   <header>
                     <div>
-                      <span>{variantComparisonTitle(ANALYSIS_RUNS)} · 경기 전체 판단</span>
+                      <span>같은 조건으로 {ANALYSIS_RUNS}판 비교 · 경기 전체 판단</span>
                       <h3>이 판단은 정말 통했나?</h3>
                     </div>
                     <strong data-tone={oneMove.tone}>
@@ -524,7 +506,6 @@ export function AnalysisPanel({
                       </article>
                     ))}
                   </div>
-                  <small className="comparison-scope-note">{VARIANT_COMPARISON_NOTE}</small>
                   <p>{verdict(analysis.userDelta)}</p>
                 </section>
 
