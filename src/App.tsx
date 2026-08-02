@@ -443,7 +443,7 @@ function SituationCard({
     >
       <span className="kickoff-situation-top">
         <b>상황 {n}</b>
-        <em>{survive ? '리드 지키기' : '동점 만들기'}</em>
+        <em>{survive ? '리드 지키기' : '동점 추격'}</em>
       </span>
       <span className="kickoff-situation-score">
         {problem.score[0]}
@@ -451,6 +451,9 @@ function SituationCard({
         {problem.score[1]}
       </span>
       <strong>{problem.title}</strong>
+      <span className="kickoff-situation-summary">
+        {problem.summary.replace(/^[^.]+\.\s*/, '')}
+      </span>
       <span className="kickoff-situation-meta">
         교체 {state.subsLeft}장 · {situationNote(state)}
       </span>
@@ -459,9 +462,9 @@ function SituationCard({
         막대를 넣어 **모양이 다르게** 만든다. 둘 다 실제 값이다.
       */}
       <span className="kickoff-situation-setup">
-        <i>{problem.initialFormation}</i>
+        <i>{problem.initialFormation.replaceAll('-', '')}</i>
         <u>
-          수비 라인 {LEVEL_LABEL.line[problem.initialTactics.line]} · 압박{' '}
+          라인 {LEVEL_LABEL.line[problem.initialTactics.line]} · 압박{' '}
           {LEVEL_LABEL.press[problem.initialTactics.press]} · 폭{' '}
           {LEVEL_LABEL.width[problem.initialTactics.width]}
         </u>

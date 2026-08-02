@@ -4826,6 +4826,12 @@ button {
   .kickoff-half-picker small { white-space: normal; }
 }
 
+.kickoff-situation-summary {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kickoff-matchday > b > i,
   .kickoff-button-main > i {
