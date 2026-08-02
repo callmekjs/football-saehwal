@@ -110,10 +110,6 @@ export function TitleScreen({
 
       <main className="title-body">
         <section className="title-lead">
-          <p className="title-kicker">
-            {preview.halfLabel} {preview.kickoffMinute}분 · {preview.score[0]}-
-            {preview.score[1]} · {preview.goal}
-          </p>
           <h1 className="title-headline">
             당신의 선택이
             <b>승부를 가른다</b>

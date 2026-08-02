@@ -9,6 +9,7 @@ import {
 } from './setup'
 import { effectivePos, getPlayer, HOME_SQUAD, initialPlayers } from './squad'
 import { MAX_ORDERS } from './engine'
+import { OPPONENTS } from './constants'
 import { PRESETS } from '../analysis/presets'
 import type { Problem } from './types'
 
@@ -52,6 +53,15 @@ describe('시작 조건 — 판마다 다르다', () => {
         expect(state.awayStamina, p.title).toBeLessThan(100)
       }
     }
+  })
+
+  it('같은 국면도 국가가 달라지면 상대 대형과 상태가 달라진다', () => {
+    const problem = PROBLEMS[0]
+    const encounters = OPPONENTS.teams.map(({ id }) => {
+      const state = createState(problem, id)
+      return JSON.stringify(state.away)
+    })
+    expect(new Set(encounters).size).toBeGreaterThan(5)
   })
 
   it('주장 보고 여섯 종류가 판마다 실제로 바뀐다', () => {

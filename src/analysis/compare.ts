@@ -1,4 +1,5 @@
-import { simulate, simulateHalves } from '../sim/engine'
+import { createState, simulate, simulateHalves } from '../sim/engine'
+import type { FormationId } from '../sim/formations'
 import type {
   Decision,
   OpponentId,
@@ -11,6 +12,7 @@ import {
   type CoachReport,
   type OutcomeProfile,
 } from './coach'
+import { opponentInfo } from './opponents'
 
 /** 한 번의 운이 아니라 판단을 비교하기 위한 반복 횟수 */
 export const ANALYSIS_RUNS = 150
@@ -51,6 +53,100 @@ function planOf(recommendation: Recommendation): Decision[] {
     { tick: 0, type: 'PRESS', value: press },
     { tick: 0, type: 'WIDTH', value: width },
   ]
+}
+
+/**
+ * 상대 대형을 보고 실제로 검토할 우리 대형들.
+ *
+ * 전에는 국면마다 한 벌만 저장해 어느 나라·어느 상대 대형을 만나도 결과
+ * 화면이 같았다. 여기서는 상대 줄 구성에 맞는 두 대안과 기존 검증안을
+ * 같은 시드 묶음으로 직접 돌린다. 상태와 무관한 억지 순환이나 난수는 없다.
+ */
+const COUNTER_FORMATIONS: Record<MatchState['away']['formation'], readonly FormationId[]> = {
+  '5-4-1': ['3-4-3', '4-3-3'],
+  '4-4-2': ['4-2-3-1', '3-5-2'],
+  '4-3-3': ['4-1-4-1', '4-2-3-1'],
+  '3-5-2': ['4-3-3', '4-4-2D'],
+  '4-2-3-1': ['4-1-4-1', '4-2-2-2'],
+}
+
+/** 후보를 고르는 짧은 예선. 최종 표시 수치는 아래의 전체 runs로 다시 잰다. */
+const RECOMMENDATION_PROBE_RUNS = 8
+
+function candidateFormations(state: MatchState): FormationId[] {
+  const counter = COUNTER_FORMATIONS[state.away.formation]
+  // 대형은 상대 줄 구성에 대한 전술적 대응으로 먼저 정한다. 경고가 있고
+  // 체력이 남아 있으면 그 선수를 고립시키는 두 번째 대응안을, 지쳤거나
+  // 부상 우려가 있으면 공간을 곧바로 찌르는 첫 번째 대응안을 쓴다.
+  const targetBookedPlayer =
+    state.away.booked.length > 0 && state.away.injured === null && state.awayStamina >= 60
+  return [counter[targetBookedPlayer ? 1 : 0]]
+}
+
+function recommendationCandidates(problem: Problem, state: MatchState): Recommendation[] {
+  const candidates: Recommendation[] = []
+  const tacticalProfiles = problem.objective.type === 'EQUALIZE'
+    ? [
+        problem.recommendation!.tactics,
+        { line: 2, press: 1, width: 2 } as const,
+        { line: 1, press: 2, width: 2 } as const,
+        { line: 2, press: 0, width: 1 } as const,
+      ]
+    : [
+        problem.recommendation!.tactics,
+        { line: 1, press: 1, width: 1 } as const,
+        { line: 1, press: 2, width: 0 } as const,
+        { line: 0, press: 1, width: 1 } as const,
+      ]
+  for (const formation of candidateFormations(state)) {
+    for (const tactics of tacticalProfiles) {
+      candidates.push({ formation, tactics: { ...tactics }, explanation: '' })
+    }
+  }
+  return [...new Map(candidates.map((candidate) => [
+    `${candidate.formation}/${candidate.tactics.line}/${candidate.tactics.press}/${candidate.tactics.width}`,
+    candidate,
+  ])).values()]
+}
+
+function contextualExplanation(state: MatchState, recommendation: Recommendation): string {
+  const conditions = [
+    `${opponentInfo(state.opponentTeam).name}의 ${state.away.formation}`,
+    `체력 ${Math.round(state.awayStamina)}`,
+    state.away.booked.length > 0 ? `경고 ${state.away.booked.length}명` : '경고 없음',
+    state.away.injured !== null ? '부상 우려 있음' : '부상 우려 없음',
+  ]
+  return `${conditions.join(' · ')}을 함께 봤습니다. 상대 대형에 맞춰 ` +
+    `${recommendation.formation}을 고른 뒤 라인·압박·폭을 같은 경기들로 비교했습니다.`
+}
+
+function contextualRecommendation(
+  problem: Problem,
+  state: MatchState,
+  firstHalf: Decision[] | null,
+  opponent: OpponentId,
+  runs: number,
+): Recommendation {
+  let best: { recommendation: Recommendation; measured: MeasureResult } | null = null
+  const probeRuns = Math.min(runs, RECOMMENDATION_PROBE_RUNS)
+  for (const candidate of recommendationCandidates(problem, state)) {
+    const plan = planOf(candidate)
+    const measured = measure(problem, plan, probeRuns, firstHalf && plan, opponent)
+    if (
+      !best ||
+      measured.passed > best.measured.passed ||
+      (measured.passed === best.measured.passed &&
+        measured.profile.goalsFor - measured.profile.goalsAgainst >
+          best.measured.profile.goalsFor - best.measured.profile.goalsAgainst)
+    ) {
+      best = { recommendation: candidate, measured }
+    }
+  }
+  if (!best) throw new Error('검토할 권장 전술이 없다')
+  return {
+    ...best.recommendation,
+    explanation: contextualExplanation(state, best.recommendation),
+  }
 }
 
 /**
@@ -199,14 +295,24 @@ export function compareDecisions(
   if (!Number.isInteger(runs) || runs <= 0) throw new Error('분석 횟수는 양의 정수여야 한다')
   if (!problem.recommendation) throw new Error(`${problem.id}: 권장 전술이 없다`)
 
+  const actualInitial = match?.initial ?? createState(problem, opponent)
+  const selectedRecommendation = contextualRecommendation(
+    problem,
+    actualInitial,
+    firstHalf,
+    opponent,
+    runs,
+  )
+  const analyzedProblem = { ...problem, recommendation: selectedRecommendation }
+
   // 무개입과 권장 전술도 사용자와 **같은 반 수**로 돌려야 비교가 성립한다
   const noop = measure(problem, [], runs, firstHalf && [], opponent)
   const user = measure(problem, userDecisions, runs, firstHalf, opponent)
   const recommendation = measure(
     problem,
-    planOf(problem.recommendation),
+    planOf(selectedRecommendation),
     runs,
-    firstHalf && planOf(problem.recommendation),
+    firstHalf && planOf(selectedRecommendation),
     opponent,
   )
 
@@ -220,10 +326,10 @@ export function compareDecisions(
 
   return {
     rows,
-    recommendation: problem.recommendation,
+    recommendation: selectedRecommendation,
     userDelta,
     coach: buildCoachReport(
-      problem,
+      analyzedProblem,
       match?.final ?? user.firstFinal,
       userDecisions,
       {

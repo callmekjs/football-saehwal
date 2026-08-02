@@ -1,6 +1,6 @@
 # Codex 인수인계 — 이 파일 하나만 읽으면 된다
 
-> 마지막 갱신 **2026-08-02** · 67분 승부처의 상대 시작 체력을 실제 경과 시간에 맞게 낮췄다.
+> 마지막 갱신 **2026-08-02** · 국가·상대 상태별 추천과 1~5분 추가시간을 반영했다.
 > 다음은 Vercel 배포와 시연영상·제출뿐이다.
 > 오늘용 짧은 순서는 [`docs/TOMORROW_HANDOFF.md`](TOMORROW_HANDOFF.md)에 있다.
 > 전에 `docs/CODEX_RESUME.md` 가 따로 있었으나 **이 파일로 합쳤다.**
@@ -11,7 +11,7 @@
 cd C:\football_hackerton
 git pull --ff-only
 git status          # 남의 미완성 작업이 있으면 건드리지 말고 사용자에게 알린다
-npm test            # 731개 통과
+npm test            # 734개 통과
 npx tsc --noEmit    # 0
 ```
 

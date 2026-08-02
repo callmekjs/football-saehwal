@@ -4,6 +4,7 @@ import {
   BREAK_MINUTES,
   SEGMENT_MINUTES,
   addedTimeOf,
+  addedTimeFor,
   breakLabel,
   breakStart,
   clockOf,
@@ -59,6 +60,14 @@ describe('경기 시계 — 전반과 후반의 급수 타임', () => {
       expect(added).toBe(segmentEnd(half) - regulationEnd(half))
       expect(added, `${halfLabel(half)} 추가시간`).toBeGreaterThanOrEqual(1)
       expect(added, `${halfLabel(half)} 추가시간`).toBeLessThanOrEqual(5)
+    }
+  })
+
+  it('판마다 추가시간 1~5분이 결정적으로 달라진다', () => {
+    const values = Array.from({ length: 100 }, (_, seed) => addedTimeFor(seed, 2))
+    expect(new Set(values)).toEqual(new Set([1, 2, 3, 4, 5]))
+    for (let seed = 0; seed < 100; seed++) {
+      expect(addedTimeFor(seed, 2)).toBe(addedTimeFor(seed, 2))
     }
   })
 

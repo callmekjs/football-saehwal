@@ -79,7 +79,7 @@ export function createState(
    * 전용 스트림이라 우리 팀 시작 조건의 난수 순서는 그대로다.
    */
   const mood = mentalityOf(problem.score)
-  const away = rollAway(problem, mood, awayRngFor(problem.seed))
+  const away = rollAway(problem, mood, awayRngFor(problem.seed, opponent))
   return {
     tick: 0,
     score: [...problem.score] as [number, number],

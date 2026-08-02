@@ -26,6 +26,7 @@ import {
 } from './visibleOpponent'
 import {
   addedTimeOf,
+  addedTimeFor,
   breakLabel,
   clockOf,
   endLabel,
@@ -332,7 +333,7 @@ export function StatBars({ state, half }: { state: MatchState; half: Half }) {
   )
 }
 
-function Log({ state, half }: { state: MatchState; half: Half }) {
+function Log({ state, half, addedTime }: { state: MatchState; half: Half; addedTime: number }) {
   const shown = state.log.filter((e) => e.kind !== 'FOUL').slice(-8).reverse()
   return (
     <section className="panel log-panel">
@@ -342,7 +343,7 @@ function Log({ state, half }: { state: MatchState; half: Half }) {
         {shown.map((e, i) => (
           <div key={`${e.tick}-${i}`} className="log-row">
             <span className="log-min">
-              {Math.floor(minuteAt(e.tick, half))}'
+              {Math.floor(minuteAt(e.tick, half, addedTime))}'
             </span>
             <span
               style={{
@@ -754,6 +755,7 @@ export function MatchScreen({
   )
   // 감독 보고서가 쓰는 시각 기준. 지금 뛰는 반이 정한다
   const kickoff = kickoffMinute(half)
+  const addedTime = addedTimeFor(problem.seed, half)
   const {
     state,
     phase,
@@ -1062,9 +1064,9 @@ export function MatchScreen({
           {mutedNow ? '🔇' : '🔊'}
         </button>
         <div className="match-clock">
-          <span>{clockOf(state.tick, half)}</span>
-          {inAddedTime(state.tick, half) && (
-            <b title={`추가시간 ${addedTimeOf(half)}분`}>+{addedTimeOf(half)}</b>
+          <span>{clockOf(state.tick, half, addedTime)}</span>
+          {inAddedTime(state.tick, half, addedTime) && (
+            <b title={`추가시간 ${addedTime}분`}>+{addedTimeOf(half, addedTime)}</b>
           )}
         </div>
         <div className="match-score">
@@ -1200,7 +1202,7 @@ export function MatchScreen({
         <div className="match-col center">
           <div className="pane center-info" data-pane="INFO">
             <StatBars state={state} half={half} />
-            <Log state={state} half={half} />
+            <Log state={state} half={half} addedTime={addedTime} />
           </div>
 
           <div className="panel pitch-card">

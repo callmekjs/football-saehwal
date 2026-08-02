@@ -53,7 +53,17 @@ export const breakStart = (half: Half): number =>
 export const kickoffMinute = (half: Half): number => breakStart(half) + BREAK_MINUTES
 
 /** 이 반이 끝나는 분. 전반 47분, 후반 92분 */
-export const segmentEnd = (half: Half): number => kickoffMinute(half) + SEGMENT_MINUTES
+export const addedTimeFor = (seed: number, half: Half): number => {
+  let mixed = (seed ^ (half === 1 ? 0x9e3779b9 : 0x85ebca6b)) >>> 0
+  mixed = Math.imul(mixed ^ (mixed >>> 16), 0x7feb352d) >>> 0
+  return 1 + (mixed % 5)
+}
+
+const segmentMinutes = (half: Half, addedTime: number): number =>
+  regulationEnd(half) - kickoffMinute(half) + addedTime
+
+export const segmentEnd = (half: Half, addedTime = 2): number =>
+  kickoffMinute(half) + segmentMinutes(half, addedTime)
 
 /**
  * 추가시간(분).
@@ -61,11 +71,12 @@ export const segmentEnd = (half: Half): number => kickoffMinute(half) + SEGMENT_
  * 급수 타임이 잡아먹은 시간이 그대로 돌아온다고 보면 된다 — 주심은
  * 멈춰 있던 만큼을 뒤에 붙여준다.
  */
-export const addedTimeOf = (half: Half): number => segmentEnd(half) - regulationEnd(half)
+export const addedTimeOf = (half: Half, addedTime = 2): number =>
+  segmentEnd(half, addedTime) - regulationEnd(half)
 
 /** 지금이 경기 시간으로 몇 분인가 (소수점 포함) */
-export const minuteAt = (tick: number, half: Half): number =>
-  kickoffMinute(half) + (tick / TOTAL_TICKS) * SEGMENT_MINUTES
+export const minuteAt = (tick: number, half: Half, addedTime = 2): number =>
+  kickoffMinute(half) + (tick / TOTAL_TICKS) * segmentMinutes(half, addedTime)
 
 /**
  * `47:00` 꼴의 시계.
@@ -73,8 +84,8 @@ export const minuteAt = (tick: number, half: Half): number =>
  * 추가시간에도 **시계를 세우지 않는다.** 45:00에 멈춰 세우면 남은 시간을
  * 읽을 수 없고, 실제 중계도 시계는 흘려보내면서 `+2` 를 따로 띄운다.
  */
-export function clockOf(tick: number, half: Half): string {
-  return formatMinute(minuteAt(tick, half))
+export function clockOf(tick: number, half: Half, addedTime = 2): string {
+  return formatMinute(minuteAt(tick, half, addedTime))
 }
 
 /** 분(소수점 포함)을 `25:00` 꼴로 */
@@ -85,8 +96,8 @@ export function formatMinute(minutes: number): string {
 }
 
 /** 정규 시간을 넘겨 추가시간에 들어갔는가 */
-export const inAddedTime = (tick: number, half: Half): boolean =>
-  minuteAt(tick, half) >= regulationEnd(half)
+export const inAddedTime = (tick: number, half: Half, addedTime = 2): boolean =>
+  minuteAt(tick, half, addedTime) >= regulationEnd(half)
 
 /**
  * 이 반이 끝났을 때 화면에 띄울 말.

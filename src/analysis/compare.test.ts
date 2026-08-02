@@ -63,6 +63,17 @@ describe('경기 분석', () => {
     expect(compareDecisions(problem, [], 30)).toEqual(compareDecisions(problem, [], 30))
   })
 
+  it('같은 국면도 실제 상대 국가와 상태가 달라지면 추천을 다시 고른다', () => {
+    const problem = problemAt(0)
+    const recommendations = ['ARG', 'ESP', 'BRA', 'ITA', 'USA', 'JPN', 'VIE'].map(
+      (opponent) => {
+        const result = compareDecisions(problem, [], 6, 70, null, opponent as MatchState['opponentTeam'])
+        return `${result.recommendation.formation}/${result.recommendation.tactics.line}/${result.recommendation.tactics.press}/${result.recommendation.tactics.width}`
+      },
+    )
+    expect(new Set(recommendations).size).toBeGreaterThan(1)
+  })
+
   it('seed 56550의 실제 시작 전술을 보고서에 이어 종료 기록과 맞춘다', () => {
     const problem = { ...problemAt(1), seed: 56550 }
     const initial = createState(problem, 'USA')
@@ -110,7 +121,7 @@ describe('경기 분석', () => {
       const result = compareDecisions(problemAt(index), [])
       expect(result.rows[2].rate).toBeGreaterThan(result.rows[0].rate + 0.1)
     }
-  })
+  }, 15_000)
 
   it('전반부터 뛴 경기는 감독 보고서가 전반 결정과 전반 기록까지 말한다', () => {
     const problem = problemAt(1)

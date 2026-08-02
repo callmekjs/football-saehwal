@@ -16,6 +16,7 @@ import {
 } from './analysis/opponents'
 import {
   addedTimeOf,
+  addedTimeFor,
   breakStart,
   halfLabel,
   kickoffMinute,
@@ -479,9 +480,11 @@ function SituationCard({
 
 function HalfPicker({
   value,
+  seed,
   onPick,
 }: {
   value: Half
+  seed: number
   onPick: (half: Half) => void
 }) {
   return (
@@ -489,6 +492,7 @@ function HalfPicker({
       {[1, 2].map((halfValue) => {
         const half = halfValue as Half
         const active = value === half
+        const addedTime = addedTimeFor(seed, half)
         return (
           <button
             type="button"
@@ -499,7 +503,7 @@ function HalfPicker({
           >
             <b>{half === 1 ? '전반부터' : '후반만'}</b>
             <small>
-              {kickoffMinute(half)}분 재개 · {segmentEnd(half)}분 종료
+              {kickoffMinute(half)}분 재개 · {segmentEnd(half, addedTime)}분 종료
             </small>
           </button>
         )
@@ -686,6 +690,8 @@ export function App() {
     [attempt, entries, opponent, rerollOffset, roster, starters],
   )
   const previewState = previewStates.get(selectedEntry.problem.id)!
+  const previewSeed = selectedEntry.problem.seed + (attempt + 1) * 7919 + rerollOffset
+  const selectedAddedTime = addedTimeFor(previewSeed, selectedHalf)
   /**
    * 지금 치르고 있는 판. **같은 판이면 같은 객체여야 한다.**
    *
@@ -776,7 +782,7 @@ export function App() {
           awayName: opponentInfo(opponent).name,
           score: selectedEntry.problem.score,
           kickoffMinute: kickoffMinute(selectedHalf),
-          endMinute: segmentEnd(selectedHalf),
+          endMinute: segmentEnd(selectedHalf, selectedAddedTime),
           regulationMinute: regulationEnd(selectedHalf),
           halfLabel: halfLabel(selectedHalf),
           problemTitle: selectedEntry.problem.title,
@@ -1019,7 +1025,7 @@ export function App() {
             <span>
               <small>진행 구간</small>
               <b>
-                {kickoffMinute(selectedHalf)}′ → {segmentEnd(selectedHalf)}′
+                {kickoffMinute(selectedHalf)}′ → {segmentEnd(selectedHalf, selectedAddedTime)}′
               </b>
             </span>
             <span>
@@ -1076,7 +1082,7 @@ export function App() {
                   <h2 id="start-point-title">시작 지점</h2>
                 </div>
               </div>
-              <HalfPicker value={selectedHalf} onPick={setSelectedHalf} />
+              <HalfPicker value={selectedHalf} seed={previewSeed} onPick={setSelectedHalf} />
             </div>
             <button
               type="button"
@@ -1102,8 +1108,8 @@ export function App() {
               명시한다. 문장 자체는 그대로다.
             */}
             {halfLabel(selectedHalf)} {breakStart(selectedHalf)}분 급수 타임에서 지시를 마친 뒤,{' '}
-            {kickoffMinute(selectedHalf)}분에 재개해 {segmentEnd(selectedHalf)}분까지 진행합니다.
-            추가시간은 +{addedTimeOf(selectedHalf)}분입니다.
+            {kickoffMinute(selectedHalf)}분에 재개해 {segmentEnd(selectedHalf, selectedAddedTime)}분까지 진행합니다.
+            추가시간은 +{addedTimeOf(selectedHalf, selectedAddedTime)}분입니다.
           </p>
             </>
           )}

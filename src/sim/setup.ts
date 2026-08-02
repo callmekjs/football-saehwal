@@ -7,6 +7,7 @@ import type {
   CaptainEffect,
   Level,
   Mentality,
+  OpponentId,
   PlayerOrder,
   PlayerState,
   Position,
@@ -50,8 +51,16 @@ export function captainRngFor(seed: number): Rng {
   return createRng((seed ^ CAPTAIN_OFFSET) >>> 0)
 }
 
-export function awayRngFor(seed: number): Rng {
-  return createRng((seed ^ AWAY_OFFSET) >>> 0)
+export function awayRngFor(seed: number, opponent: OpponentId = 'USA'): Rng {
+  // 기준팀은 저장된 밸런스 시드를 그대로 지킨다. 다른 국가는 팀 코드로
+  // 스트림만 옮겨, 같은 국면이어도 실제로 다른 대형·체력·경고를 만난다.
+  let teamSalt = 0
+  if (opponent !== 'USA') {
+    for (let i = 0; i < opponent.length; i++) {
+      teamSalt = Math.imul(teamSalt ^ opponent.charCodeAt(i), 16777619)
+    }
+  }
+  return createRng((seed ^ AWAY_OFFSET ^ teamSalt) >>> 0)
 }
 
 /**
