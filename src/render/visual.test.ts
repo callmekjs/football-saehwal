@@ -10,6 +10,7 @@ import {
   FLAG_REACH,
   SHOT_CONTACT_DIST,
   offsidePosition,
+  WRONG_TEAM_PASS,
 } from './visual'
 import { createState, tick, checkSub } from '../sim/engine'
 import { createRng } from '../sim/rng'
@@ -137,6 +138,10 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
  */
 const SEEDS = Array.from({ length: 12 }, (_, i) => P.seed + i)
 const MULTI = SEEDS.map((seed) => watch({ ...P, seed }).frames)
+
+it('앞으로 주든 뒤로 주든 상대를 직접 겨냥하는 패스는 1%뿐이다', () => {
+  expect(WRONG_TEAM_PASS).toBe(0.01)
+})
 
 /**
  * 드문 사건 전용 표본.
@@ -1468,7 +1473,10 @@ describe('골은 갑자기 터지지 않는다', () => {
     expect(
       shown / buildable.length,
       `골 ${buildable.length}회 중 슛으로 들어간 것 ${shown}회`,
-    ).toBeGreaterThan(0.88)
+    // 상대 발밑을 겨냥하는 오패스를 72%에서 1%로 줄이면 일부 예약 공격은
+    // 빈 공간으로 흐른 공 때문에 늦어진다. 그래도 열 장면 중 여덟 이상은
+    // 반드시 실제 슛으로 보여야 한다.
+    ).toBeGreaterThan(0.85)
   })
 
   it('골은 상대 진영에서, 골대 사정거리 안에서 들어간다', () => {

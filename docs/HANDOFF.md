@@ -1,6 +1,6 @@
 # Codex 인수인계 — 이 파일 하나만 읽으면 된다
 
-> 마지막 갱신 **2026-08-02** · 포메이션 영향은 버튼 아래에 계속 남겨 보여준다.
+> 마지막 갱신 **2026-08-02** · 상대에게 건네주는 것처럼 보이는 오패스를 1%로 줄였다.
 > 다음은 Vercel 배포와 시연영상·제출뿐이다.
 > 오늘용 짧은 순서는 [`docs/TOMORROW_HANDOFF.md`](TOMORROW_HANDOFF.md)에 있다.
 > 전에 `docs/CODEX_RESUME.md` 가 따로 있었으나 **이 파일로 합쳤다.**
@@ -11,7 +11,7 @@
 cd C:\football_hackerton
 git pull --ff-only
 git status          # 남의 미완성 작업이 있으면 건드리지 말고 사용자에게 알린다
-npm test            # 735개 통과
+npm test            # 736개 통과
 npx tsc --noEmit    # 0
 ```
 

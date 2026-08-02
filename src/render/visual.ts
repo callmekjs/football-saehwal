@@ -646,6 +646,9 @@ const NEAR_GOAL_SHOT_FLOOR = 0.7
  */
 const NEAR_GOAL_BACKPASS = 0.01
 
+/** 빗나간 패스가 상대 선수 발밑을 직접 향하는 비율. */
+export const WRONG_TEAM_PASS = 0.01
+
 /** 심판이 낼 수 있는 최고 속도(초당 미터). 선수보다 느리다 */
 const REF_SPEED = 6.2
 
@@ -3532,8 +3535,10 @@ export class VisualMatch {
       // 난수는 분기와 무관하게 셋 다 뽑는다. 조건 안에서 뽑으면 같은
       // 시드에서도 이후 수열이 밀려 재현이 조용히 깨진다
       const ang = this.rng.next() * Math.PI * 2
+      // 상대에게 건네지 않는 오패스는 원래 받으려던 동료 주변으로 흐른다.
+      // 너무 멀리 보내면 패스 한 번마다 공격 장면 전체가 끊겨 축구로 보이지 않는다.
       const off = 2 + this.rng.next() * 4
-      const toMarker = this.rng.next() < 0.72
+      const toMarker = this.rng.next() < WRONG_TEAM_PASS
       const marker = this.players.reduce<VPlayer | null>((m, o) => {
         if (o.side === to.side || o.pos === 'GK') return m
         return !m || dist(o, to) < dist(m, to) ? o : m
