@@ -318,9 +318,9 @@ function OpponentPicker({
           </div>
 
           <div className="opp-meters">
-            <h3>이 팀이 위협하는 방식</h3>
+            <h3>상대가 주로 공격하는 방법</h3>
             <Meter
-              label="등 뒤로 넘기기"
+              label="수비 뒤 공간으로 보내기"
               value={selected.shape.behind}
               min={0.6}
               max={1.5}
@@ -328,7 +328,7 @@ function OpponentPicker({
               read={`${selected.shape.behind.toFixed(2)}배`}
             />
             <Meter
-              label="짧게 엮어 들어오기"
+              label="짧은 패스로 파고들기"
               value={selected.shape.open}
               min={0.6}
               max={1.5}
@@ -336,7 +336,7 @@ function OpponentPicker({
               read={`${selected.shape.open.toFixed(2)}배`}
             />
             <Meter
-              label="기회를 골로 만들기"
+              label="기회를 골로 연결하기"
               value={selected.shape.finish}
               min={0.6}
               max={1.5}
@@ -344,7 +344,7 @@ function OpponentPicker({
               read={`${selected.shape.finish.toFixed(2)}배`}
             />
             <Meter
-              label="공격 세기"
+              label="공격 능력"
               value={selected.atk}
               min={-1}
               max={1}
@@ -352,7 +352,7 @@ function OpponentPicker({
               read={selected.atk === 0 ? '기준' : `${selected.atk > 0 ? '+' : ''}${selected.atk}`}
             />
             <Meter
-              label="수비 세기"
+              label="수비 능력"
               value={selected.def}
               min={-1}
               max={1}
@@ -364,7 +364,7 @@ function OpponentPicker({
           <div className="opp-key">
             <h3>
               주요 선수
-              <small>자기 자리 평균보다 가장 많이 튀는 세 명</small>
+              <small>같은 포지션의 다른 선수보다 능력치가 돋보이는 3명</small>
             </h3>
             <ul>
               {squad.keyPlayers.map((player) => (
