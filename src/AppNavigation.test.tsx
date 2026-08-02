@@ -249,6 +249,9 @@ describe('첫 화면 시작 길', () => {
 
     const selectedCard = view.container.querySelector('.kickoff-situation[data-selected="true"]')
     expect(selectedCard?.textContent).toContain(`경고 ${expectedCount}명`)
+    expect(view.container.querySelector('.kickoff-preview-badge')?.textContent?.trim()).toBe(
+      '국면 재현',
+    )
 
     click(find(view.container, 'button.kickoff-button-main', '경기 시작'))
     expect(view.container.querySelector('.captain-brief')?.textContent).toContain(bookedLine!.text)

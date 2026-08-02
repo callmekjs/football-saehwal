@@ -928,7 +928,7 @@ export function App() {
             <div className="kickoff-vignette" aria-hidden />
             <span className="kickoff-preview-badge">
               <i aria-hidden />
-              국면 재현 — 이 장면부터 시작합니다
+              국면 재현
             </span>
             <div className="kickoff-preview-grid">
               {/*
