@@ -58,8 +58,8 @@ const POSITION_LABEL: Record<Position, string> = {
  * 두 이름을 갖는다.
  */
 const LEVEL_LABEL: Record<'line' | 'press' | 'width', Record<Level, string>> = {
-  line: { 0: '낮음', 1: '보통', 2: '높음' },
-  press: { 0: '약', 1: '중', 2: '강' },
+  line: { 0: '낮게', 1: '보통', 2: '높게' },
+  press: { 0: '약하게', 1: '보통', 2: '강하게' },
   width: { 0: '좁게', 1: '보통', 2: '넓게' },
 }
 
@@ -359,7 +359,7 @@ function OpponentPicker({
             <i aria-hidden>✓</i>
             <span>
               <b>{selected.name} 선택 완료</b>
-              아래 자료를 더 보거나 다음 국면으로 진행하세요.
+              아래 자료를 더 보거나 다음 상황으로 진행하세요.
             </span>
           </p>
         </div>
@@ -442,8 +442,8 @@ function SituationCard({
       onClick={onPick}
     >
       <span className="kickoff-situation-top">
-        <b>제{n}국면</b>
-        <em>{survive ? 'SURVIVE' : 'EQUALIZE'}</em>
+        <b>상황 {n}</b>
+        <em>목표 · {survive ? '리드 지키기' : '동점 만들기'}</em>
       </span>
       <span className="kickoff-situation-score">
         {problem.score[0]}
@@ -461,15 +461,15 @@ function SituationCard({
       <span className="kickoff-situation-setup">
         <i>{problem.initialFormation}</i>
         <u>
-          라인 {LEVEL_LABEL.line[problem.initialTactics.line]} · 압박{' '}
+          수비 라인 {LEVEL_LABEL.line[problem.initialTactics.line]} · 압박{' '}
           {LEVEL_LABEL.press[problem.initialTactics.press]} · 폭{' '}
           {LEVEL_LABEL.width[problem.initialTactics.width]}
         </u>
       </span>
       <span className="kickoff-survival">
-        <small>{opponentInfo(opponent).name} 상대 · 아무것도 안 하면</small>
+        <small>{opponentInfo(opponent).name}전 · 아무것도 바꾸지 않으면</small>
         <b>{(rate * 100).toFixed(1)}%</b>
-        <em>만 버팁니다</em>
+        <em>목표 달성 확률</em>
         <i className="kickoff-survival-bar" aria-hidden>
           <b style={{ width: `${Math.max(3, rate * 100)}%` }} />
         </i>
@@ -519,7 +519,7 @@ function HalfPicker({
 const NAV_STEPS: ReadonlyArray<{ id: HomeSection; n: string; label: string; hint: string }> = [
   { id: 'squad', n: '01', label: '우리 팀', hint: '선수 스물여섯 명' },
   { id: 'opponent', n: '02', label: '상대 선택', hint: '13개 팀' },
-  { id: 'situation', n: '03', label: '국면 선택', hint: '고르고 킥오프' },
+  { id: 'situation', n: '03', label: '상황 선택', hint: '위기 장면 고르기' },
   { id: 'history', n: '04', label: '분석 · 기록', hint: '지난 판' },
 ]
 
@@ -839,7 +839,7 @@ export function App() {
           축구 사활
         </button>
         <div className="kickoff-header-facts" aria-label="시뮬레이션 정보">
-          <span>5개 국면</span>
+          <span>5가지 상황</span>
           <span>13개 상대</span>
           <span>실시간 75초</span>
         </div>
@@ -1053,10 +1053,10 @@ export function App() {
                 <i aria-hidden>2</i>
                 <div>
                   <small>전술 사활</small>
-                  <h2 id="situations-title">국면 선택</h2>
+                  <h2 id="situations-title">상황 선택</h2>
                 </div>
               </div>
-              <p>한 국면의 정답이 다른 국면에서는 오판이 됩니다.</p>
+              <p>같은 전술도 경기 상황에 따라 결과가 달라집니다.</p>
               <small>{opponentInfo(opponent).name} 상대 · 1,200시드 실측</small>
             </div>
             <div className="kickoff-situation-grid">

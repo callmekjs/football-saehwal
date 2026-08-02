@@ -120,7 +120,7 @@ describe('첫 화면 시작 길', () => {
     expect(dossier).not.toContain('주요 선수')
     expect(scouting).toContain('주요 선수')
     expect(scouting).toContain('즐겨 서는 대형')
-    expect(find(view.container, 'button.step-next', '다음 · 국면 선택')).toBeDefined()
+    expect(find(view.container, 'button.step-next', '다음 · 상황 선택')).toBeDefined()
 
     view.unmount()
   })
@@ -231,7 +231,19 @@ describe('첫 화면 시작 길', () => {
 
     click(find(view.container, 'button.title-play', '경기 준비'))
     click(find(view.container, 'button.step-next', '다음 · 상대 선택'))
-    click(find(view.container, 'button.step-next', '다음 · 국면 선택'))
+    click(find(view.container, 'button.step-next', '다음 · 상황 선택'))
+
+    const situationCards = Array.from(
+      view.container.querySelectorAll<HTMLElement>('.kickoff-situation'),
+    )
+    expect(situationCards).toHaveLength(5)
+    for (const card of situationCards) {
+      const text = card.textContent ?? ''
+      expect(text).toContain('목표 ·')
+      expect(text).toContain('목표 달성 확률')
+      expect(text).toContain('전 · 아무것도 바꾸지 않으면')
+      expect(text).not.toMatch(/SURVIVE|EQUALIZE|제\d국면|만 버팁니다/)
+    }
 
     const selectedCard = view.container.querySelector('.kickoff-situation[data-selected="true"]')
     expect(selectedCard?.textContent).toContain(`경고 ${expectedCount}명`)
