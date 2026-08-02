@@ -29,9 +29,8 @@ import {
   type DropTarget,
 } from './squadDrag'
 import {
-  OUR_ABILITY_AVERAGE,
+  homeAbilityAverage,
   opponentAbilityAverage,
-  opponentAbilityRatio,
 } from '../analysis/opponents'
 import { attributeTone, playerDataOf } from './playerData'
 import type {
@@ -1094,7 +1093,8 @@ export function AwayPanel({ state }: { state: MatchState }) {
    */
   const stamina = Math.max(0, Math.min(100, state.awayStamina))
   const awayAbility = opponentAbilityAverage(state.opponentTeam)
-  const abilityRatio = opponentAbilityRatio(state.opponentTeam)
+  const homeAbility = homeAbilityAverage(state.players)
+  const abilityRatio = awayAbility / homeAbility
   return (
     <section className="panel away-panel" aria-label="상대 포메이션">
       <h2>
@@ -1121,13 +1121,13 @@ export function AwayPanel({ state }: { state: MatchState }) {
         추적하지 않기 때문이다. 대신 **팀 평균**을 보여준다 — 이 값은
         상대 세기 계수에서 그대로 유도하므로 화면과 실제가 어긋나지 않는다.
       */}
-      <div className="away-ability" aria-label={`상대 평균 능력치 ${awayAbility.toFixed(1)}, 우리 ${OUR_ABILITY_AVERAGE.toFixed(1)}`}>
+      <div className="away-ability" aria-label={`상대 평균 능력치 ${awayAbility.toFixed(1)}, 우리 ${homeAbility.toFixed(1)}`}>
         <span className="away-vitals-label">평균 능력치</span>
-        <b data-side={awayAbility > OUR_ABILITY_AVERAGE ? 'over' : 'under'}>
+        <b data-side={awayAbility > homeAbility ? 'over' : 'under'}>
           {awayAbility.toFixed(1)}
         </b>
         <small>
-          우리 {OUR_ABILITY_AVERAGE.toFixed(1)} · {abilityRatio.toFixed(2)}배
+          우리 {homeAbility.toFixed(1)} · {abilityRatio.toFixed(2)}배
         </small>
       </div>
 

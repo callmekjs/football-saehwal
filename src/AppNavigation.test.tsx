@@ -107,9 +107,9 @@ describe('첫 화면 시작 길', () => {
     expect(dossier).toContain('일본')
     expect(dossier).toContain('선택 완료')
     expect(dossier).toContain('상대 전력 한눈에')
-    expect(dossier).toContain('공격수 평균')
-    expect(dossier).toContain('수비수 평균')
-    expect(dossier).toContain('미드필더 평균')
+    expect(dossier).toMatch(/공격(?:강함|보통|약함)우리 \d+\.\d · 상대 \d+\.\d/)
+    expect(dossier).toMatch(/수비(?:강함|보통|약함)우리 \d+\.\d · 상대 \d+\.\d/)
+    expect(dossier).toMatch(/중원(?:강함|보통|약함)우리 \d+\.\d · 상대 \d+\.\d/)
     expect(dossier).not.toContain('상대가 주로 공격하는 방법')
     expect(dossier).not.toContain('결정력')
     expect(view.container.querySelectorAll('.opp-trait')).toHaveLength(3)
@@ -121,6 +121,34 @@ describe('첫 화면 시작 길', () => {
     expect(scouting).toContain('주요 선수')
     expect(scouting).toContain('즐겨 서는 대형')
     expect(find(view.container, 'button.step-next', '다음 · 국면 선택')).toBeDefined()
+
+    view.unmount()
+  })
+
+  it('명단을 다시 뽑으면 상대 비교의 우리 팀 기준도 함께 바뀐다', () => {
+    const view = mount(<App />)
+
+    click(find(view.container, 'button.title-play', '경기 준비'))
+    click(find(view.container, 'button.step-next', '다음 · 상대 선택'))
+
+    const homeAverage = () =>
+      view.container.querySelector('.opp-compare > div:first-child > b')?.textContent
+    const lineComparisons = () =>
+      Array.from(view.container.querySelectorAll('.opp-trait p')).map(
+        (node) => node.textContent,
+      )
+
+    const beforeAverage = homeAverage()
+    const beforeLines = lineComparisons()
+
+    click(find(view.container, 'button.step-back', '우리 팀'))
+    click(find(view.container, 'button.squad-refresh', '명단 다시 뽑기'))
+    click(find(view.container, 'button.step-next', '다음 · 상대 선택'))
+
+    expect(homeAverage()).not.toBe(beforeAverage)
+    expect(lineComparisons()).not.toEqual(beforeLines)
+    expect(lineComparisons().every((text) => text?.includes('우리'))).toBe(true)
+    expect(lineComparisons().every((text) => text?.includes('상대'))).toBe(true)
 
     view.unmount()
   })

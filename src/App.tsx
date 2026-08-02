@@ -7,11 +7,10 @@ import {
 import raw from './data/problems.json' with { type: 'json' }
 import { noActionRate, referenceNoActionRate } from './analysis/balanceBaseline'
 import {
-  OUR_ABILITY_AVERAGE,
   OPPONENT_DATA_NOTICE,
   TIER_LABEL,
+  homeAbilityAverage,
   opponentAbilityAverage,
-  opponentAbilityRatio,
   opponentInfo,
   teamsByTier,
 } from './analysis/opponents'
@@ -93,8 +92,8 @@ function situationNote(state: MatchState): string {
 
 type TraitLevel = '강함' | '보통' | '약함'
 
-function traitLevelFromRating(rating: number): TraitLevel {
-  const gap = rating - OUR_ABILITY_AVERAGE
+function traitLevelFromRating(rating: number, homeRating: number): TraitLevel {
+  const gap = rating - homeRating
   if (gap >= 1) return '강함'
   if (gap <= -1) return '약함'
   return '보통'
@@ -210,20 +209,27 @@ function AwayShapeBoard({
 function OpponentPicker({
   value,
   onPick,
+  homeState,
 }: {
   value: OpponentId
   onPick: (value: OpponentId) => void
+  /** 명단 다시 뽑기와 선발 교체까지 반영된, 곧 경기에 나갈 우리 선수들 */
+  homeState: MatchState
 }) {
   const selected = opponentInfo(value)
   const squad = opponentSquad(value)
-  const ratio = opponentAbilityRatio(value)
-  const lineRating = (position: Position) => {
+  const homeAverage = homeAbilityAverage(homeState.players)
+  const awayLineRating = (position: Position) => {
     const players = squad.players.filter((player) => player.pos === position)
     return players.reduce((sum, player) => sum + player.rating, 0) / players.length
   }
-  const attackRating = lineRating('FW')
-  const defenseRating = lineRating('DF')
-  const midfieldRating = lineRating('MF')
+  const attackRating = awayLineRating('FW')
+  const defenseRating = awayLineRating('DF')
+  const midfieldRating = awayLineRating('MF')
+  const homeAttackRating = homeAbilityAverage(homeState.players, 'FW')
+  const homeDefenseRating = homeAbilityAverage(homeState.players, 'DF')
+  const homeMidfieldRating = homeAbilityAverage(homeState.players, 'MF')
+  const ratio = opponentAbilityAverage(value) / homeAverage
 
   return (
     <section id="opponents" className="kickoff-opponents" aria-labelledby="opponent-title">
@@ -250,7 +256,7 @@ function OpponentPicker({
               <div className="kickoff-team-grid">
                 {teams.map((team) => {
                   const active = value === team.id
-                  const teamRatio = opponentAbilityRatio(team.id)
+                  const teamRatio = opponentAbilityAverage(team.id) / homeAverage
                   return (
                     <button
                       type="button"
@@ -305,9 +311,9 @@ function OpponentPicker({
           <div className="opp-compare">
             <div>
               <small>우리</small>
-              <b>{OUR_ABILITY_AVERAGE.toFixed(1)}</b>
+              <b>{homeAverage.toFixed(1)}</b>
               <i aria-hidden>
-                <u style={{ width: `${(OUR_ABILITY_AVERAGE / 20) * 100}%` }} data-side="home" />
+                <u style={{ width: `${(homeAverage / 20) * 100}%` }} data-side="home" />
               </i>
             </div>
             <div>
@@ -330,20 +336,20 @@ function OpponentPicker({
             <div>
               <OpponentTrait
                 label="공격"
-                description={`공격수 평균 ${attackRating.toFixed(1)}`}
-                level={traitLevelFromRating(attackRating)}
+                description={`우리 ${homeAttackRating.toFixed(1)} · 상대 ${attackRating.toFixed(1)}`}
+                level={traitLevelFromRating(attackRating, homeAttackRating)}
                 tone="attack"
               />
               <OpponentTrait
                 label="수비"
-                description={`수비수 평균 ${defenseRating.toFixed(1)}`}
-                level={traitLevelFromRating(defenseRating)}
+                description={`우리 ${homeDefenseRating.toFixed(1)} · 상대 ${defenseRating.toFixed(1)}`}
+                level={traitLevelFromRating(defenseRating, homeDefenseRating)}
                 tone="defense"
               />
               <OpponentTrait
                 label="중원"
-                description={`미드필더 평균 ${midfieldRating.toFixed(1)}`}
-                level={traitLevelFromRating(midfieldRating)}
+                description={`우리 ${homeMidfieldRating.toFixed(1)} · 상대 ${midfieldRating.toFixed(1)}`}
+                level={traitLevelFromRating(midfieldRating, homeMidfieldRating)}
                 tone="midfield"
               />
             </div>
@@ -687,6 +693,8 @@ export function App() {
     [attempt, entries, opponent, rerollOffset, roster, starters],
   )
   const previewState = previewStates.get(selectedEntry.problem.id)!
+  const previewHomeAverage = homeAbilityAverage(previewState.players)
+  const previewOpponentRatio = opponentAbilityAverage(opponent) / previewHomeAverage
   const previewSeed = selectedEntry.problem.seed + (attempt + 1) * 7919 + rerollOffset
   const selectedAddedTime = addedTimeFor(previewSeed, selectedHalf)
   /**
@@ -886,7 +894,7 @@ export function App() {
           )}
 
           {section === 'opponent' && (
-            <OpponentPicker value={opponent} onPick={setOpponent} />
+            <OpponentPicker value={opponent} onPick={setOpponent} homeState={previewState} />
           )}
 
           {section === 'history' && (
@@ -999,8 +1007,8 @@ export function App() {
                     </li>
                     <li>
                       <small>우리 대비</small>
-                      <b data-strong={opponentAbilityRatio(opponent) >= 1 ? 'on' : undefined}>
-                        {opponentAbilityRatio(opponent).toFixed(2)}배
+                      <b data-strong={previewOpponentRatio >= 1 ? 'on' : undefined}>
+                        {previewOpponentRatio.toFixed(2)}배
                       </b>
                     </li>
                   </ul>

@@ -1,6 +1,6 @@
 import { OPPONENTS } from '../sim/constants'
-import { HOME_XI } from '../sim/squad'
-import type { OpponentId, PlayerAttributes } from '../sim/types'
+import { abilityOf, getPlayer, HOME_XI } from '../sim/squad'
+import type { OpponentId, PlayerAttributes, PlayerState, Position } from '../sim/types'
 
 /**
  * 오늘 만나는 상대 팀을 사람 말로.
@@ -73,6 +73,37 @@ export const OUR_ABILITY_AVERAGE =
         ATTRIBUTE_KEYS.length,
     0,
   ) / HOME_XI.length
+
+/**
+ * 지금 경기에 나갈 우리 선수들의 평균 능력치.
+ *
+ * 기본 명단 상수로 계산하면 「명단 다시 뽑기」와 선발 교체 뒤에도 비교
+ * 화면이 그대로 남는다. 반드시 `PlayerState.ability`를 읽어 그 판의 실제
+ * 능력치를 반영한다. 포지션을 넘기면 공격·수비·중원 비교에 쓴다.
+ */
+export function homeAbilityAverage(
+  players: readonly PlayerState[],
+  position?: Position,
+): number {
+  const selected = players.filter(
+    (player) =>
+      player.onPitch &&
+      !player.out &&
+      (position === undefined || getPlayer(player.id).pos === position),
+  )
+  if (selected.length === 0) return OUR_ABILITY_AVERAGE
+
+  return (
+    selected.reduce((teamSum, player) => {
+      const attributes = abilityOf(player).attributes
+      return (
+        teamSum +
+        ATTRIBUTE_KEYS.reduce((playerSum, key) => playerSum + attributes[key], 0) /
+          ATTRIBUTE_KEYS.length
+      )
+    }, 0) / selected.length
+  )
+}
 
 /** 이 상대의 평균 능력치. 1~20 눈금이며 계수에서 유도한다 */
 export function opponentAbilityAverage(id: OpponentId): number {
