@@ -413,6 +413,8 @@ const OWNER_GRACE = 0.5
  * 늦는 것은 화면의 숫자뿐이고, 종료 휘슬에서 반드시 같아진다.
  */
 const GOAL_RUNWAY = 11
+/** 종료 뒤에는 골문 앞 마무리만 보여주고 결과 화면을 오래 붙잡지 않는다. */
+const FINAL_GOAL_RUNWAY = 0.35
 /**
  * 골이 들어가기 전에 있어야 하는 최소 전개 시간(초).
  *
@@ -1089,7 +1091,7 @@ export class VisualMatch {
    * 났다"를 보게 된다 — 사용자가 지적한 바로 그 결함이다.
    *
    * **경기 결과는 아무 영향도 받지 않는다.** 승패는 시뮬의 점수로만
-   * 판정하고, 이 숫자는 종료 휘슬에서 시뮬의 점수로 반드시 맞춰진다.
+   * 판정하고, 이 숫자는 공 전체가 골라인을 넘었을 때만 오른다.
    */
   displayScore: [number, number] = [0, 0]
   /**
@@ -1559,37 +1561,15 @@ export class VisualMatch {
     this.simTick = state.tick
     // 점수가 움직이기 전에 원인부터 읽어둔다. 아래 득점 처리가 이 줄을 쓴다
     this.readGoalCauses(state)
-    /**
-     * 종료 휘슬 — 점수판을 시뮬에 맞춘다.
-     *
-     * 750틱이 끝나면 화면도 멈춘다. 미뤄둔 골이 남아 있으면 그 장면은
-     * 영영 안 나오는데, 그렇다고 숫자까지 안 오르면 시뮬의 결과와 화면이
-     * 어긋난 채로 경기가 끝난다. 장면을 놓치는 것보다 점수가 틀리는 것이
-     * 훨씬 나쁘다. 아래 `queueShot` 이 남은 시간을 보고 유예를 잘라서
-     * 여기까지 오는 일 자체가 거의 없게 해둔다
-     */
+    // 경기 중에 예약돼 남아 있던 골도 종료 뒤에는 짧게 마무리한다.
+    // 점수를 강제로 올리지는 않고, 각 공이 실제 골라인을 넘을 시간만 준다.
     if (state.tick >= TOTAL_TICKS) {
-      /**
-       * 종료 직전까지 장면을 못 만든 골도 소리 사건에서는 잃지 않는다.
-       *
-       * 종료 휘슬에서는 점수 정확성이 우선이라 화면 점수를 시뮬 점수로
-       * 맞춘다. 전에는 숫자만 바뀌고 함성은 `requestAnimationFrame`
-       * 전이에 매달려 사라질 수 있었다. 아직 보여주지 못한 골 수만큼
-       * 같은 사건 장부에 남긴다.
-       */
-      while (this.displayScore[0] < state.score[0]) this.revealGoal('HOME')
-      while (this.displayScore[1] < state.score[1]) this.revealGoal('AWAY')
-      this.displayScore = [...state.score] as [number, number]
-      // 이미 점수와 함성을 맞췄으므로 밀린 득점 슛이 다시 실행되면 안 된다
-      this.pending = this.pending.filter((shot) => !shot.willScore)
-      this.lastScore = [...state.score] as [number, number]
-      // 장면이 영영 안 나올 골의 원인은 버린다. 남겨두면 다음 골이 남의
-      // 원인을 물려받아 엉뚱한 장면이 된다
-      this.awayCauses = []
-      this.homeCauses = []
-      this.behindRun = null
+      for (const shot of this.pending) {
+        if (!shot.willScore) continue
+        shot.life = Math.min(shot.life, FINAL_GOAL_RUNWAY)
+        shot.extra = 0
+      }
     }
-
     // 대형을 다시 짜기 전에 읽어야 한다. 다시 짜고 나면 빠진 선수가
     // 목록에서 사라져 어디에 쓰러졌는지 알 방법이 없다
     this.captureDowned(state)
@@ -2067,9 +2047,18 @@ export class VisualMatch {
      * 급한 팀은 벽을 기다리지 않고 빨리 재개한다.
      */
     if (willScore && this.restart) this.restart.wait = Math.min(this.restart.wait, 0.2)
-    const left = (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
+    const afterWhistle = this.simTick >= TOTAL_TICKS
+    const left = afterWhistle
+      ? FINAL_GOAL_RUNWAY
+      : (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
     const life = willScore ? clamp(Math.min(GOAL_RUNWAY, left), 0, GOAL_RUNWAY) : 1.8
-    this.pending.push({ side, willScore, cause, life, extra: willScore ? GOAL_EXTRA : 0 })
+    this.pending.push({
+      side,
+      willScore,
+      cause,
+      life,
+      extra: willScore && !afterWhistle ? GOAL_EXTRA : 0,
+    })
     const holder = this.byId(this.ball.holder)
     if (
       this.ball.mode === 'HELD' &&
@@ -2242,6 +2231,9 @@ export class VisualMatch {
     if (this.restart) return
     const q = this.pending[0]
     if (!q) return
+    // 앞 골의 공이 아직 골라인을 넘는 중이면 다음 예약 골이 그 공을
+    // 덮어쓰지 않는다. 한 골씩 실제 장면을 끝낸 뒤 다음 장면을 만든다.
+    if (this.ball.mode === 'SHOT' && this.ball.willScore) return
     if (q.willScore && this.ballIsLeavingField()) return
     q.life -= dt
     /**
@@ -2366,20 +2358,35 @@ export class VisualMatch {
     this.netGoal(q.side)
   }
 
-  /** 슛 없이 골망 장면으로 넘어간다 */
+  /**
+   * 정상적인 공격 전개를 만들 시간이 끝났을 때의 마지막 안전망.
+   *
+   * 예전에는 공을 골망 뒤로 옮긴 뒤 점수를 바로 올렸다. 이제는 골문 앞에서
+   * 실제 슛 궤적을 시작하고, `resolveShot`이 공 전체의 골라인 통과를 확인한
+   * 뒤에만 점수를 올린다.
+   */
   private netGoal(side: 'HOME' | 'AWAY', targetY?: number) {
     const b = this.ball
     const gx = this.goalX(side)
-    b.mode = 'LOOSE'
+    const direction = gx === GOAL_LINE_HOME ? 1 : -1
+    b.mode = 'SHOT'
     b.holder = null
     b.targetId = null
-    b.willScore = false
-    this.stopBall()
-    b.x = gx === GOAL_LINE_HOME ? PITCH_W + 0.8 : -0.8
+    b.kickerId = null
+    b.selfLock = 0
+    b.willScore = true
+    b.x = gx - direction * 5
     b.y = targetY ?? GOAL_MID + (this.rng.next() - 0.5) * 4
+    b.z = 0.35
+    b.vx = direction * SHOT_SPEED
+    b.vy = 0
+    b.vz = 0.7
     b.lastTouch = side
-    this.flash('GOAL', b.x, b.y)
-    this.beginCelebration(side, b.x, b.y)
+    b.fromX = b.x
+    b.fromY = b.y
+    b.toX = gx
+    b.toY = b.y
+    this.flash('SHOT', b.x, b.y)
   }
 
   /**
@@ -2453,10 +2460,13 @@ export class VisualMatch {
     // 재개 시점에 밀려 있던 빗나갈 슛은 버린다. 골 예약은 반드시 장면이
     // 나와야 하므로 살려두되 기다리는 시간을 다시 준다
     this.pending = this.pending.filter((q) => q.willScore)
-    const left = (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
+    const afterWhistle = this.simTick >= TOTAL_TICKS
+    const left = afterWhistle
+      ? FINAL_GOAL_RUNWAY
+      : (TOTAL_TICKS - this.simTick) * 0.1 - 2.5
     for (const q of this.pending) {
       q.life = clamp(Math.min(GOAL_RUNWAY, left), 0, GOAL_RUNWAY)
-      q.extra = GOAL_EXTRA
+      q.extra = afterWhistle ? 0 : GOAL_EXTRA
     }
     // 킥오프가 아웃 재개보다 우선한다
     this.restart = null

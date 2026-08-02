@@ -99,6 +99,10 @@ describe('경기 중 선수 선택과 행동 지시', () => {
 
     // 종료 보고서에 넘기는 결정 개수도 0이 아니어야 한다.
     advance(() => vi.advanceTimersByTime(75_100))
+    // 종료 직전 골이 있으면 공이 골라인을 넘고 세리머니가 끝날 때까지
+    // 결과 보고서를 열지 않는다.
+    advance(() => vi.advanceTimersByTime(12_000))
+    advance(() => vi.advanceTimersByTime(1_500))
     expect(finished.length).toBeGreaterThan(0)
     expect(finished[0].decisions).toBeGreaterThan(0)
 

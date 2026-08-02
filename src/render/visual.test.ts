@@ -48,6 +48,15 @@ const P03_85776 = {
   seed: 85776,
 }
 
+/** 종료 직전 예약 골이 실제 골라인을 넘을 때까지 관전 연출을 진행한다. */
+function settleFinal(vm: VisualMatch, state: MatchState, seconds = 25) {
+  for (let frame = 0; frame < seconds * 60; frame++) {
+    if (vm.displayScore[0] === state.score[0] && vm.displayScore[1] === state.score[1]) return
+    vm.sync(state)
+    vm.advance(state, 1 / 60)
+  }
+}
+
 /** 경기를 관전하며 매 프레임을 기록한다. 화면과 같은 60fps로 돈다 */
 function watch(problem = P, ticks = TOTAL_TICKS) {
   const rng = createRng(problem.seed)
@@ -116,8 +125,8 @@ function watch(problem = P, ticks = TOTAL_TICKS) {
       players: vm.players.map((p) => ({ id: p.id, x: p.x, y: p.y, v: Math.hypot(p.vx, p.vy) })),
     })
   }
-  // 종료 휘슬을 한 번 더 흘려보낸다. 점수판이 시뮬과 맞춰지는 자리다
-  vm.sync(s)
+  // 종료 직전 골이 남았다면 공이 골라인을 통과할 때까지 결과를 기다린다.
+  settleFinal(vm, s)
   return { frames, vm, final: s }
 }
 
@@ -411,11 +420,11 @@ describe('선수 움직임 — 출시 기준', () => {
     expect(scenes, `득점 ${signals}회 중 골 장면 ${scenes}회`).toBeGreaterThanOrEqual(signals)
   })
 
-  it('종료 휘슬에서 점수판이 시뮬과 정확히 같다', () => {
+  it('마지막 골 장면이 끝나면 점수판이 시뮬과 정확히 같다', () => {
     /**
      * 골 장면을 미루는 대가로 점수판이 잠깐 늦는다. **경기 결과가 바뀌는
      * 것은 절대 아니다.** 승패는 시뮬의 점수로만 판정하고, 화면의 숫자는
-     * 종료 휘슬에서 반드시 시뮬과 같아진다. 여기가 그 보증이다
+     * 공이 골라인을 넘은 뒤 반드시 시뮬과 같아진다. 여기가 그 보증이다
      */
     for (const seed of SEEDS) {
       const { vm, final } = watch({ ...P, seed })
@@ -1460,11 +1469,9 @@ describe('골은 갑자기 터지지 않는다', () => {
   /**
    * 종료 직전의 골은 구조적으로 전개를 만들 수 없다.
    *
-   * 750틱이 끝나면 화면도 멈춘다. 남은 시간이 없는데 장면을 미루면 골이
-   * 영영 안 나오고 점수판만 끝에서 훌쩍 뛴다 — 그게 훨씬 나쁘다. 그래서
-   * 남은 시간이 짧으면 화면은 전개를 포기하고 곧바로 골망 장면으로
-   * 넘어간다. 그 골들은 아래 비율에서 뺀다. 점수가 맞는지는
-   * "종료 휘슬에서 점수판이 시뮬과 정확히 같다" 가 따로 지킨다
+   * 남은 시간이 짧으면 긴 빌드업을 만들 수 없다. 이때는 골문 앞 마무리만
+   * 보여주되 공 전체가 골라인을 넘은 뒤에 점수를 올린다. 그 골들은 아래
+   * 전개 비율에서 빼고, 종료 점수 검사는 따로 지킨다.
    */
   const buildable = goals.filter((g) => g.timeLeft > 14)
 
@@ -1987,17 +1994,6 @@ describe('공이 밖으로 나가면 규칙대로 다시 넣는다', () => {
         const scoreChanged = fs[i].shown[0] !== fs[i - 1].shown[0] ||
           fs[i].shown[1] !== fs[i - 1].shown[1]
         if (!scoreChanged) continue
-        /**
-         * **종료 휘슬은 예외다.** 그 순간에는 점수 정확성이 장면보다
-         * 우선이라 화면 점수를 시뮬 점수에 강제로 맞춘다(`visual.ts` 의
-         * `state.tick >= TOTAL_TICKS` 블록). 그때 마침 재개를 기다리고
-         * 있었다면 여기 걸리는데, 그건 고장이 아니라 정해둔 규칙이다 —
-         * 장면을 기다리다 골을 영영 안 보여주는 쪽이 훨씬 나쁘다.
-         *
-         * 이 예외가 없어서 검사가 운으로 통과하고 있었다. 열두 시드 중
-         * 재개 중에 종료를 맞은 판이 하나도 없었을 뿐이다.
-         */
-        if (fs[i].state.tick >= TOTAL_TICKS) continue
         expect(fs[i].restart, '아웃 재개 중 점수판이 바뀌었다').toBeNull()
       }
     }
@@ -2897,7 +2893,7 @@ describe('예약 득점은 공 없는 슈터에게 순간이동하지 않는다'
       }
     }
 
-    vm.sync(state)
+    settleFinal(vm, state)
     expect(nonContactJumps, `비접촉 5m 이상 이동 ${nonContactJumps.join(', ')}`).toHaveLength(0)
     expect(
       Math.max(0, queuedGoals - goalScenes),
@@ -2984,7 +2980,7 @@ describe('비득점 슛은 골라인 뒤에서 가짜 선방을 만들지 않는
         }
       }
 
-      vm.sync(state)
+      settleFinal(vm, state)
       expect(vm.displayScore, `시드 ${problem.seed}`).toEqual(state.score)
     }
 

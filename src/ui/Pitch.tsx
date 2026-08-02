@@ -85,6 +85,7 @@ export function Pitch({
     let raf = 0
     let pulseTimer = 0
     let audioTimer = 0
+    let settlementStartedAt = 0
     const audioQueue: VisualAudioCue[] = []
     /** 마지막으로 알린 점수. 바뀔 때만 알려야 매 프레임 다시 그리지 않는다 */
     let told = ''
@@ -118,7 +119,17 @@ export function Pitch({
      */
     const pulse = () => {
       const st = stateRef.current
-      const update = clock.update(st, liveRef.current ? CATCHUP_PER_PULSE : 0)
+      if (st.tick >= TOTAL_TICKS && liveRef.current && settlementStartedAt === 0) {
+        settlementStartedAt = performance.now()
+      }
+      const settlementSeconds = settlementStartedAt
+        ? Math.max(0, (performance.now() - settlementStartedAt) / 1000)
+        : 0
+      const update = clock.update(
+        st,
+        liveRef.current ? CATCHUP_PER_PULSE : 0,
+        settlementSeconds,
+      )
       queueCues(update.cues)
 
       // 골 장면이 나온 순간(그리고 종료 휘슬에서) 점수판이 따라 오른다
@@ -148,7 +159,7 @@ export function Pitch({
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
           drawPitch(ctx, vm, stateRef.current, w, h, flippedRef.current)
           // 멈춘 화면은 고장난 화면과 구분되지 않는다. 끝났다고 말해준다
-          if (stateRef.current.tick >= TOTAL_TICKS) {
+          if (stateRef.current.tick >= TOTAL_TICKS && !liveRef.current) {
             ctx.save()
             ctx.fillStyle = 'rgba(6,12,10,0.58)'
             ctx.fillRect(0, 0, w, h)

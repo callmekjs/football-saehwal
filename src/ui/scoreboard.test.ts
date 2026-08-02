@@ -19,22 +19,16 @@ function problemOf(id: string): Problem {
   return problemById(id)
 }
 
-describe('점수판 — 끝났을 때 반드시 시뮬과 같다', () => {
+describe('점수판 — 골 장면과 숫자가 함께 움직인다', () => {
   it('경기 중에는 장면을 기다린다', () => {
     // 시뮬은 이미 2-0인데 화면이 아직 첫 골밖에 못 보여줬다.
     // 이 지연은 의도된 것이다 — 공이 중원에 있는데 숫자만 오르면 안 된다
     expect(scoreboardScore(false, [2, 0], [1, 0])).toEqual([1, 0])
   })
 
-  it('종료 휘슬에서는 장면을 기다리지 않는다', () => {
-    /**
-     * 이것이 이번에 고친 것이다. 사용자가 브라우저에서 끝까지 돌렸더니
-     * 헤더는 1-0인데 감독 보고서는 2-0이라고 말했고 기록에는 87분 골이
-     * 남아 있었다. 화면이 못 만든 장면 하나 때문에 **경기가 틀린 점수로
-     * 끝났다.** 장면을 놓치는 것보다 점수가 틀린 것이 훨씬 나쁘다
-     */
-    expect(scoreboardScore(true, [2, 0], [1, 0])).toEqual([2, 0])
-    expect(scoreboardScore(true, [1, 3], [1, 0])).toEqual([1, 3])
+  it('종료 시점에도 아직 안 들어간 골을 숫자로 먼저 말하지 않는다', () => {
+    expect(scoreboardScore(true, [2, 0], [1, 0])).toEqual([1, 0])
+    expect(scoreboardScore(true, [1, 3], [1, 0])).toEqual([1, 0])
   })
 
   it('화면이 시뮬보다 앞서지 않는다', () => {
@@ -121,8 +115,17 @@ function playInBrowser(
     }
   }
 
-  const header = scoreboardScore(s.tick >= TOTAL_TICKS, s.score, scene)
-  return { header, sim: s.score, scene }
+  const sceneAtWhistle = [...scene] as [number, number]
+  // 시뮬 시계는 끝났지만 Pitch의 보조 시계는 마지막 골 장면을 계속 그린다.
+  for (let frame = 0; frame < 25 * fps; frame++) {
+    if (scene[0] === s.score[0] && scene[1] === s.score[1]) break
+    vm.sync(s)
+    vm.advance(s, 1 / fps)
+    scene = [...vm.displayScore] as [number, number]
+  }
+
+  const header = scoreboardScore(true, s.score, scene)
+  return { header, sim: s.score, scene, sceneAtWhistle }
 }
 
 describe('점수판 — 브라우저 루프 전체', () => {
@@ -142,22 +145,24 @@ describe('점수판 — 브라우저 루프 전체', () => {
     }
   })
 
-  it('연출이 도중에 멈춰도 헤더가 시뮬과 같다', () => {
+  it('연출이 도중에 멈췄어도 마지막 장면을 마친 뒤 헤더가 시뮬과 같다', () => {
     /**
      * **이것이 실제로 깨졌던 경로다.** 화면이 골 장면을 만드는 동안
      * 점수판이 기다리게 돼 있는데, 그 기다림이 끝나기 전에 렌더 루프가
      * 멈추면 숫자가 영영 안 올랐다. 마지막 5초·15초·30초 동안 루프가
      * 죽어도 종료 시점의 숫자는 맞아야 한다
      */
-    let stale = 0
+    let staleAtWhistle = 0
     for (const lostSeconds of [5, 15, 30]) {
       const r = playInBrowser(P, { stopRenderAt: (75 - lostSeconds) * 60 })
       expect(r.header, `마지막 ${lostSeconds}초 동안 연출 정지`).toEqual(r.sim)
-      if (r.scene[0] !== r.sim[0] || r.scene[1] !== r.sim[1]) stale += 1
+      if (r.sceneAtWhistle[0] !== r.sim[0] || r.sceneAtWhistle[1] !== r.sim[1]) {
+        staleAtWhistle += 1
+      }
     }
     // **표본이 실제로 그 상황을 담고 있어야 한다.** 연출이 끝까지 따라온
     // 판만 모여 있으면 이 테스트는 아무것도 안 지키고 통과한다
-    expect(stale, `연출 점수가 시뮬과 달랐던 경우 ${stale}/3`).toBeGreaterThan(0)
+    expect(staleAtWhistle, `종료 순간 밀린 경우 ${staleAtWhistle}/3`).toBeGreaterThan(0)
   })
 
   it('모든 국면 · 여러 시드에서 한 건도 어긋나지 않는다', () => {

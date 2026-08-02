@@ -38,13 +38,20 @@ export class VisualClock {
    * 숨긴 탭이 오래 멈췄다가 돌아오면 여러 호출에 나눠 따라잡으며, 그
    * 사이에 생긴 소리 사건도 순서대로 남는다.
    */
-  update(state: MatchState, maxAdvanceSeconds = 5): VisualClockUpdate {
-    const target = state.tick * TICK_SECONDS
+  update(
+    state: MatchState,
+    maxAdvanceSeconds = 5,
+    settlementSeconds = 0,
+  ): VisualClockUpdate {
+    const stateTarget = state.tick * TICK_SECONDS
+    // 종료 직전 예약된 골은 시뮬 시계가 멈춘 뒤에도 실제 골 장면을
+    // 마칠 시간이 필요하다. 이미 진행한 연출 시간을 뒤로 감지는 않는다.
+    const target = Math.max(stateTarget + Math.max(0, settlementSeconds), this.time)
 
     // 같은 화면에서 다시 풀었다. 지난 경기의 연출과 사건 장부를 버린다.
-    if (target + 0.5 < this.time) {
+    if (state.tick < 1 && this.time > 0.5) {
       this.vm = new VisualMatch(state, this.seed)
-      this.time = target
+      this.time = stateTarget
       this.cueSequence = 0
     }
 

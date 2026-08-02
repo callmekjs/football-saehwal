@@ -382,8 +382,35 @@ export function StatBars({ state, half }: { state: MatchState; half: Half }) {
   )
 }
 
-function Log({ state, half, addedTime }: { state: MatchState; half: Half; addedTime: number }) {
-  const shown = state.log.filter((e) => e.kind !== 'FOUL').slice(-8).reverse()
+function Log({
+  state,
+  score,
+  half,
+  addedTime,
+}: {
+  state: MatchState
+  score: readonly [number, number]
+  half: Half
+  addedTime: number
+}) {
+  // 아직 화면에서 골라인을 넘지 않은 득점은 기록에서도 먼저 말하지 않는다.
+  // 최신 득점부터 시뮬 점수와 공개 점수의 차이만큼 가린다.
+  let hiddenHome = Math.max(0, state.score[0] - score[0])
+  let hiddenAway = Math.max(0, state.score[1] - score[1])
+  const shown = [] as MatchState['log']
+  for (let i = state.log.length - 1; i >= 0 && shown.length < 8; i--) {
+    const event = state.log[i]
+    if (event.kind === 'FOUL') continue
+    if (event.kind === 'GOAL' && hiddenHome > 0) {
+      hiddenHome -= 1
+      continue
+    }
+    if (event.kind === 'CONCEDE' && hiddenAway > 0) {
+      hiddenAway -= 1
+      continue
+    }
+    shown.push(event)
+  }
   return (
     <section className="panel log-panel">
       <h2>경기 이벤트</h2>
@@ -1024,9 +1051,8 @@ export function MatchScreen({
    * 있는 상황이 아닌 경우가 절반이 넘는다. 그래서 연출은 골을 예약해두고
    * 공격 장면을 만든 다음 보여주고, 점수판은 그 장면에 맞춰 오른다.
    *
-   * **이 값을 그대로 점수판에 쓰지 않는다.** 아래 `scoreboardScore` 가
-   * 종료 휘슬 뒤에는 시뮬 값으로 바꿔치기한다 — 장면을 못 만든 채
-   * 경기가 끝나면 이 값이 영영 안 오르기 때문이다.
+   * 아래 `scoreboardScore`도 이 값을 넘지 않는다. 종료 직전 장면이 남으면
+   * 결과 화면이 기다리고, 공 전체가 골라인을 넘은 뒤 함께 끝난다.
    *
    * **승패 판정은 어느 쪽도 쓰지 않는다.** 아래 `judge(state, ...)` 는
    * 시뮬의 점수를 그대로 읽는다.
@@ -1051,7 +1077,30 @@ export function MatchScreen({
 
   const [scene, setScene] = useState<[number, number]>(problem.score)
   useEffect(() => setScene(problem.score), [problem])
-  const shown = scoreboardScore(phase === 'DONE', state.score, scene)
+  const shown = scoreboardScore(false, state.score, scene)
+  const scoreCaughtUp = shown[0] === state.score[0] && shown[1] === state.score[1]
+  const [resultReady, setResultReady] = useState(false)
+  const goalWasPendingAtEnd = useRef(false)
+  useEffect(() => {
+    if (phase !== 'DONE') {
+      goalWasPendingAtEnd.current = false
+      setResultReady(false)
+      return
+    }
+    if (!scoreCaughtUp) {
+      goalWasPendingAtEnd.current = true
+      setResultReady(false)
+      return
+    }
+    if (!goalWasPendingAtEnd.current) {
+      setResultReady(true)
+      return
+    }
+    // 공이 들어간 장면과 세리머니를 잠깐 보여준 뒤 결과로 넘어간다.
+    const timer = window.setTimeout(() => setResultReady(true), 1200)
+    return () => window.clearTimeout(timer)
+  }, [phase, half, scoreCaughtUp])
+  const displayDone = phase === 'DONE' && resultReady
   // 점수판과 같은 공개 점수를 읽는다. 예약 골을 장면보다 먼저 누설하지 않는다.
   const objective = immediateObjective(problem.objective, shown).label
 
@@ -1104,18 +1153,22 @@ export function MatchScreen({
     if (blow) whistle(1)
   }, [state.log])
 
-  /** 경기 시작과 끝. 종료는 실제 경기처럼 두 번 분다 */
+  /** 경기 시작. 종료 휘슬은 마지막 골 장면까지 끝난 뒤 따로 분다. */
   const lastPhase = useRef(phase)
   useEffect(() => {
     if (lastPhase.current !== phase) {
       if (phase === 'RUNNING') whistle(1)
-      else if (phase === 'DONE') whistle(2)
       lastPhase.current = phase
     }
   }, [phase])
+  const lastDisplayDone = useRef(displayDone)
   useEffect(() => {
-    if (phase === 'DONE') setActiveTab('INFO')
-  }, [phase])
+    if (!lastDisplayDone.current && displayDone) whistle(2)
+    lastDisplayDone.current = displayDone
+  }, [displayDone])
+  useEffect(() => {
+    if (displayDone) setActiveTab('INFO')
+  }, [displayDone])
 
   const passed = judge(state, problem.objective)
   const activePreset = presetOf(state.tactics)
@@ -1127,7 +1180,7 @@ export function MatchScreen({
    * 후반이 끝난 것은 경기가 끝난 것이라 정리할 "다음 반"이 없다. 그때는
    * 감독 보고서가 전체를 분석한다.
    */
-  const halftime = phase === 'DONE' && half === 1 ? buildHalftime(problem, state) : null
+  const halftime = displayDone && half === 1 ? buildHalftime(problem, state) : null
 
   /**
    * 후반으로 넘어간다.
@@ -1146,7 +1199,7 @@ export function MatchScreen({
   return (
     <div
       className="match-screen"
-      data-finished={phase === 'DONE' && half === 2 ? 'true' : undefined}
+      data-finished={displayDone && half === 2 ? 'true' : undefined}
     >
       <header className="match-scorebar">
         <button className="match-back" onClick={onExit} aria-label="국면 선택으로">
@@ -1311,7 +1364,7 @@ export function MatchScreen({
         <div className="match-col center">
           <div className="pane center-info" data-pane="INFO">
             <StatBars state={state} half={half} />
-            <Log state={state} half={half} addedTime={addedTime} />
+            <Log state={state} score={shown} half={half} addedTime={addedTime} />
           </div>
 
           <div className="panel pitch-card">
@@ -1319,7 +1372,7 @@ export function MatchScreen({
               state={visibleOpponentState}
               seed={problem.seed}
               half={half}
-              live={phase === 'RUNNING'}
+              live={phase === 'RUNNING' || (phase === 'DONE' && !displayDone)}
               /**
                * 하프타임에 진영을 맞바꾼다.
                *
@@ -1425,7 +1478,7 @@ export function MatchScreen({
             </section>
           )}
 
-          {phase === 'DONE' && half === 1 && halftime && (
+          {displayDone && half === 1 && halftime && (
             /**
              * 하프타임 — 아직 경기가 끝나지 않았다.
              *
@@ -1457,7 +1510,7 @@ export function MatchScreen({
             </section>
           )}
 
-          {phase === 'DONE' && half === 2 && (
+          {displayDone && half === 2 && (
             <section className={`panel side-note result ${passed ? 'passed' : 'failed'}`}>
               <h2>{endLabel(half)}</h2>
               <div className="side-note-body">
@@ -1537,7 +1590,7 @@ export function MatchScreen({
         있다. 조작 경로를 둘로 만들면 어느 쪽이 진짜인지 흐려지고, 지시는
         되돌릴 수 없어서 돌려 걸기가 특히 위험하다. 여기서는 읽기만 한다.
       */}
-      {phase !== 'DONE' && <SquadStrip state={state} />}
+      {!displayDone && <SquadStrip state={state} />}
 
       {/* 감독 보고서는 길다. 열 안에 밀어 넣지 않고 아래에 통째로 편다 */}
       {/*
@@ -1545,7 +1598,7 @@ export function MatchScreen({
         것이 아니라 아직 45분이 남은 것이라, 여기서 판단 평가를 내면
         뒤집을 시간이 남았는데 결론을 선고하는 셈이다.
       */}
-      {phase === 'DONE' && half === 2 && (
+      {displayDone && half === 2 && (
         <div className="match-report">
           <FinishReporter
             onReport={(delta) =>
