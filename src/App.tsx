@@ -28,9 +28,9 @@ import { opponentSquad } from './analysis/opponentSquad'
 import { awayCaptainNumber } from './captain'
 import { awaySlots, type AwayFormationId } from './sim/awayShape'
 import { createState } from './sim/engine'
-import { FORMATIONS } from './sim/formations'
+import { FORMATIONS, slotsForPlayers } from './sim/formations'
 import { OUR_TEAM } from './sim/constants'
-import { HOME_SQUAD, rollRoster } from './sim/squad'
+import { HOME_SQUAD, formationRoleOf, rollRoster } from './sim/squad'
 import { toProblem } from './sim/problems'
 import type { Level, MatchState, OpponentId, Position, Problem } from './sim/types'
 import { attributeLabel } from './ui/playerData'
@@ -948,7 +948,12 @@ export function App() {
                     <em>{selectedProblem.initialFormation}</em>
                   </h3>
                   <ShapeBoard
-                    dots={FORMATIONS[selectedProblem.initialFormation].slots}
+                    dots={slotsForPlayers(
+                      selectedProblem.initialFormation,
+                      previewState.players
+                        .filter((player) => player.onPitch && !player.out)
+                        .map(formationRoleOf),
+                    )}
                     side="home"
                     label={`우리 ${selectedProblem.initialFormation} 대형`}
                   />

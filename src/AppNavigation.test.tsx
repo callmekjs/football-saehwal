@@ -253,6 +253,27 @@ describe('첫 화면 시작 길', () => {
       '국면 재현',
     )
 
+    // 퇴장 국면은 설명만 열 명이어서는 안 된다. 양쪽 미리보기 대형도 실제
+    // 남은 인원과 같아야 한다.
+    click(situationCards[3])
+    expect(
+      view.container.querySelectorAll('.kickoff-crest.home .opp-board-dot'),
+    ).toHaveLength(10)
+    expect(
+      view.container.querySelectorAll('.kickoff-crest.away .opp-board-dot'),
+    ).toHaveLength(11)
+
+    click(situationCards[4])
+    expect(
+      view.container.querySelectorAll('.kickoff-crest.home .opp-board-dot'),
+    ).toHaveLength(11)
+    expect(
+      view.container.querySelectorAll('.kickoff-crest.away .opp-board-dot'),
+    ).toHaveLength(10)
+
+    // 아래 급수 타임 검사는 원래 선택했던 상황 1을 기준으로 한다.
+    click(situationCards[0])
+
     click(find(view.container, 'button.kickoff-button-main', '경기 시작'))
     expect(view.container.querySelector('.captain-brief')?.textContent).toContain(bookedLine!.text)
 
