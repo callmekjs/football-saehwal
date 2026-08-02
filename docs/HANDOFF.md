@@ -1,7 +1,7 @@
 # Codex 인수인계 — 이 파일 하나만 읽으면 된다
 
-> 마지막 갱신 **2026-08-02** · 사용자 결정으로 권장안 자동 시범 경기를 제외했다.
-> 다음은 `final_eval` 재평가와 Vercel 제출 준비다.
+> 마지막 갱신 **2026-08-02** · 최소 `final_eval` 95점과 신규 사용자 최종 점검을 마쳤다.
+> 다음은 Vercel 배포와 시연영상·제출뿐이다.
 > 오늘용 짧은 순서는 [`docs/TOMORROW_HANDOFF.md`](TOMORROW_HANDOFF.md)에 있다.
 > 전에 `docs/CODEX_RESUME.md` 가 따로 있었으나 **이 파일로 합쳤다.**
 >
