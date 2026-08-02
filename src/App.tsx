@@ -452,7 +452,7 @@ function SituationCard({
       </span>
       <strong>{problem.title}</strong>
       <span className="kickoff-situation-summary">
-        {problem.summary.replace(/^[^.]+\.\s*/, '')}
+        {problem.summary?.replace(/^[^.]+\.\s*/, '') ?? ''}
       </span>
       <span className="kickoff-situation-meta">
         교체 {state.subsLeft}장 · {situationNote(state)}
