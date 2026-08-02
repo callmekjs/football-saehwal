@@ -1,6 +1,6 @@
 # Codex 인수인계 — 이 파일 하나만 읽으면 된다
 
-> 마지막 갱신 **2026-08-02** · 2K 첫 화면의 빈 가운데 폭을 줄이고 경기장 미리보기를 키웠다.
+> 마지막 갱신 **2026-08-02** · 67분 승부처의 상대 시작 체력을 실제 경과 시간에 맞게 낮췄다.
 > 다음은 Vercel 배포와 시연영상·제출뿐이다.
 > 오늘용 짧은 순서는 [`docs/TOMORROW_HANDOFF.md`](TOMORROW_HANDOFF.md)에 있다.
 > 전에 `docs/CODEX_RESUME.md` 가 따로 있었으나 **이 파일로 합쳤다.**
@@ -11,7 +11,7 @@
 cd C:\football_hackerton
 git pull --ff-only
 git status          # 남의 미완성 작업이 있으면 건드리지 말고 사용자에게 알린다
-npm test            # 730개 통과
+npm test            # 731개 통과
 npx tsc --noEmit    # 0
 ```
 
@@ -34,8 +34,8 @@ npx tsc --noEmit          # 0
 npm run build             # 성공
 ```
 
-- `npm run sim` 다섯 국면 전부 합격. 무개입 `10.7 / 48.0 / 46.8 / 37.0 / 19.5`,
-  격차 `20.5 / 22.6 / 27.6 / 28.0 / 26.3%p` — **한 자리라도 움직이면 회귀다**
+- `npm run sim` 다섯 국면 전부 합격. 무개입 `10.8 / 48.8 / 48.3 / 38.0 / 19.8`,
+  격차 `21.3 / 23.5 / 27.6 / 29.0 / 26.9%p`
 - 배포 살아 있음 <https://callmekjs.github.io/football-saehwal/>
 
 ### 라이트 사용자를 위한 정보 순서 정리 완료

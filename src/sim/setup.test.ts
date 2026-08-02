@@ -46,6 +46,14 @@ describe('시작 조건 — 판마다 다르다', () => {
     }
   })
 
+  it('후반 승부처의 상대도 이미 뛴 만큼 지친 상태로 시작한다', () => {
+    for (const p of PROBLEMS) {
+      for (const state of seeds(p, 120)) {
+        expect(state.awayStamina, p.title).toBeLessThan(100)
+      }
+    }
+  })
+
   it('주장 보고 여섯 종류가 판마다 실제로 바뀐다', () => {
     for (const p of PROBLEMS) {
       const effects = new Set(seeds(p, 120).map((state) => state.captainEffect))
