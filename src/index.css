@@ -4633,50 +4633,6 @@ button {
   text-align: right;
 }
 
-.kickoff-ticker {
-  min-width: 0;
-  display: flex;
-  align-items: stretch;
-  overflow: hidden;
-  border-top: 1px solid var(--line-3);
-  background: var(--panel-head);
-}
-
-.kickoff-ticker > b {
-  position: relative;
-  z-index: 1;
-  padding: 10px 16px;
-  flex: 0 0 auto;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--label);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-}
-
-.kickoff-ticker > div {
-  min-width: 0;
-  display: inline-flex;
-  white-space: nowrap;
-  color: var(--dim-2);
-  font-family: var(--label);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  animation: kickoff-tick 46s linear infinite;
-}
-
-.kickoff-ticker span {
-  padding: 10px 0;
-}
-
-.kickoff-footnote {
-  margin: 0;
-  padding: 9px 18px 12px;
-  color: var(--dim-3);
-  font-size: 9px;
-  text-align: center;
-}
-
 .kickoff-home :is(a, button):focus-visible {
   outline: 2px solid var(--accent-hi);
   outline-offset: 2px;
@@ -4690,11 +4646,6 @@ button {
 @keyframes kickoff-sweep {
   from { transform: translateX(-420%); }
   to { transform: translateX(420%); }
-}
-
-@keyframes kickoff-tick {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
 }
 
 @media (max-width: 1350px) {
@@ -4870,13 +4821,11 @@ button {
   .kickoff-situation { min-height: 166px; }
   .kickoff-section-head > small { font-size: 9px; }
   .kickoff-half-picker small { white-space: normal; }
-  .kickoff-ticker > b { padding-inline: 10px; font-size: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .kickoff-matchday > b > i,
-  .kickoff-button-main > i,
-  .kickoff-ticker > div {
+  .kickoff-button-main > i {
     animation: none;
   }
 

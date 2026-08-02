@@ -612,11 +612,6 @@ function StepNav({
   )
 }
 
-const TICKER =
-  '시계는 끝까지 흐른다 — 일시정지 없음　　교체 카드는 되돌릴 수 없다　　' +
-  '13개 상대 팀은 서로 다른 축구를 한다　　기준팀 무개입 통과율 11.1~48.9%　　' +
-  '좋은 판단도 한 경기에서는 질 수 있다　　국면과 가상 선수 능력치는 창작이다　　'
-
 export function App() {
   const entries = useMemo<Entry[]>(
     () =>
@@ -1116,17 +1111,6 @@ export function App() {
         </main>
       </div>
 
-      <div className="kickoff-ticker" aria-hidden>
-        <b>경기 안내</b>
-        <div>
-          <span>{TICKER}</span>
-          <span>{TICKER}</span>
-        </div>
-      </div>
-      <p className="kickoff-footnote">
-        상대 팀명·순위는 FIFA 랭킹을 참고했고, 국면과 가상 선수 능력치는
-        창작했습니다.
-      </p>
     </div>
   )
 }

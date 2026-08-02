@@ -115,7 +115,7 @@ describe('첫 화면 시작 길', () => {
     expect(view.container.querySelector('.history-note')?.textContent).toContain('판단 횟수')
     expect(view.container.querySelector('.history-note')?.textContent).not.toContain('판단 n회')
     expect(view.container.textContent).toContain('오늘의 경기')
-    expect(view.container.textContent).toContain('경기 안내')
+    expect(view.container.textContent).not.toContain('경기 안내')
     expect(view.container.textContent).not.toContain('MATCH DAY')
     expect(view.container.textContent).not.toContain('SAEHWAL FEED')
 
