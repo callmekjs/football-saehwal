@@ -148,8 +148,12 @@ function ShapeBoard({
   side: 'home' | 'away'
   label: string
 }) {
-  const place = (x: number) =>
-    side === 'home' ? (x / 78) * 100 : ((x - 40) / 65) * 100
+  const place = (x: number) => {
+    const raw = side === 'home' ? (x / 78) * 100 : ((x - 40) / 65) * 100
+    // 3-4-3의 중앙 공격수처럼 절반 피치 끝에 선 자리도 점 전체가 보이게
+    // 한다. 좌표 자체를 바꾸지 않고 작은 미리보기 안에서만 여백을 둔다.
+    return Math.max(6, Math.min(94, raw))
+  }
   return (
     <div className="opp-board" data-side={side} aria-label={label}>
       <i className="opp-board-box" aria-hidden />

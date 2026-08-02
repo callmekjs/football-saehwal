@@ -253,6 +253,19 @@ describe('첫 화면 시작 길', () => {
       '국면 재현',
     )
 
+    // 3-4-3의 중앙 공격수는 원래 좌표가 절반 피치 끝이다. 작은 전술판에서는
+    // 점이 잘리지 않도록 모든 선수가 안쪽 여백 안에 있어야 한다.
+    click(situationCards[2])
+    const formationDots = Array.from(
+      view.container.querySelectorAll<HTMLElement>('.kickoff-crest.home .opp-board-dot'),
+    )
+    expect(formationDots).toHaveLength(11)
+    for (const dot of formationDots) {
+      const left = Number.parseFloat(dot.style.left)
+      expect(left).toBeGreaterThanOrEqual(6)
+      expect(left).toBeLessThanOrEqual(94)
+    }
+
     // 퇴장 국면은 설명만 열 명이어서는 안 된다. 양쪽 미리보기 대형도 실제
     // 남은 인원과 같아야 한다.
     click(situationCards[3])
