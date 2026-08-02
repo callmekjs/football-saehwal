@@ -19,7 +19,7 @@
 cd C:\football_hackerton
 git pull --ff-only
 git status          # 남의 미완성 작업이 있으면 건드리지 말고 사용자에게 알린다
-npm test            # 737개 통과
+npm test            # 738개 통과
 npx tsc --noEmit    # 0
 ```
 
@@ -872,7 +872,7 @@ ROLL_DRAG  0.1  → 0.0135   공기 항력 ½ρC_dA/m — 이제 v² 에 곱한�
 ## 1. 지금 상태
 
 ```bash
-npm test          # 695개
+npm test          # 738개
 npx tsc --noEmit  # 0
 npm run build
 npm run sim       # 기준팀(미국). 다섯 국면 전 국면 합격
