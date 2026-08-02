@@ -96,6 +96,10 @@ describe('첫 화면 시작 길', () => {
     expect(view.container.querySelector('button.kickoff-team[aria-pressed="true"]')?.textContent)
       .toContain('선택')
 
+    const usaLevels = Array.from(view.container.querySelectorAll('.opp-trait > span > b'))
+      .map((node) => node.textContent)
+      .join('|')
+
     click(find(view.container, 'button.kickoff-team', '일본'))
 
     const dossier = view.container.querySelector('.opp-dossier')?.textContent ?? ''
@@ -103,11 +107,16 @@ describe('첫 화면 시작 길', () => {
     expect(dossier).toContain('일본')
     expect(dossier).toContain('선택 완료')
     expect(dossier).toContain('상대 전력 한눈에')
-    expect(dossier).toContain('공격력')
-    expect(dossier).toContain('수비력')
-    expect(dossier).toContain('결정력')
+    expect(dossier).toContain('공격수 평균')
+    expect(dossier).toContain('수비수 평균')
+    expect(dossier).toContain('미드필더 평균')
     expect(dossier).not.toContain('상대가 주로 공격하는 방법')
+    expect(dossier).not.toContain('결정력')
     expect(view.container.querySelectorAll('.opp-trait')).toHaveLength(3)
+    const japanLevels = Array.from(view.container.querySelectorAll('.opp-trait > span > b'))
+      .map((node) => node.textContent)
+      .join('|')
+    expect(japanLevels).not.toBe(usaLevels)
     expect(dossier).not.toContain('주요 선수')
     expect(scouting).toContain('주요 선수')
     expect(scouting).toContain('즐겨 서는 대형')

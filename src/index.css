@@ -7501,7 +7501,7 @@ button {
 }
 .opp-trait[data-tone='attack'] { --trait-color: #d9a75f; }
 .opp-trait[data-tone='defense'] { --trait-color: #6faac7; }
-.opp-trait[data-tone='finish'] { --trait-color: #78bd92; }
+.opp-trait[data-tone='midfield'] { --trait-color: #78bd92; }
 .opp-trait > span { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .opp-trait small { color: var(--text); font-size: 11px; font-weight: 700; }
 .opp-trait b {

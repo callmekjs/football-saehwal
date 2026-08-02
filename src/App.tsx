@@ -93,9 +93,10 @@ function situationNote(state: MatchState): string {
 
 type TraitLevel = '강함' | '보통' | '약함'
 
-function traitLevel(value: number, base: number, threshold: number): TraitLevel {
-  if (value >= base + threshold) return '강함'
-  if (value <= base - threshold) return '약함'
+function traitLevelFromRating(rating: number): TraitLevel {
+  const gap = rating - OUR_ABILITY_AVERAGE
+  if (gap >= 1) return '강함'
+  if (gap <= -1) return '약함'
   return '보통'
 }
 
@@ -109,7 +110,7 @@ function OpponentTrait({
   label: string
   description: string
   level: TraitLevel
-  tone: 'attack' | 'defense' | 'finish'
+  tone: 'attack' | 'defense' | 'midfield'
 }) {
   return (
     <div className="opp-trait" data-tone={tone} data-level={level}>
@@ -216,6 +217,13 @@ function OpponentPicker({
   const selected = opponentInfo(value)
   const squad = opponentSquad(value)
   const ratio = opponentAbilityRatio(value)
+  const lineRating = (position: Position) => {
+    const players = squad.players.filter((player) => player.pos === position)
+    return players.reduce((sum, player) => sum + player.rating, 0) / players.length
+  }
+  const attackRating = lineRating('FW')
+  const defenseRating = lineRating('DF')
+  const midfieldRating = lineRating('MF')
 
   return (
     <section id="opponents" className="kickoff-opponents" aria-labelledby="opponent-title">
@@ -321,22 +329,22 @@ function OpponentPicker({
             <h3>상대 전력 한눈에</h3>
             <div>
               <OpponentTrait
-                label="공격력"
-                description="기회를 만드는 힘"
-                level={traitLevel(selected.atk, 0, 0.15)}
+                label="공격"
+                description={`공격수 평균 ${attackRating.toFixed(1)}`}
+                level={traitLevelFromRating(attackRating)}
                 tone="attack"
               />
               <OpponentTrait
-                label="수비력"
-                description="상대 공격을 막는 힘"
-                level={traitLevel(selected.def, 0, 0.15)}
+                label="수비"
+                description={`수비수 평균 ${defenseRating.toFixed(1)}`}
+                level={traitLevelFromRating(defenseRating)}
                 tone="defense"
               />
               <OpponentTrait
-                label="결정력"
-                description="기회를 골로 바꾸는 힘"
-                level={traitLevel(selected.shape.finish, 1, 0.075)}
-                tone="finish"
+                label="중원"
+                description={`미드필더 평균 ${midfieldRating.toFixed(1)}`}
+                level={traitLevelFromRating(midfieldRating)}
+                tone="midfield"
               />
             </div>
           </div>
