@@ -2322,21 +2322,6 @@ button {
     gap: 12px;
   }
 
-  /*
-   * 경기장이 세로로 길어서 아래 장면을 볼 때 양옆 패널이 먼저 화면 밖으로
-   * 사라지면 넓은 빈 열만 남는다. 양옆은 화면 안에 붙여 두고, 내용이
-   * 길면 그 열 안에서만 굴린다. 경기장과 조작 기능의 크기는 바꾸지 않는다.
-   */
-  .match-col.left,
-  .match-col.right {
-    position: sticky;
-    top: 76px;
-    align-self: start;
-    max-height: calc(100vh - 88px);
-    overflow-y: auto;
-    scrollbar-width: thin;
-  }
-
   .match-col > .pane { display: block; }
   .match-col > .pane.center-info { display: grid; }
 
@@ -5974,6 +5959,19 @@ button {
   /* 전술판이 낮은 화면에서 스스로 줄어들 수 있어야 한다. 이게 없으면
      격자 칸이 내용 높이만큼 버텨서 판이 화면 밖으로 잘린다 */
   min-height: 0;
+}
+
+/*
+ * 2K처럼 아주 넓은 화면에서는 왼쪽 1fr만 끝없이 늘어, 실제 글이 끝난 뒤
+ * 오른쪽 경기장까지 수백 px의 빈 띠가 생겼다. 두 영역의 최대 폭을 정해
+ * 하나의 묶음으로 가운데 놓고, 남는 폭은 경기장 미리보기에 더 쓴다.
+ */
+@media (min-width: 1440px) {
+  .title-body {
+    grid-template-columns: minmax(620px, 900px) minmax(520px, 620px);
+    justify-content: center;
+    gap: clamp(32px, 3vw, 60px);
+  }
 }
 
 .title-kicker {
