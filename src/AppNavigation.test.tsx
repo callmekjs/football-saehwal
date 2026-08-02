@@ -85,6 +85,31 @@ describe('첫 화면 시작 길', () => {
     view.unmount()
   })
 
+  it('상대 선택은 고른 나라의 핵심과 세부 자료를 나눠 보여 준다', () => {
+    const view = mount(<App />)
+
+    click(find(view.container, 'button.title-play', '경기 준비'))
+    click(find(view.container, 'button.step-next', '다음 · 상대 선택'))
+
+    const teams = view.container.querySelectorAll('button.kickoff-team')
+    expect(teams).toHaveLength(13)
+    expect(view.container.querySelector('button.kickoff-team[aria-pressed="true"]')?.textContent)
+      .toContain('선택')
+
+    click(find(view.container, 'button.kickoff-team', '일본'))
+
+    const dossier = view.container.querySelector('.opp-dossier')?.textContent ?? ''
+    const scouting = view.container.querySelector('.opp-scouting')?.textContent ?? ''
+    expect(dossier).toContain('일본')
+    expect(dossier).toContain('선택 완료')
+    expect(dossier).not.toContain('주요 선수')
+    expect(scouting).toContain('주요 선수')
+    expect(scouting).toContain('즐겨 서는 대형')
+    expect(find(view.container, 'button.step-next', '다음 · 국면 선택')).toBeDefined()
+
+    view.unmount()
+  })
+
   it('경기 준비 더블클릭의 두 번째 클릭이 새 선수단 카드로 관통하지 않는다', () => {
     const view = mount(<App />)
     const play = find(view.container, 'button.title-play', '경기 준비')

@@ -261,7 +261,7 @@ function OpponentPicker({
                     >
                       <span>
                         <b>{team.name}</b>
-                        <i>{team.rank}위</i>
+                        <i>{active ? `선택 · ${team.rank}위` : `${team.rank}위`}</i>
                       </span>
                       <em>{team.tag}</em>
                       {/*
@@ -286,6 +286,7 @@ function OpponentPicker({
         </div>
 
         <div className="opp-dossier" aria-live="polite">
+          <small className="opp-eyebrow">선택한 상대 한눈에</small>
           <header className="opp-head">
             <span className="opp-head-name">
               <b>{selected.name}</b>
@@ -367,6 +368,16 @@ function OpponentPicker({
             />
           </div>
 
+          <p className="opp-ready">
+            <i aria-hidden>✓</i>
+            <span>
+              <b>{selected.name} 선택 완료</b>
+              아래 자료를 더 보거나 다음 국면으로 진행하세요.
+            </span>
+          </p>
+        </div>
+
+        <section className="opp-scouting" aria-label={`${selected.name} 세부 자료`}>
           <div className="opp-key">
             <h3>
               주요 선수
@@ -401,7 +412,7 @@ function OpponentPicker({
             명단은 그 계수에서 되짚어 만든 값이며, 경기 결과에는 들어가지
             않습니다. 대형은 경기 중 점수와 성향에 따라 바뀝니다.
           </p>
-        </div>
+        </section>
       </div>
     </section>
   )

@@ -7374,12 +7374,12 @@ button {
 
 .opp-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.03fr) minmax(0, 0.97fr);
   align-items: start;
-  gap: 16px;
+  gap: 14px;
 }
 
-.opp-list { min-width: 0; display: grid; gap: 12px; align-content: start; }
+.opp-list { min-width: 0; display: grid; gap: 8px; align-content: start; }
 
 /* 팀 버튼 안의 세기 막대. 눌러 보지 않아도 열세 팀이 비교된다 */
 .kickoff-team-bar {
@@ -7407,18 +7407,25 @@ button {
   color: var(--dim-2);
 }
 .kickoff-team-bar[data-strong='on'] > u { color: var(--away); }
-.kickoff-team { min-height: 66px; }
+.kickoff-team { min-height: 60px; }
 
 .opp-dossier {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--away);
   border-radius: 10px;
   background: var(--panel);
+}
+
+.opp-eyebrow {
+  color: var(--accent);
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.14em;
 }
 
 .opp-head {
@@ -7542,6 +7549,55 @@ button {
   white-space: nowrap;
 }
 
+.opp-ready {
+  min-height: 44px;
+  margin: 0;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(100, 212, 155, 0.3);
+  border-radius: 8px;
+  background: rgba(100, 212, 155, 0.08);
+  color: var(--dim-2);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.opp-ready > i {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #06140e;
+  font-style: normal;
+  font-weight: 700;
+}
+.opp-ready > span { display: grid; gap: 1px; }
+.opp-ready b { color: var(--text); font-size: 11px; }
+
+/*
+ * 팀을 고른 뒤 필요한 핵심 판단은 오른쪽 카드에서 끝난다. 주요 선수와
+ * 대형은 두 열 아래를 함께 쓰는 자료줄로 내려 왼쪽의 빈 바닥을 채운다.
+ */
+.opp-scouting {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+  align-items: start;
+  gap: 12px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.opp-scouting .opp-key li { min-height: 44px; }
+.opp-scouting .opp-board { max-width: 360px; }
+.opp-scouting > .opp-foot { grid-column: 1 / -1; }
+
 /* 상대 배치도 — 등번호는 자리를 가리킨다 */
 .opp-board {
   position: relative;
@@ -7617,6 +7673,13 @@ button {
 @media (max-width: 1100px) {
   .opp-layout { grid-template-columns: minmax(0, 1fr); }
   .opp-meter { grid-template-columns: 104px minmax(0, 1fr) 44px; }
+  .opp-scouting { grid-column: 1; }
+}
+
+@media (max-width: 700px) {
+  .opp-scouting { grid-template-columns: minmax(0, 1fr); }
+  .opp-scouting > .opp-foot { grid-column: 1; }
+  .opp-scouting .opp-board { max-width: none; }
 }
 
 /* ─────────────────────────────────────────────────────────────
