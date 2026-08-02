@@ -20,6 +20,8 @@ import type { Level } from '../sim/types'
 export interface ToastMessage {
   /** 무엇을 했는가 */
   text: string
+  /** 실제 경기 계산에서 직전보다 어떻게 달라졌는가 */
+  impact?: string
   /** 몇 번째 토스트인가. 같은 문장을 다시 띄워도 새 것으로 보이게 한다 */
   seq: number
 }
@@ -56,10 +58,10 @@ export function useToast() {
   const timer = useRef<number>(0)
   const seq = useRef(0)
 
-  const show = useCallback((text: string) => {
+  const show = useCallback((text: string, impact?: string) => {
     window.clearTimeout(timer.current)
     seq.current += 1
-    setToast({ text, seq: seq.current })
+    setToast({ text, impact, seq: seq.current })
     timer.current = window.setTimeout(() => setToast(null), TOAST_LIFE_MS)
   }, [])
 

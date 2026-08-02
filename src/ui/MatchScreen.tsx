@@ -7,7 +7,15 @@ import {
   SquadPanel,
   playerExitLabel,
 } from './SquadPanel'
-import { BENCH, effectivePos, getPlayer, meanStamina } from '../sim/squad'
+import { BENCH, assignFormationRoles, effectivePos, getPlayer, meanStamina } from '../sim/squad'
+import {
+  applyAwayFatigue,
+  applyOpponent,
+  applyOrders,
+  applyPositions,
+  resolveCoefficients,
+  type Coefficients,
+} from '../sim/tactics'
 import { homeCaptainNumber } from '../captain'
 import { carryToNextHalf, judge, secondHalfSeed } from '../sim/engine'
 import { useMatch } from './useMatch'
@@ -56,6 +64,7 @@ import type {
   Level,
   MatchState,
   PlayerOrder,
+  PlayerPosition,
   Problem,
 } from '../sim/types'
 
@@ -64,6 +73,46 @@ const LEVER_LABELS = {
   PRESS: ['약', '중', '강'],
   WIDTH: ['좁게', '보통', '넓게'],
 } as const
+
+function liveCoefficients(
+  state: MatchState,
+  formation = state.formation,
+  players = state.players,
+  tactics = state.tactics,
+): Coefficients {
+  return applyOpponent(
+    applyAwayFatigue(
+      applyPositions(
+        applyOrders(
+          resolveCoefficients(
+            tactics,
+            state.opponent,
+            state.awayCount < 11,
+            state.homeCount < 11,
+            formation,
+          ),
+          players,
+        ),
+        players,
+      ),
+      state.awayStamina,
+    ),
+    state.opponentTeam,
+  )
+}
+
+const arrow = (before: number, after: number): string => {
+  if (after === before) return '→'
+  return after > before ? '↑' : '↓'
+}
+
+function liveImpact(before: Coefficients, after: Coefficients): string {
+  const attackBefore = before.widthK * before.openness * before.entryXg
+  const attackAfter = after.widthK * after.openness * after.entryXg
+  const riskBefore = (before.oppOpen + before.behind + before.setPiece) * before.oppShotXg
+  const riskAfter = (after.oppOpen + after.behind + after.setPiece) * after.oppShotXg
+  return `공격 기회 ${arrow(attackBefore, attackAfter)} · 실점 위험 ${arrow(riskBefore, riskAfter)} · 체력 소모 ${arrow(before.drain, after.drain)}`
+}
 
 
 /**
@@ -283,7 +332,7 @@ function Toast({ message }: { message: ToastMessage | null }) {
     // `key` 로 같은 문장을 다시 눌러도 등장 애니메이션이 다시 돈다
     <div className="toast" key={message.seq} role="status">
       <strong>{message.text}</strong>
-      <small>되돌릴 수 없습니다</small>
+      <small>{message.impact ?? '되돌릴 수 없습니다'}</small>
     </div>
   )
 }
@@ -830,19 +879,35 @@ export function MatchScreen({
    */
   const setLeverLoud = useCallback(
     (type: 'LINE' | 'PRESS' | 'WIDTH', value: Level) => {
+      const before = liveCoefficients(state)
       const reason = setLever(type, value)
-      show(reason ?? leverToast(type, value))
+      if (reason) {
+        show(reason)
+        return
+      }
+      const key = type === 'LINE' ? 'line' : type === 'PRESS' ? 'press' : 'width'
+      const after = liveCoefficients(state, state.formation, state.players, {
+        ...state.tactics,
+        [key]: value,
+      })
+      show(leverToast(type, value), liveImpact(before, after))
     },
-    [setLever, show],
+    [setLever, show, state],
   )
 
   /** 포메이션은 평소에 조용하다. 막혔을 때만 이유를 말한다 */
   const setFormationLoud = useCallback(
     (value: FormationId) => {
+      const before = liveCoefficients(state)
       const reason = setFormation(value)
-      if (reason) show(reason)
+      if (reason) {
+        show(reason)
+        return
+      }
+      const players = assignFormationRoles(state.players, value)
+      show(`포메이션 → ${value}`, liveImpact(before, liveCoefficients(state, value, players)))
     },
-    [setFormation, show],
+    [setFormation, show, state],
   )
 
   /**
@@ -853,6 +918,7 @@ export function MatchScreen({
    */
   const applyPreset = useCallback(
     (name: string, v: readonly [Level, Level, Level]) => {
+      const before = liveCoefficients(state)
       // 하나가 막히면 셋 다 막힌 것이다. 첫 사유를 그대로 보여주고 멈춘다
       const reason = setLever('LINE', v[0])
       if (reason) {
@@ -861,9 +927,48 @@ export function MatchScreen({
       }
       setLever('PRESS', v[1])
       setLever('WIDTH', v[2])
-      show(presetToast(name))
+      const after = liveCoefficients(state, state.formation, state.players, {
+        line: v[0],
+        press: v[1],
+        width: v[2],
+      })
+      show(presetToast(name), liveImpact(before, after))
     },
-    [setLever, show],
+    [setLever, show, state],
+  )
+
+  const setOrderLoud = useCallback(
+    (target: string, order: PlayerOrder): string | null => {
+      const before = liveCoefficients(state)
+      const reason = setOrder(target, order)
+      if (reason) return reason
+      const players = state.players.map((player) =>
+        player.id === target ? { ...player, order } : player,
+      )
+      show(
+        `${getPlayer(target).num}번 · ${order === 'NONE' ? '지시 해제' : ORDER_LABELS[order].name}`,
+        liveImpact(before, liveCoefficients(state, state.formation, players)),
+      )
+      return null
+    },
+    [setOrder, show, state],
+  )
+
+  const setPositionLoud = useCallback(
+    (target: string, position: PlayerPosition | null): string | null => {
+      const before = liveCoefficients(state)
+      const reason = setPosition(target, position)
+      if (reason) return reason
+      const players = state.players.map((player) =>
+        player.id === target ? { ...player, position } : player,
+      )
+      show(
+        `${getPlayer(target).num}번 · ${position ? '새 위치' : '기본 자리'}`,
+        liveImpact(before, liveCoefficients(state, state.formation, players)),
+      )
+      return null
+    },
+    [setPosition, show, state],
   )
 
   /** 교체는 카드를 태운다. 누가 바뀌었는지가 가장 중요하다 */
@@ -1177,8 +1282,8 @@ export function MatchScreen({
             <SquadPanel
               state={state}
               locked={phase === 'DONE'}
-              onOrder={setOrder}
-              onPosition={setPosition}
+              onOrder={setOrderLoud}
+              onPosition={setPositionLoud}
               onFormation={setFormationLoud}
               running={phase === 'RUNNING'}
               subIn={subIn}

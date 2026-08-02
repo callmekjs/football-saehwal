@@ -3322,8 +3322,10 @@ button {
   transform: translateX(-50%);
   z-index: 20;
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  flex-direction: column;
+  gap: 3px;
+  max-width: calc(100vw - 32px);
   padding: 10px 18px;
   border-radius: 5px;
   background: rgba(11, 26, 20, 0.96);
@@ -3334,7 +3336,7 @@ button {
 }
 
 .toast > strong { font-size: 14px; color: var(--text); }
-.toast > small { font-size: 11px; color: var(--dim-2); }
+.toast > small { font-size: 11px; color: var(--accent); text-align: center; }
 
 @keyframes toastin {
   from { opacity: 0; transform: translate(-50%, 8px); }

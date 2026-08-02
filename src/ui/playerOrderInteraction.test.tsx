@@ -77,6 +77,10 @@ describe('경기 중 선수 선택과 행동 지시', () => {
     expect(view.container.querySelector('.squad-orders .player-data-card')).toBeNull()
     expect(boardCard(view.container, 7).textContent).toContain('↑공격')
     expect(view.container.querySelector('.side-orders')?.textContent).toContain('7번 · 올라가라')
+    const impact = view.container.querySelector('.toast small')?.textContent
+    expect(impact).toContain('공격 기회')
+    expect(impact).toContain('실점 위험')
+    expect(impact).toContain('체력 소모')
 
     // 종료 보고서에 넘기는 결정 개수도 0이 아니어야 한다.
     advance(() => vi.advanceTimersByTime(75_100))
