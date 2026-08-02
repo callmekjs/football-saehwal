@@ -319,6 +319,7 @@ export function SquadPanel({
   onOrder,
   onPosition,
   onFormation,
+  formationImpact,
   running = false,
   subIn = null,
   onSubOut,
@@ -329,6 +330,8 @@ export function SquadPanel({
   onOrder: (target: string, order: PlayerOrder) => string | null
   onPosition: (target: string, position: PlayerPosition | null) => string | null
   onFormation: (f: FormationId) => void
+  /** 마지막 포메이션 변경이 실제 계산을 움직인 방향 */
+  formationImpact?: string | null
   /**
    * 경기가 흐르는 중인가. 선수 카드의 능력치 표를 접는다.
    *
@@ -785,6 +788,13 @@ export function SquadPanel({
         <b>{getFormation(state.formation).label}</b> · 수비 {shape.DF}명 · 중원 {shape.MF}명
         · 공격 {shape.FW}명 · 누르면 데이터·지시, 원하는 곳에 놓기
       </p>
+
+      {formationImpact && (
+        <p className="squad-effect formation-impact" data-live="on" role="status">
+          <span>포메이션 변화</span>
+          <b>{formationImpact}</b>
+        </p>
+      )}
 
       {/*
         배치가 확률에 주는 효과. **끌고 있는 동안에는 놓을 자리로 미리 본다.**

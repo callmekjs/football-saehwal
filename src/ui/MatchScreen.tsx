@@ -869,6 +869,7 @@ export function MatchScreen({
    * 없든 경기는 똑같이 흘러간다.
    */
   const { toast, show } = useToast()
+  const [formationImpact, setFormationImpact] = useState<string | null>(null)
 
   /**
    * 레버 하나를 바꾸고 무엇을 바꿨는지 알린다.
@@ -905,7 +906,9 @@ export function MatchScreen({
         return
       }
       const players = assignFormationRoles(state.players, value)
-      show(`포메이션 → ${value}`, liveImpact(before, liveCoefficients(state, value, players)))
+      const impact = liveImpact(before, liveCoefficients(state, value, players))
+      setFormationImpact(impact)
+      show(`포메이션 → ${value}`, impact)
     },
     [setFormation, show, state],
   )
@@ -1285,6 +1288,7 @@ export function MatchScreen({
               onOrder={setOrderLoud}
               onPosition={setPositionLoud}
               onFormation={setFormationLoud}
+              formationImpact={formationImpact}
               running={phase === 'RUNNING'}
               subIn={subIn}
               onSubOut={substituteOut}

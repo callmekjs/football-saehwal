@@ -1509,6 +1509,7 @@ button {
 /* 상대 역습 위험은 반대다 — 늘면 나쁘고 줄면 좋다 */
 .squad-effect b[data-tone='bad'] { color: var(--away); }
 .squad-effect b[data-tone='good'] { color: var(--accent); }
+.formation-impact b { color: var(--accent); }
 
 /*
   경기가 흐르는 중이라 능력치 표를 접었다는 안내.

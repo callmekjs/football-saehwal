@@ -33,6 +33,21 @@ describe('경기 중 선수 선택과 행동 지시', () => {
     vi.useRealTimers()
   })
 
+  it('포메이션을 바꾸면 계산 영향이 포메이션 판 아래에 계속 남는다', () => {
+    const view = mount(
+      <MatchScreen problem={PROBLEM} startHalf={2} onExit={() => undefined} />,
+    )
+    click(find(view.container, 'button.formation-choice', '3-4-3'))
+
+    const impact = view.container.querySelector('.formation-impact')?.textContent
+    expect(impact).toContain('포메이션 변화')
+    expect(impact).toContain('공격 기회')
+    expect(impact).toContain('실점 위험')
+    expect(impact).toContain('체력 소모')
+
+    view.unmount()
+  })
+
   it('여러 틱이 지나도 9번 선택과 무효 지시 사유를 유지한다', () => {
     const view = mount(
       <MatchScreen problem={PROBLEM} startHalf={2} onExit={() => undefined} />,
